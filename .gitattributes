@@ -1,0 +1,9 @@
+*.cpp            text diff=cpp
+*.c              text diff=cpp
+*.h              text diff=cpp
+*.sh             text eol=lf
+*.vcproj         text eol=crlf
+*.vcproj.filters text eol=crlf
+*.sln            text eol=crlf
+*.properties     text
+*.xml            text

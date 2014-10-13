@@ -1,0 +1,33 @@
+# Object files
+*.o
+*.ko
+*.obj
+*.elf
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Libraries
+*.lib
+*.a
+*.la
+*.lo
+
+# Shared objects (inc. Windows DLLs)
+*.dll
+*.so
+*.so.*
+*.dylib
+
+# Temp and debugging files
+*.opensdf
+*.sdf
+*.cachefile
+*.ilk
+*.pdb
+
+# Executables
+*.exe
+*.out
+*.app
