@@ -1,0 +1,43 @@
+#include "SystemPageRes.h"
+#include "../../GuiCommon.rc"
+
+#define xc 200
+#define yc 200
+
+IDD_SYSTEM  MY_PAGE
+CAPTION "System"
+BEGIN
+  LTEXT      "Associate 7-Zip with:", IDC_SYSTEM_STATIC_ASSOCIATE, m, m, xc, 8
+  CONTROL    "List1", IDC_SYSTEM_LIST_ASSOCIATE, "SysListView32",
+             LVS_LIST | LVS_SHOWSELALWAYS | LVS_SORTASCENDING | WS_BORDER | WS_TABSTOP,
+             m, m + 12, xc, (yc - m - 12 - 1 - bys)
+  PUSHBUTTON  "Select all", IDC_SYSTEM_SELECT_ALL, m, (ys - m - bys), 90, bys
+END
+
+#ifdef UNDER_CE
+
+#undef m
+#undef xc
+#undef yc
+
+#define m 4
+#define xc (SMALL_PAGE_SIZE_X + 8)
+#define yc (128 + 8)
+
+IDD_SYSTEM_2  MY_PAGE
+CAPTION "System"
+BEGIN
+  LTEXT      "Associate 7-Zip with:", IDC_SYSTEM_STATIC_ASSOCIATE, m, m, xc, 8
+  CONTROL    "List1", IDC_SYSTEM_LIST_ASSOCIATE, "SysListView32",
+             LVS_LIST | LVS_SHOWSELALWAYS | LVS_SORTASCENDING | WS_BORDER | WS_TABSTOP,
+             m, m + 12, xc, (yc - m - 12 - 1 - bys - 8)
+  PUSHBUTTON  "Select all", IDC_SYSTEM_SELECT_ALL, m, (ys - m - bys - 8), 90, bys
+END
+
+#endif
+
+
+STRINGTABLE
+BEGIN
+  IDS_PLUGIN  "Plugin"
+END
