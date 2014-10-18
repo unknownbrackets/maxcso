@@ -271,8 +271,13 @@ static void MatchFinder_SetLimits(CMatchFinder *p)
 void MatchFinder_Init(CMatchFinder *p)
 {
   UInt32 i;
-  for (i = 0; i < p->hashSizeSum; i++)
-    p->hash[i] = kEmptyHashValue;
+  if (kEmptyHashValue == 0)
+  {
+    memset(p->hash, 0, sizeof(p->hash[0]) * p->hashSizeSum);
+  }
+  else
+    for (i = 0; i < p->hashSizeSum; i++)
+      p->hash[i] = kEmptyHashValue;
   p->cyclicBufferPos = 0;
   p->buffer = p->bufferBase;
   p->pos = p->streamPos = p->cyclicBufferSize;
