@@ -1,0 +1,31 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClInclude Include="src\zopfli\zlib_container.h" />
+    <ClInclude Include="src\zopfli\zopfli.h" />
+    <ClInclude Include="src\zopfli\blocksplitter.h" />
+    <ClInclude Include="src\zopfli\cache.h" />
+    <ClInclude Include="src\zopfli\deflate.h" />
+    <ClInclude Include="src\zopfli\gzip_container.h" />
+    <ClInclude Include="src\zopfli\hash.h" />
+    <ClInclude Include="src\zopfli\katajainen.h" />
+    <ClInclude Include="src\zopfli\lz77.h" />
+    <ClInclude Include="src\zopfli\squeeze.h" />
+    <ClInclude Include="src\zopfli\tree.h" />
+    <ClInclude Include="src\zopfli\util.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="src\zopfli\zopfli_lib.c" />
+    <ClCompile Include="src\zopfli\blocksplitter.c" />
+    <ClCompile Include="src\zopfli\cache.c" />
+    <ClCompile Include="src\zopfli\deflate.c" />
+    <ClCompile Include="src\zopfli\gzip_container.c" />
+    <ClCompile Include="src\zopfli\hash.c" />
+    <ClCompile Include="src\zopfli\katajainen.c" />
+    <ClCompile Include="src\zopfli\lz77.c" />
+    <ClCompile Include="src\zopfli\squeeze.c" />
+    <ClCompile Include="src\zopfli\tree.c" />
+    <ClCompile Include="src\zopfli\util.c" />
+    <ClCompile Include="src\zopfli\zlib_container.c" />
+  </ItemGroup>
+</Project>
