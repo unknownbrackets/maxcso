@@ -21,7 +21,8 @@ struct CSOHeader {
 	uint8_t unused[2];
 };
 
-Input::Input(uv_loop_t *loop, const Task &t) : task_(t), loop_(loop), type_(UNKNOWN), size_(-1), csoIndex_(nullptr) {
+Input::Input(uv_loop_t *loop)
+	: loop_(loop), type_(UNKNOWN), paused_(false), resumeShouldRead_(false), size_(-1), csoIndex_(nullptr) {
 }
 
 Input::~Input() {
@@ -29,11 +30,11 @@ Input::~Input() {
 	csoIndex_ = nullptr;
 }
 
-void Input::OnFinish(std::function<void (bool success, const char *reason)> finish) {
+void Input::OnFinish(InputFinishCallback finish) {
 	finish_ = finish;
 }
 
-void Input::Pipe(uv_file file, std::function<void (int64_t pos, uint8_t *sector)> callback) {
+void Input::Pipe(uv_file file, InputCallback callback) {
 	file_ = file;
 	callback_ = callback;
 	pos_ = 0;

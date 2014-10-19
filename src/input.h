@@ -2,16 +2,18 @@
 
 #include <string>
 #include "uv_helper.h"
-#include "compress.h"
 
 namespace maxcso {
 
+typedef std::function<void (int64_t pos, uint8_t *sector)> InputCallback;
+typedef std::function<void (bool success, const char *reason)> InputFinishCallback;
+
 class Input {
 public:
-	Input(uv_loop_t *loop, const Task &t);
+	Input(uv_loop_t *loop);
 	~Input();
-	void OnFinish(std::function<void (bool success, const char *reason)> finish);
-	void Pipe(uv_file file, std::function<void (int64_t pos, uint8_t *sector)> callback);
+	void OnFinish(InputFinishCallback finish);
+	void Pipe(uv_file file, InputCallback callback);
 
 	int64_t TotalSize() {
 		return size_;
@@ -29,11 +31,10 @@ private:
 	};
 
 	UVHelper uv_;
-	const Task &task_;
 	uv_loop_t *loop_;
 
-	std::function<void (bool success, const char *reason)> finish_;
-	std::function<void (int64_t pos, uint8_t *sector)> callback_;
+	InputFinishCallback finish_;
+	InputCallback callback_;
 	uv_file file_;
 	uv_fs_t req_;
 	uv_work_t work_;
