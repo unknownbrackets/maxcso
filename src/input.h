@@ -14,6 +14,8 @@ public:
 	~Input();
 	void OnFinish(InputFinishCallback finish);
 	void Pipe(uv_file file, InputCallback callback);
+	void Pause();
+	void Resume();
 
 	int64_t TotalSize() {
 		return size_;
@@ -40,6 +42,8 @@ private:
 	uv_work_t work_;
 	FileType type_;
 
+	bool paused_;
+	bool resumeShouldRead_;
 	int64_t pos_;
 	int64_t size_;
 

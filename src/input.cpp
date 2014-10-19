@@ -113,7 +113,13 @@ void Input::ReadSector() {
 		finish_(true, nullptr);
 		return;
 	}
-	
+
+	if (paused_) {
+		// When we resume, it'll need to call ReadSector() to resume.
+		resumeShouldRead_ = true;
+		return;
+	}
+
 	int64_t pos = pos_;
 	unsigned int len = SECTOR_SIZE;
 	bool compressed = false;
@@ -183,6 +189,18 @@ void Input::ReadSector() {
 			ReadSector();
 		}
 	});
+}
+
+void Input::Pause() {
+	paused_ = true;
+}
+
+void Input::Resume() {
+	paused_ = false;
+	if (resumeShouldRead_) {
+		resumeShouldRead_ = false;
+		ReadSector();
+	}
 }
 
 bool Input::DecompressSector(uint8_t *dst, const uint8_t *src, unsigned int len, std::string &err) {
