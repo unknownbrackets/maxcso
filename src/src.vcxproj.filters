@@ -1,0 +1,15 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="compress.cpp" />
+    <ClCompile Include="input.cpp" />
+    <ClCompile Include="uv_helper.cpp" />
+    <ClCompile Include="buffer_pool.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="compress.h" />
+    <ClInclude Include="input.h" />
+    <ClInclude Include="uv_helper.h" />
+    <ClInclude Include="buffer_pool.h" />
+  </ItemGroup>
+</Project>
