@@ -14,6 +14,7 @@ enum TaskStatus {
 	TASK_BAD_INPUT,
 	TASK_BAD_OUTPUT,
 	TASK_INVALID_DATA,
+	TASK_CANNOT_WRITE,
 };
 
 typedef std::function<void (const Task *, TaskStatus status, float completion)> Callback;

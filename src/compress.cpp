@@ -3,6 +3,7 @@
 #include "compress.h"
 #include "uv_helper.h"
 #include "input.h"
+#include "output.h"
 #include "buffer_pool.h"
 
 namespace maxcso {
@@ -10,7 +11,7 @@ namespace maxcso {
 class CompressionTask {
 public:
 	CompressionTask(uv_loop_t *loop, const Task &t)
-		: task_(t), loop_(loop), input_(-1), inputHandler_(loop), output_(-1) {
+		: task_(t), loop_(loop), input_(-1), inputHandler_(loop), outputHandler_(loop), output_(-1) {
 	}
 	~CompressionTask() {
 		Cleanup();
@@ -35,6 +36,7 @@ private:
 
 	uv_file input_;
 	Input inputHandler_;
+	Output outputHandler_;
 	uv_file output_;
 };
 
@@ -79,8 +81,7 @@ void CompressionTask::Cleanup() {
 void CompressionTask::BeginProcessing() {
 	inputHandler_.OnFinish([this](bool success, const char *reason) {
 		if (success) {
-			// TODO: Flush
-			Notify(TASK_SUCCESS);
+			outputHandler_.Flush();
 		} else {
 			Notify(TASK_INVALID_DATA);
 			if (reason) {
@@ -88,12 +89,33 @@ void CompressionTask::BeginProcessing() {
 			}
 		}
 	});
+	outputHandler_.OnFinish([this](bool success, const char *reason) {
+		if (success) {
+			Notify(TASK_SUCCESS);
+			printf("success\n");
+		} else {
+			Notify(TASK_CANNOT_WRITE);
+			if (reason) {
+				printf("error: %s\n", reason);
+			}
+		}
+	});
+
+	outputHandler_.OnProgress([this](float progress) {
+		// If it was paused, the queue has space now.
+		inputHandler_.Resume();
+		Notify(TASK_INPROGRESS, progress);
+	});
 
 	inputHandler_.OnBegin([this](int64_t size) {
+		outputHandler_.SetFile(output_, size);
 		Notify(TASK_INPROGRESS, 0.0f);
 	});
 	inputHandler_.Pipe(input_, [this](int64_t pos, uint8_t *sector) {
-		// TODO
+		outputHandler_.Enqueue(pos, sector);
+		if (outputHandler_.QueueFull()) {
+			inputHandler_.Pause();
+		}
 	});
 }
 
