@@ -27,6 +27,7 @@
   <ItemGroup>
     <ClInclude Include="buffer_pool.h" />
     <ClInclude Include="compress.h" />
+    <ClInclude Include="cso.h" />
     <ClInclude Include="input.h" />
     <ClInclude Include="uv_helper.h" />
   </ItemGroup>

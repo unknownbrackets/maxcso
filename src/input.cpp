@@ -1,25 +1,9 @@
 #include <zlib.h>
 #include "input.h"
 #include "buffer_pool.h"
+#include "cso.h"
 
 namespace maxcso {
-
-static const char *CSO_MAGIC = "CISO";
-
-static const uint32_t SECTOR_SIZE = 0x800;
-static const uint32_t SECTOR_MASK = 0x7FF;
-static const uint8_t SECTOR_SHIFT = 11;
-
-// TODO: Endian-ify?
-struct CSOHeader {
-	char magic[4];
-	uint32_t header_size;
-	uint64_t uncompressed_size;
-	uint32_t sector_size;
-	uint8_t version;
-	uint8_t index_shift;
-	uint8_t unused[2];
-};
 
 Input::Input(uv_loop_t *loop)
 	: loop_(loop), type_(UNKNOWN), paused_(false), resumeShouldRead_(false), size_(-1), csoIndex_(nullptr) {
@@ -131,7 +115,7 @@ void Input::ReadSector() {
 			const uint32_t sector = static_cast<uint32_t>(pos_ >> SECTOR_SHIFT);
 			const uint32_t index = csoIndex_[sector];
 			const uint32_t nextIndex = csoIndex_[sector + 1];
-			compressed = (index & 0x80000000) == 0;
+			compressed = (index & CSO_INDEX_UNCOMPRESSED) == 0;
 
 			pos = static_cast<uint64_t>(index & 0x7FFFFFFF) << csoShift_;
 			const int64_t nextPos = static_cast<uint64_t>(nextIndex & 0x7FFFFFFF) << csoShift_;

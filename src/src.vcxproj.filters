@@ -11,5 +11,6 @@
     <ClInclude Include="input.h" />
     <ClInclude Include="uv_helper.h" />
     <ClInclude Include="buffer_pool.h" />
+    <ClInclude Include="cso.h" />
   </ItemGroup>
 </Project>
