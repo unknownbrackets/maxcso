@@ -18,6 +18,10 @@ void Input::OnFinish(InputFinishCallback finish) {
 	finish_ = finish;
 }
 
+void Input::OnBegin(InputBeginCallback begin) {
+	begin_ = begin;
+}
+
 void Input::Pipe(uv_file file, InputCallback callback) {
 	file_ = file;
 	callback_ = callback;
@@ -68,6 +72,7 @@ void Input::DetectFormat() {
 					}
 					uv_fs_req_cleanup(req);
 
+					begin_(size_);
 					ReadSector();
 				});
 			}
@@ -83,6 +88,7 @@ void Input::DetectFormat() {
 					size_ = req->statbuf.st_size;
 					uv_fs_req_cleanup(req);
 
+					begin_(size_);
 					ReadSector();
 				}
 			});

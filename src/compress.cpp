@@ -24,8 +24,7 @@ private:
 		task_.progress(&task_, status, progress);
 	}
 
-	void BeginInput();
-	void HandleSector(int64_t pos, uint8_t *sector);
+	void BeginProcessing();
 
 	UVHelper uv_;
 	const Task &task_;
@@ -51,7 +50,9 @@ void CompressionTask::Enqueue() {
 					Notify(TASK_BAD_OUTPUT);
 				} else {
 					output_ = static_cast<uv_file>(req->result);
-					BeginInput();
+
+					// Okay, both files opened fine, it's time to turn on the tap.
+					BeginProcessing();
 				}
 				uv_fs_req_cleanup(req);
 			});
@@ -75,16 +76,11 @@ void CompressionTask::Cleanup() {
 	}
 }
 
-void CompressionTask::BeginInput() {
-	// Check if CSO or not... do this outside?
-	// Need to write fake index table and fixup
-	// Serialize writes using a buffer + sema
-	// uv_fs_fstat, uv_fs_read, uv_fs_write
+void CompressionTask::BeginProcessing() {
 	inputHandler_.OnFinish([this](bool success, const char *reason) {
 		if (success) {
-			// TODO: Flush output first?
+			// TODO: Flush
 			Notify(TASK_SUCCESS);
-			printf("success\n");
 		} else {
 			Notify(TASK_INVALID_DATA);
 			if (reason) {
@@ -92,16 +88,13 @@ void CompressionTask::BeginInput() {
 			}
 		}
 	});
-	inputHandler_.Pipe(input_, [this](int64_t pos, uint8_t *sector) {
-		CompressionTask::HandleSector(pos, sector);
-	});
-}
 
-void CompressionTask::HandleSector(int64_t pos, uint8_t *sector) {
-	// Do something with sector.
-	// TODO: Progress.
-	//printf("sector\n");
-	pool.Release(sector);
+	inputHandler_.OnBegin([this](int64_t size) {
+		Notify(TASK_INPROGRESS, 0.0f);
+	});
+	inputHandler_.Pipe(input_, [this](int64_t pos, uint8_t *sector) {
+		// TODO
+	});
 }
 
 void Compress(const std::vector<Task> &tasks) {

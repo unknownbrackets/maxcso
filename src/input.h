@@ -6,6 +6,7 @@
 namespace maxcso {
 
 typedef std::function<void (int64_t pos, uint8_t *sector)> InputCallback;
+typedef std::function<void (int64_t size)> InputBeginCallback;
 typedef std::function<void (bool success, const char *reason)> InputFinishCallback;
 
 class Input {
@@ -13,13 +14,10 @@ public:
 	Input(uv_loop_t *loop);
 	~Input();
 	void OnFinish(InputFinishCallback finish);
+	void OnBegin(InputBeginCallback begin);
 	void Pipe(uv_file file, InputCallback callback);
 	void Pause();
 	void Resume();
-
-	int64_t TotalSize() {
-		return size_;
-	}
 
 private:
 	void DetectFormat();
@@ -35,6 +33,7 @@ private:
 	UVHelper uv_;
 	uv_loop_t *loop_;
 
+	InputBeginCallback begin_;
 	InputFinishCallback finish_;
 	InputCallback callback_;
 	uv_file file_;
