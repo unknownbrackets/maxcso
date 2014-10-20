@@ -6,6 +6,7 @@
     <ClCompile Include="uv_helper.cpp" />
     <ClCompile Include="buffer_pool.cpp" />
     <ClCompile Include="output.cpp" />
+    <ClCompile Include="sector.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="compress.h" />
@@ -13,6 +14,7 @@
     <ClInclude Include="uv_helper.h" />
     <ClInclude Include="buffer_pool.h" />
     <ClInclude Include="output.h" />
+    <ClInclude Include="sector.h" />
     <ClInclude Include="cso.h" />
   </ItemGroup>
 </Project>

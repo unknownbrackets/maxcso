@@ -43,7 +43,7 @@ private:
 	OutputFinishCallback finish_;
 
 	bool writing_;
-	// TODO: Queue
+	// TODO: Queue, vector of free ones, map of pending?
 };
 
 };

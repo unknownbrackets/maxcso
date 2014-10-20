@@ -23,6 +23,7 @@
     <ClCompile Include="compress.cpp" />
     <ClCompile Include="input.cpp" />
     <ClCompile Include="output.cpp" />
+    <ClCompile Include="sector.cpp" />
     <ClCompile Include="uv_helper.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -31,6 +32,7 @@
     <ClInclude Include="cso.h" />
     <ClInclude Include="input.h" />
     <ClInclude Include="output.h" />
+    <ClInclude Include="sector.h" />
     <ClInclude Include="uv_helper.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
