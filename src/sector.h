@@ -29,6 +29,9 @@ public:
 	bool Compressed() {
 		return best_ != nullptr;
 	}
+	int64_t Pos() {
+		return pos_;
+	}
 
 	// Just so it has some place to live.
 	// Otherwise, Output needs to handle a list of these.

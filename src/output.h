@@ -1,7 +1,10 @@
 #pragma once
 
 #include <functional>
+#include <vector>
+#include <map>
 #include "uv_helper.h"
+#include "sector.h"
 
 namespace maxcso {
 
@@ -14,7 +17,7 @@ public:
 	~Output();
 
 	void SetFile(uv_file file, int64_t srcSize);
-	void Enqueue(int64_t pos, uint8_t *sector);
+	void Enqueue(int64_t pos, uint8_t *buffer);
 	void Flush(); // callback when done?
 	bool QueueFull();
 
@@ -22,7 +25,8 @@ public:
 	void OnFinish(OutputFinishCallback callback);
 
 private:
-	void Align();
+	int32_t Align(int64_t &pos);
+	void HandleReadySector(Sector *sector);
 
 	UVHelper uv_;
 	uv_loop_t *loop_;
@@ -42,6 +46,8 @@ private:
 	OutputCallback progress_;
 	OutputFinishCallback finish_;
 
+	std::vector<Sector *> freeSectors_;
+	std::map<int64_t, Sector *> pendingSectors_;
 	bool writing_;
 	// TODO: Queue, vector of free ones, map of pending?
 };

@@ -199,6 +199,7 @@ bool Input::DecompressSector(uint8_t *dst, const uint8_t *src, unsigned int len,
 	z.zfree = Z_NULL;
 	z.opaque = Z_NULL;
 	z.msg = Z_NULL;
+	// TODO: inflateReset2?
 	if (inflateInit2(&z, -15) != Z_OK) {
 		err = z.msg ? z.msg : "Unable to initialize inflate";
 		return false;

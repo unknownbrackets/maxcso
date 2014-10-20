@@ -4,10 +4,24 @@
 
 namespace maxcso {
 
+static const size_t QUEUE_SIZE = 128;
+
 Output::Output(uv_loop_t *loop) : loop_(loop), srcSize_(-1), index_(nullptr), writing_(false) {
+	for (size_t i = 0; i < QUEUE_SIZE; ++i) {
+		freeSectors_.push_back(new Sector());
+	}
 }
 
 Output::~Output() {
+	for (Sector *sector : freeSectors_) {
+		delete sector;
+	}
+	for (auto pair : pendingSectors_) {
+		delete pair.second;
+	}
+	freeSectors_.clear();
+	pendingSectors_.clear();
+
 	delete [] index_;
 	index_ = nullptr;
 }
@@ -41,52 +55,127 @@ void Output::SetFile(uv_file file, int64_t srcSize) {
 	// If the shift is above 11, the padding could make it need more space.
 	// But that would be > 4 TB anyway, so let's not worry about it.
 	align_ = 1 << shift_;
-	Align();
+	Align(dstPos_);
 }
 
-void Output::Align() {
-	uint32_t off = static_cast<uint32_t>(dstPos_ % align_);
+int32_t Output::Align(int64_t &pos) {
+	uint32_t off = static_cast<uint32_t>(pos % align_);
 	if (off != 0) {
-		dstPos_ += align_ - off;
+		pos += align_ - off;
+		return align_ - off;
+	}
+	return 0;
+}
+
+void Output::Enqueue(int64_t pos, uint8_t *buffer) {
+	Sector *sector = freeSectors_.back();
+	freeSectors_.pop_back();
+
+	// TODO: Don't compress certain blocks?  Like header, dirs?
+	bool tryCompress = true;
+
+	// Sector takes ownership of buffer.
+	if (tryCompress) {
+		sector->Process(loop_, pos, buffer, [this, sector](bool status, const char *reason) {
+			HandleReadySector(sector);
+		});
+	} else {
+		sector->Reserve(pos, buffer);
+		HandleReadySector(sector);
 	}
 }
 
-static bool TESTING;
+void Output::HandleReadySector(Sector *sector) {
+	if (sector != nullptr) {
+		if (srcPos_ != sector->Pos()) {
+			// We're not there yet in the file stream.  Queue this, get to it later.
+			pendingSectors_[sector->Pos()] = sector;
+			return;
+		}
+	} else {
+		// If no sector was provided, we're looking at the first in the queue.
+		if (pendingSectors_.empty()) {
+			return;
+		}
+		sector = pendingSectors_.begin()->second;
+		if (srcPos_ != sector->Pos()) {
+			return;
+		}
 
-void Output::Enqueue(int64_t pos, uint8_t *sector) {
-	// TODO: Serialize writes, queue, release sector
-	// TODO: Don't compress certain blocks?  Like header, dirs?
+		// Remove it from the queue, and then run with it.
+		pendingSectors_.erase(pendingSectors_.begin());
+	}
 
-	// For now, just for testing.
-	int32_t s = static_cast<int32_t>(pos >> SECTOR_SHIFT);
-	index_[s] = static_cast<int32_t>(dstPos_ >> shift_) | CSO_INDEX_UNCOMPRESSED;
-	const uv_buf_t buf = uv_buf_init(reinterpret_cast<char *>(sector), SECTOR_SIZE);
+	// Check for any sectors that immediately follow the one we're writing.
+	// We'll just write them all together.
+	std::vector<Sector *> sectors;
+	sectors.push_back(sector);
+	// TODO: Try other numbers.
+	static const size_t MAX_BUFS = 4;
+	int64_t nextPos = srcPos_ + SECTOR_SIZE;
+	auto it = pendingSectors_.find(nextPos);
+	while (it != pendingSectors_.end()) {
+		sectors.push_back(it->second);
+		pendingSectors_.erase(it);
+		nextPos += SECTOR_SIZE;
+		it = pendingSectors_.find(nextPos);
 
-	// TODO: Should really write multiple at once.  Wrong way...
-	writing_ = true;
-	uv_.fs_write(loop_, &req_, file_, &buf, 1, dstPos_, [this, sector](uv_fs_t *req) {
-		writing_ = false;
-		pool.Release(sector);
-		if (req->result != SECTOR_SIZE) {
-			finish_(false, "Unable to write data (disk space?)");
+		// Don't do more than 4 at a time.
+		if (sectors.size() >= MAX_BUFS) {
+			break;
+		}
+	}
+
+	int64_t dstPos = dstPos_;
+	uv_buf_t bufs[MAX_BUFS * 2];
+	unsigned int nbufs = 0;
+	static char padding[2048] = {0};
+	for (size_t i = 0; i < sectors.size(); ++i) {
+		bufs[nbufs++] = uv_buf_init(reinterpret_cast<char *>(sectors[i]->BestBuffer()), sectors[i]->BestSize());
+
+		// Update the index.
+		const int32_t s = static_cast<int32_t>(sectors[i]->Pos() >> SECTOR_SHIFT);
+		index_[s] = static_cast<int32_t>(dstPos >> shift_);
+		if (!sectors[i]->Compressed()) {
+			index_[s] |= CSO_INDEX_UNCOMPRESSED;
+		}
+
+		dstPos += sectors[i]->BestSize();
+		int32_t padSize = Align(dstPos);
+		if (padSize != 0) {
+			// We need uv to write the padding out as well.
+			bufs[nbufs++] = uv_buf_init(padding, padSize);
+		}
+	}
+
+	const int64_t totalWrite = dstPos - dstPos_;
+	uv_.fs_write(loop_, sector->WriteReq(), file_, bufs, nbufs, dstPos_, [this, sectors, nextPos, totalWrite](uv_fs_t *req) {
+		for (Sector *sector : sectors) {
+			sector->Release();
+			freeSectors_.push_back(sector);
+		}
+
+		if (req->result != totalWrite) {
+			finish_(false, "Data could not be written to output file");
 			uv_fs_req_cleanup(req);
 			return;
 		}
 		uv_fs_req_cleanup(req);
 
-		dstPos_ += SECTOR_SIZE;
-		srcPos_ += SECTOR_SIZE;
-		Align();
+		srcPos_ = nextPos;
+		dstPos_ += totalWrite;
 
 		// TODO: Better (including index?)
 		float prog = static_cast<float>(srcPos_) / static_cast<float>(srcSize_);
 		progress_(prog);
+
+		// Check if there's more data to write out.
+		HandleReadySector(nullptr);
 	});
 }
 
 bool Output::QueueFull() {
-	// TODO: This is wrong, but just to make it not crash for now.
-	return writing_;
+	return freeSectors_.empty();
 }
 
 void Output::OnProgress(OutputCallback callback) {
