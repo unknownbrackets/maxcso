@@ -29,7 +29,7 @@ private:
 	void Flush();
 	int32_t Align(int64_t &pos);
 	void HandleReadySector(Sector *sector);
-	bool ShouldCompress(int64_t pos);
+	bool ShouldCompress(int64_t pos, uint8_t *buffer);
 
 	enum State {
 		STATE_INIT = 0x00,

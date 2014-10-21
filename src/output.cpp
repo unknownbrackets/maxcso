@@ -77,7 +77,7 @@ void Output::Enqueue(int64_t pos, uint8_t *buffer) {
 	freeSectors_.pop_back();
 
 	// We might not compress all blocks.
-	const bool tryCompress = ShouldCompress(pos);
+	const bool tryCompress = ShouldCompress(pos, buffer);
 
 	// Sector takes ownership of buffer either way.
 	if (tryCompress) {
@@ -194,11 +194,17 @@ void Output::HandleReadySector(Sector *sector) {
 	});
 }
 
-bool Output::ShouldCompress(int64_t pos) {
+bool Output::ShouldCompress(int64_t pos, uint8_t *buffer) {
 	if (flags_ & TASKFLAG_FORCE_ALL) {
 		return true;
 	}
 
+	if (pos == 16 * SECTOR_SIZE) {
+		// This is the volume descriptor.
+		// TODO: Could read it in and map all the directory structures.
+		// Would just need to keep  a list, assuming they are sequential, we'd get most of them.
+		return false;
+	}
 	// TODO
 	return true;
 }
