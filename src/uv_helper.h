@@ -21,32 +21,32 @@ public:
 	UVHelper() {
 	}
 
-	int fs_open(uv_loop_t *loop, uv_fs_t *req, const char *path, int flags, int mode, fs_func_cb &&cb) {
+	inline int fs_open(uv_loop_t *loop, uv_fs_t *req, const char *path, int flags, int mode, fs_func_cb &&cb) {
 		req->data = Freeze(std::move(cb));
 		return uv_fs_open(loop, req, path, flags, mode, &Dispatch);
 	}
 
-	int fs_close(uv_loop_t *loop, uv_fs_t *req, uv_file file, fs_func_cb &&cb) {
+	inline int fs_close(uv_loop_t *loop, uv_fs_t *req, uv_file file, fs_func_cb &&cb) {
 		req->data = Freeze(std::move(cb));
 		return uv_fs_close(loop, req, file, &Dispatch);
 	}
 
-	int fs_read(uv_loop_t *loop, uv_fs_t *req, uv_file file, const uv_buf_t bufs[], unsigned int nbufs, int64_t offset, fs_func_cb &&cb) {
+	inline int fs_read(uv_loop_t *loop, uv_fs_t *req, uv_file file, const uv_buf_t bufs[], unsigned int nbufs, int64_t offset, fs_func_cb &&cb) {
 		req->data = Freeze(std::move(cb));
 		return uv_fs_read(loop, req, file, bufs, nbufs, offset, &Dispatch);
 	}
 
-	int fs_write(uv_loop_t *loop, uv_fs_t *req, uv_file file, const uv_buf_t bufs[], unsigned int nbufs, int64_t offset, fs_func_cb &&cb) {
+	inline int fs_write(uv_loop_t *loop, uv_fs_t *req, uv_file file, const uv_buf_t bufs[], unsigned int nbufs, int64_t offset, fs_func_cb &&cb) {
 		req->data = Freeze(std::move(cb));
 		return uv_fs_write(loop, req, file, bufs, nbufs, offset, &Dispatch);
 	}
 
-	int fs_fstat(uv_loop_t *loop, uv_fs_t *req, uv_file file, fs_func_cb &&cb) {
+	inline int fs_fstat(uv_loop_t *loop, uv_fs_t *req, uv_file file, fs_func_cb &&cb) {
 		req->data = Freeze(std::move(cb));
 		return uv_fs_fstat(loop, req, file, &Dispatch);
 	}
 
-	int queue_work(uv_loop_t *loop, uv_work_t *req, work_func_cb &&cb, after_work_func_cb &&after) {
+	inline int queue_work(uv_loop_t *loop, uv_work_t *req, work_func_cb &&cb, after_work_func_cb &&after) {
 		req->data = Freeze(std::move(cb), std::move(after));
 		return uv_queue_work(loop, req, &Dispatch, &Dispatch);
 	}
@@ -57,12 +57,12 @@ private:
 		f(req);
 	}
 
-	static void *Freeze(fs_func_cb &&cb) {
+	inline static void *Freeze(fs_func_cb &&cb) {
 		int ticket = ++ticket_;
 		fs_funcs_.emplace(ticket, std::move(cb));
 		return (void *)ticket;
 	}
-	static fs_func_cb ThawFS(void *data) {
+	inline static fs_func_cb ThawFS(void *data) {
 		int ticket = (int)data;
 		fs_func_cb f = std::move(fs_funcs_.at(ticket));
 		fs_funcs_.erase(ticket);
@@ -78,17 +78,17 @@ private:
 		f(req, status);
 	}
 
-	static void *Freeze(work_func_cb &&cb, after_work_func_cb &&after) {
+	inline static void *Freeze(work_func_cb &&cb, after_work_func_cb &&after) {
 		int ticket = ++ticket_;
 		work_funcs_.emplace(ticket, std::move(std::make_pair(std::move(cb), std::move(after))));
 		return (void *)ticket;
 	}
-	static work_func_cb ThawWork(void *data) {
+	inline static work_func_cb ThawWork(void *data) {
 		int ticket = (int)data;
 		work_func_cb f = std::move(work_funcs_.at(ticket).first);
 		return f;
 	}
-	static after_work_func_cb ThawAfterWork(void *data) {
+	inline static after_work_func_cb ThawAfterWork(void *data) {
 		int ticket = (int)data;
 		after_work_func_cb f = std::move(work_funcs_.at(ticket).second);
 		work_funcs_.erase(ticket);
