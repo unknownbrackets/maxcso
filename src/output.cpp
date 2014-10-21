@@ -1,5 +1,6 @@
 #include "output.h"
 #include "buffer_pool.h"
+#include "compress.h"
 #include "cso.h"
 
 namespace maxcso {
@@ -7,9 +8,9 @@ namespace maxcso {
 // TODO: Tune, less may be better.
 static const size_t QUEUE_SIZE = 128;
 
-Output::Output(uv_loop_t *loop) : loop_(loop), srcSize_(-1), index_(nullptr) {
+Output::Output(uv_loop_t *loop, const Task &task) : loop_(loop), flags_(task.flags), srcSize_(-1), index_(nullptr) {
 	for (size_t i = 0; i < QUEUE_SIZE; ++i) {
-		freeSectors_.push_back(new Sector());
+		freeSectors_.push_back(new Sector(task.flags));
 	}
 }
 
@@ -72,10 +73,10 @@ void Output::Enqueue(int64_t pos, uint8_t *buffer) {
 	Sector *sector = freeSectors_.back();
 	freeSectors_.pop_back();
 
-	// TODO: Don't compress certain blocks?  Like header, dirs?
-	bool tryCompress = true;
+	// We might not compress all blocks.
+	const bool tryCompress = ShouldCompress(pos);
 
-	// Sector takes ownership of buffer.
+	// Sector takes ownership of buffer either way.
 	if (tryCompress) {
 		sector->Process(loop_, pos, buffer, [this, sector](bool status, const char *reason) {
 			HandleReadySector(sector);
@@ -173,6 +174,15 @@ void Output::HandleReadySector(Sector *sector) {
 		// Check if there's more data to write out.
 		HandleReadySector(nullptr);
 	});
+}
+
+bool Output::ShouldCompress(int64_t pos) {
+	if (flags_ & TASKFLAG_FORCE_ALL) {
+		return true;
+	}
+
+	// TODO
+	return true;
 }
 
 bool Output::QueueFull() {

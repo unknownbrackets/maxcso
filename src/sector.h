@@ -12,7 +12,7 @@ typedef std::function<void (bool status, const char *reason)> SectorCallback;
 
 class Sector {
 public:
-	Sector();
+	Sector(uint32_t flags);
 	~Sector();
 
 	void Process(uv_loop_t *loop, int64_t pos, uint8_t *buffer, SectorCallback ready);
@@ -48,6 +48,7 @@ private:
 
 	UVHelper uv_;
 	uv_loop_t *loop_;
+	uint32_t flags_;
 	bool busy_;
 
 	int64_t pos_;

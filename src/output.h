@@ -4,6 +4,7 @@
 #include <vector>
 #include <map>
 #include "uv_helper.h"
+#include "compress.h"
 #include "sector.h"
 
 namespace maxcso {
@@ -13,7 +14,7 @@ typedef std::function<void (bool status, const char *reason)> OutputFinishCallba
 
 class Output {
 public:
-	Output(uv_loop_t *loop);
+	Output(uv_loop_t *loop, const Task &task);
 	~Output();
 
 	void SetFile(uv_file file, int64_t srcSize);
@@ -27,9 +28,11 @@ public:
 private:
 	int32_t Align(int64_t &pos);
 	void HandleReadySector(Sector *sector);
+	bool ShouldCompress(int64_t pos);
 
 	UVHelper uv_;
 	uv_loop_t *loop_;
+	uint32_t flags_;
 
 	uv_file file_;
 	uv_fs_t req_;

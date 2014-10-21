@@ -1,10 +1,11 @@
 #include "sector.h"
+#include "compress.h"
 #include "cso.h"
 #include "buffer_pool.h"
 
 namespace maxcso {
 
-Sector::Sector() : busy_(false), buffer_(nullptr), best_(nullptr) {
+Sector::Sector(uint32_t flags) : flags_(flags), busy_(false), buffer_(nullptr), best_(nullptr) {
 	// Set up the zlib streams, which we will reuse each time we hit this sector.
 	memset(&zDefault_, 0, sizeof(zDefault_));
 	deflateInit2(&zDefault_, 9, Z_DEFLATED, -15, 9, Z_DEFAULT_STRATEGY);
@@ -53,10 +54,14 @@ void Sector::Process(uv_loop_t *loop, int64_t pos, uint8_t *buffer, SectorCallba
 
 void Sector::Compress() {
 	// Each of these sometimes wins on certain blocks.
-	ZlibTrial(&zDefault_);
-	ZlibTrial(&zFiltered_);
-	ZlibTrial(&zHuffman_);
-	ZlibTrial(&zRLE_);
+	if (!(flags_ & TASKFLAG_NO_ZLIB_DEFAULT)) {
+		ZlibTrial(&zDefault_);
+	}
+	if (!(flags_ & TASKFLAG_NO_ZLIB_BRUTE)) {
+		ZlibTrial(&zFiltered_);
+		ZlibTrial(&zHuffman_);
+		ZlibTrial(&zRLE_);
+	}
 }
 
 // TODO: Split these out to separate files?

@@ -11,7 +11,7 @@ namespace maxcso {
 class CompressionTask {
 public:
 	CompressionTask(uv_loop_t *loop, const Task &t)
-		: task_(t), loop_(loop), input_(-1), inputHandler_(loop), outputHandler_(loop), output_(-1) {
+		: task_(t), loop_(loop), input_(-1), inputHandler_(loop), outputHandler_(loop, t), output_(-1) {
 	}
 	~CompressionTask() {
 		Cleanup();
