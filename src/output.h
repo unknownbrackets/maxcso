@@ -48,8 +48,6 @@ private:
 
 	std::vector<Sector *> freeSectors_;
 	std::map<int64_t, Sector *> pendingSectors_;
-	bool writing_;
-	// TODO: Queue, vector of free ones, map of pending?
 };
 
 };

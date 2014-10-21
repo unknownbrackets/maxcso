@@ -4,9 +4,10 @@
 
 namespace maxcso {
 
+// TODO: Tune, less may be better.
 static const size_t QUEUE_SIZE = 128;
 
-Output::Output(uv_loop_t *loop) : loop_(loop), srcSize_(-1), index_(nullptr), writing_(false) {
+Output::Output(uv_loop_t *loop) : loop_(loop), srcSize_(-1), index_(nullptr) {
 	for (size_t i = 0; i < QUEUE_SIZE; ++i) {
 		freeSectors_.push_back(new Sector());
 	}

@@ -1,7 +1,8 @@
-#include <zlib.h>
 #include "input.h"
 #include "buffer_pool.h"
 #include "cso.h"
+#define ZLIB_CONST
+#include "zlib.h"
 
 namespace maxcso {
 
@@ -195,10 +196,7 @@ void Input::Resume() {
 
 bool Input::DecompressSector(uint8_t *dst, const uint8_t *src, unsigned int len, std::string &err) {
 	z_stream z;
-	z.zalloc = Z_NULL;
-	z.zfree = Z_NULL;
-	z.opaque = Z_NULL;
-	z.msg = Z_NULL;
+	memset(&z, 0, sizeof(z));
 	// TODO: inflateReset2?
 	if (inflateInit2(&z, -15) != Z_OK) {
 		err = z.msg ? z.msg : "Unable to initialize inflate";

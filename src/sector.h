@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <functional>
 #include "uv_helper.h"
+#define ZLIB_CONST
+#include "zlib.h"
 
 namespace maxcso {
 
@@ -41,6 +43,8 @@ public:
 
 private:
 	void Compress();
+	void ZlibTrial(z_stream *z);
+	bool SubmitTrial(uint8_t *result, uint32_t size);
 
 	UVHelper uv_;
 	uv_loop_t *loop_;
@@ -55,6 +59,11 @@ private:
 	uv_fs_t write_;
 
 	SectorCallback ready_;
+
+	z_stream zDefault_;
+	z_stream zFiltered_;
+	z_stream zHuffman_;
+	z_stream zRLE_;
 };
 
 };
