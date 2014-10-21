@@ -33,19 +33,14 @@ void ZopfliInitHash(size_t window_size, ZopfliHash* h) {
   h->head = (int*)malloc(sizeof(*h->head) * 65536);
   h->prev = (unsigned short*)malloc(sizeof(*h->prev) * window_size);
   h->hashval = (int*)malloc(sizeof(*h->hashval) * window_size);
-  for (i = 0; i < 65536; i++) {
-    h->head[i] = -1;  /* -1 indicates no head so far. */
-  }
+  memset(h->head, -1, sizeof(h->head[0]) * 65536);  /* -1 indicates no head so far. */
+  memset(h->hashval, -1, sizeof(h->hashval[0]) * window_size);
   for (i = 0; i < window_size; i++) {
     h->prev[i] = i;  /* If prev[j] == j, then prev[j] is uninitialized. */
-    h->hashval[i] = -1;
   }
 
 #ifdef ZOPFLI_HASH_SAME
-  h->same = (unsigned short*)malloc(sizeof(*h->same) * window_size);
-  for (i = 0; i < window_size; i++) {
-    h->same[i] = 0;
-  }
+  h->same = (unsigned short*)calloc(window_size, sizeof(*h->same));
 #endif
 
 #ifdef ZOPFLI_HASH_SAME_HASH
@@ -53,12 +48,10 @@ void ZopfliInitHash(size_t window_size, ZopfliHash* h) {
   h->head2 = (int*)malloc(sizeof(*h->head2) * 65536);
   h->prev2 = (unsigned short*)malloc(sizeof(*h->prev2) * window_size);
   h->hashval2 = (int*)malloc(sizeof(*h->hashval2) * window_size);
-  for (i = 0; i < 65536; i++) {
-    h->head2[i] = -1;
-  }
+  memset(h->head2, -1, sizeof(h->head[0]) * 65536);
+  memset(h->hashval2, -1, sizeof(h->hashval2[0]) * window_size);
   for (i = 0; i < window_size; i++) {
     h->prev2[i] = i;
-    h->hashval2[i] = -1;
   }
 #endif
 }
