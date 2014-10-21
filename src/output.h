@@ -19,20 +19,30 @@ public:
 
 	void SetFile(uv_file file, int64_t srcSize);
 	void Enqueue(int64_t pos, uint8_t *buffer);
-	void Flush(); // callback when done?
 	bool QueueFull();
 
 	void OnProgress(OutputCallback callback);
 	void OnFinish(OutputFinishCallback callback);
 
 private:
+	void CheckFinish();
+	void Flush();
 	int32_t Align(int64_t &pos);
 	void HandleReadySector(Sector *sector);
 	bool ShouldCompress(int64_t pos);
 
+	enum State {
+		STATE_INIT = 0x00,
+		STATE_HAS_FILE = 0x01,
+		STATE_INDEX_READY = 0x02,
+		STATE_INDEX_WRITTEN = 0x04,
+		STATE_DATA_WRITTEN = 0x08,
+	};
+
 	UVHelper uv_;
 	uv_loop_t *loop_;
 	uint32_t flags_;
+	uint32_t state_;
 
 	uv_file file_;
 	uv_fs_t req_;

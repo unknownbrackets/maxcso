@@ -8,7 +8,8 @@ namespace maxcso {
 // TODO: Tune, less may be better.
 static const size_t QUEUE_SIZE = 128;
 
-Output::Output(uv_loop_t *loop, const Task &task) : loop_(loop), flags_(task.flags), srcSize_(-1), index_(nullptr) {
+Output::Output(uv_loop_t *loop, const Task &task)
+	: loop_(loop), flags_(task.flags), state_(STATE_INIT), srcSize_(-1), index_(nullptr) {
 	for (size_t i = 0; i < QUEUE_SIZE; ++i) {
 		freeSectors_.push_back(new Sector(task.flags));
 	}
@@ -58,6 +59,8 @@ void Output::SetFile(uv_file file, int64_t srcSize) {
 	// But that would be > 4 TB anyway, so let's not worry about it.
 	align_ = 1 << shift_;
 	Align(dstPos_);
+
+	state_ |= STATE_HAS_FILE;
 }
 
 int32_t Output::Align(int64_t &pos) {
@@ -150,6 +153,12 @@ void Output::HandleReadySector(Sector *sector) {
 		}
 	}
 
+	// If we're working on the last sectors, then the index is ready to write.
+	if (nextPos == srcSize_) {
+		state_ |= STATE_INDEX_READY;
+		Flush();
+	}
+
 	const int64_t totalWrite = dstPos - dstPos_;
 	uv_.fs_write(loop_, sector->WriteReq(), file_, bufs, nbufs, dstPos_, [this, sectors, nextPos, totalWrite](uv_fs_t *req) {
 		for (Sector *sector : sectors) {
@@ -171,8 +180,13 @@ void Output::HandleReadySector(Sector *sector) {
 		float prog = static_cast<float>(srcPos_) / static_cast<float>(srcSize_);
 		progress_(prog);
 
-		// Check if there's more data to write out.
-		HandleReadySector(nullptr);
+		if (nextPos == srcSize_) {
+			state_ |= STATE_DATA_WRITTEN;
+			CheckFinish();
+		} else {
+			// Check if there's more data to write out.
+			HandleReadySector(nullptr);
+		}
 	});
 }
 
@@ -198,6 +212,11 @@ void Output::OnFinish(OutputFinishCallback callback) {
 }
 
 void Output::Flush() {
+	if (!(state_ & STATE_INDEX_READY)) {
+		finish_(false, "Flush called before index finalized");
+		return;
+	}
+
 	CSOHeader *header = new CSOHeader;
 	memcpy(header->magic, CSO_MAGIC, sizeof(header->magic));
 	header->header_size = sizeof(CSOHeader);
@@ -210,23 +229,26 @@ void Output::Flush() {
 
 	const uint32_t sectors = static_cast<uint32_t>(srcSize_ >> SECTOR_SHIFT);
 
-	// TODO: Need to drain first before broadcasting finish.
-	// TODO: Then need to update the final index.
-
 	uv_buf_t bufs[2];
 	bufs[0] = uv_buf_init(reinterpret_cast<char *>(header), sizeof(CSOHeader));
 	bufs[1] = uv_buf_init(reinterpret_cast<char *>(index_), (sectors + 1) * sizeof(uint32_t));
 	const size_t totalBytes = sizeof(CSOHeader) + (sectors + 1) * sizeof(uint32_t);
 	uv_.fs_write(loop_, &flush_, file_, bufs, 2, 0, [this, header, totalBytes](uv_fs_t *req) {
 		if (req->result != totalBytes) {
-			printf("GOT: %lld not %lld\n", (uint64_t)req->result, (uint64_t)totalBytes);
 			finish_(false, "Unable to write header data");
 		} else {
-			finish_(true, nullptr);
+			state_ |= STATE_INDEX_WRITTEN;
+			CheckFinish();
 		}
 		uv_fs_req_cleanup(req);
 		delete header;
 	});
+}
+
+void Output::CheckFinish() {
+	if ((state_ & STATE_INDEX_WRITTEN) && (state_ & STATE_DATA_WRITTEN)) {
+		finish_(true, nullptr);
+	}
 }
 
 };

@@ -80,9 +80,7 @@ void CompressionTask::Cleanup() {
 
 void CompressionTask::BeginProcessing() {
 	inputHandler_.OnFinish([this](bool success, const char *reason) {
-		if (success) {
-			outputHandler_.Flush();
-		} else {
+		if (!success) {
 			Notify(TASK_INVALID_DATA);
 			if (reason) {
 				printf("error: %s\n", reason);
@@ -94,6 +92,8 @@ void CompressionTask::BeginProcessing() {
 			Notify(TASK_SUCCESS);
 			printf("success\n");
 		} else {
+			// Abort reading.
+			inputHandler_.Pause();
 			Notify(TASK_CANNOT_WRITE);
 			if (reason) {
 				printf("error: %s\n", reason);
