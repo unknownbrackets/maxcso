@@ -155,6 +155,10 @@ void Output::HandleReadySector(Sector *sector) {
 
 	// If we're working on the last sectors, then the index is ready to write.
 	if (nextPos == srcSize_) {
+		// Update the final index entry.
+		const int32_t s = static_cast<int32_t>(srcSize_ >> SECTOR_SHIFT);
+		index_[s] = static_cast<int32_t>(dstPos >> shift_);
+
 		state_ |= STATE_INDEX_READY;
 		Flush();
 	}
