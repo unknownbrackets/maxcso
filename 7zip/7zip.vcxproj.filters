@@ -1,0 +1,98 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="7zip">
+      <UniqueIdentifier>{83fe08e8-c88d-475e-bd8c-49ecba8cce9b}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="CPP\7zip\Archive\DeflateProps.h">
+      <Filter>7zip</Filter>
+    </ClInclude>
+    <ClInclude Include="CPP\7zip\Compress\DeflateEncoder.h">
+      <Filter>7zip</Filter>
+    </ClInclude>
+    <ClInclude Include="C\Alloc.h">
+      <Filter>7zip</Filter>
+    </ClInclude>
+    <ClInclude Include="C\LzFind.h">
+      <Filter>7zip</Filter>
+    </ClInclude>
+    <ClInclude Include="C\HuffEnc.h">
+      <Filter>7zip</Filter>
+    </ClInclude>
+    <ClInclude Include="C\Sort.h">
+      <Filter>7zip</Filter>
+    </ClInclude>
+    <ClInclude Include="CPP\7zip\Common\OutBuffer.h">
+      <Filter>7zip</Filter>
+    </ClInclude>
+    <ClInclude Include="CPP\7zip\Common\FileStreams.h">
+      <Filter>7zip</Filter>
+    </ClInclude>
+    <ClInclude Include="CPP\Windows\PropVariant.h">
+      <Filter>7zip</Filter>
+    </ClInclude>
+    <ClInclude Include="CPP\Windows\FileIO.h">
+      <Filter>7zip</Filter>
+    </ClInclude>
+    <ClInclude Include="CPP\7zip\Archive\Common\ParseProperties.h">
+      <Filter>7zip</Filter>
+    </ClInclude>
+    <ClInclude Include="CPP\Common\StringToInt.h">
+      <Filter>7zip</Filter>
+    </ClInclude>
+    <ClInclude Include="CPP\Common\StringConvert.h">
+      <Filter>7zip</Filter>
+    </ClInclude>
+    <ClInclude Include="CPP\Common\MyString.h">
+      <Filter>7zip</Filter>
+    </ClInclude>
+    <ClInclude Include="deflate7z.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="CPP\7zip\Archive\DeflateProps.cpp">
+      <Filter>7zip</Filter>
+    </ClCompile>
+    <ClCompile Include="CPP\7zip\Compress\DeflateEncoder.cpp">
+      <Filter>7zip</Filter>
+    </ClCompile>
+    <ClCompile Include="C\Alloc.c">
+      <Filter>7zip</Filter>
+    </ClCompile>
+    <ClCompile Include="C\LzFind.c">
+      <Filter>7zip</Filter>
+    </ClCompile>
+    <ClCompile Include="C\HuffEnc.c">
+      <Filter>7zip</Filter>
+    </ClCompile>
+    <ClCompile Include="C\Sort.c">
+      <Filter>7zip</Filter>
+    </ClCompile>
+    <ClCompile Include="CPP\7zip\Common\OutBuffer.cpp">
+      <Filter>7zip</Filter>
+    </ClCompile>
+    <ClCompile Include="CPP\7zip\Common\FileStreams.cpp">
+      <Filter>7zip</Filter>
+    </ClCompile>
+    <ClCompile Include="CPP\Windows\PropVariant.cpp">
+      <Filter>7zip</Filter>
+    </ClCompile>
+    <ClCompile Include="CPP\Windows\FileIO.cpp">
+      <Filter>7zip</Filter>
+    </ClCompile>
+    <ClCompile Include="CPP\7zip\Archive\Common\ParseProperties.cpp">
+      <Filter>7zip</Filter>
+    </ClCompile>
+    <ClCompile Include="CPP\Common\StringToInt.cpp">
+      <Filter>7zip</Filter>
+    </ClCompile>
+    <ClCompile Include="CPP\Common\StringConvert.cpp">
+      <Filter>7zip</Filter>
+    </ClCompile>
+    <ClCompile Include="CPP\Common\MyString.cpp">
+      <Filter>7zip</Filter>
+    </ClCompile>
+    <ClCompile Include="deflate7z.cpp" />
+  </ItemGroup>
+</Project>
