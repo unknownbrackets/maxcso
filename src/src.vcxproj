@@ -35,6 +35,20 @@
     <ClInclude Include="sector.h" />
     <ClInclude Include="uv_helper.h" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\7zip\7zip.vcxproj">
+      <Project>{6343b36e-030f-4a66-a588-758b2e2b5bee}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\libuv\libuv.vcxproj">
+      <Project>{33066374-88cb-cb8d-15da-61032886329a}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\zlib\zlib.vcxproj">
+      <Project>{f761046e-6c38-4428-a5f1-38391a37bb34}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\zopfli\zopfli.vcxproj">
+      <Project>{6343b36e-030f-4a66-a588-758b2e2b5bed}</Project>
+    </ProjectReference>
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{F761046E-6C38-4428-A5F1-38391A37BB35}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
@@ -208,7 +222,7 @@
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <RuntimeTypeInfo>false</RuntimeTypeInfo>
       <WholeProgramOptimization>true</WholeProgramOptimization>
-      <AdditionalIncludeDirectories>../libuv/include;../zlib</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../libuv/include;../zlib;../zopfli/src;../7zip</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
     </ClCompile>
     <Link>

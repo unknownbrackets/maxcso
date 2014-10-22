@@ -3,8 +3,12 @@
 #include <cstdint>
 #include <functional>
 #include "uv_helper.h"
-#define ZLIB_CONST
-#include "zlib.h"
+
+typedef struct z_stream_s z_stream;
+
+namespace Deflate7z {
+	struct Context;
+};
 
 namespace maxcso {
 
@@ -44,6 +48,8 @@ public:
 private:
 	void Compress();
 	void ZlibTrial(z_stream *z);
+	void ZopfliTrial();
+	void SevenZipTrial();
 	bool SubmitTrial(uint8_t *result, uint32_t size);
 
 	UVHelper uv_;
@@ -61,10 +67,11 @@ private:
 
 	SectorCallback ready_;
 
-	z_stream zDefault_;
-	z_stream zFiltered_;
-	z_stream zHuffman_;
-	z_stream zRLE_;
+	z_stream *zDefault_;
+	z_stream *zFiltered_;
+	z_stream *zHuffman_;
+	z_stream *zRLE_;
+	Deflate7z::Context *deflate7z_;
 };
 
 };
