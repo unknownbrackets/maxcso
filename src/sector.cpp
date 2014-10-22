@@ -176,6 +176,8 @@ void Sector::Reserve(int64_t pos, uint8_t *buffer) {
 	busy_ = true;
 	pos_ = pos;
 	buffer_ = buffer;
+	best_ = nullptr;
+	bestSize_ = SECTOR_SIZE;
 }
 
 void Sector::Release() {
