@@ -16,5 +16,6 @@
     <ClInclude Include="output.h" />
     <ClInclude Include="sector.h" />
     <ClInclude Include="cso.h" />
+    <ClInclude Include="dax.h" />
   </ItemGroup>
 </Project>

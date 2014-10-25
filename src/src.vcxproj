@@ -30,6 +30,7 @@
     <ClInclude Include="buffer_pool.h" />
     <ClInclude Include="compress.h" />
     <ClInclude Include="cso.h" />
+    <ClInclude Include="dax.h" />
     <ClInclude Include="input.h" />
     <ClInclude Include="output.h" />
     <ClInclude Include="sector.h" />
