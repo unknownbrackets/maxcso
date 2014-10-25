@@ -1,4 +1,6 @@
 # Object files
+/cli/Debug
+/cli/Release
 *.o
 *.ko
 *.obj
@@ -31,3 +33,7 @@
 *.exe
 *.out
 *.app
+
+# User setting files
+*.vcxproj.user
+*.suo
