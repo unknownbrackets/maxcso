@@ -6,7 +6,7 @@
 namespace maxcso {
 
 // TODO: Tune, less may be better.
-static const size_t QUEUE_SIZE = 128;
+static const size_t QUEUE_SIZE = 32;
 
 Output::Output(uv_loop_t *loop, const Task &task)
 	: loop_(loop), flags_(task.flags), state_(STATE_INIT), srcSize_(-1), index_(nullptr) {
