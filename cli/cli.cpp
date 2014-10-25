@@ -139,6 +139,12 @@ int validate_args(const char *arg0, Arguments &args) {
 		}
 	}
 
+	if (args.inputs.size() != args.outputs.size()) {
+		show_help(arg0);
+		fprintf(stderr, "\nERROR: Too few output files.\n");
+		return 1;
+	}
+
 	if (args.inputs.empty()) {
 		show_help(arg0);
 		fprintf(stderr, "\nERROR: No input files.\n");
