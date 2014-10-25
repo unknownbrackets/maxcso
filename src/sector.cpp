@@ -22,27 +22,39 @@ static void EndZlib(z_stream *&z) {
 
 Sector::Sector(uint32_t flags) : flags_(flags), busy_(false), buffer_(nullptr), best_(nullptr) {
 	// Set up the zlib streams, which we will reuse each time we hit this sector.
-	InitZlib(zDefault_, Z_DEFAULT_STRATEGY);
-	InitZlib(zFiltered_, Z_FILTERED);
-	InitZlib(zHuffman_, Z_HUFFMAN_ONLY);
-	InitZlib(zRLE_, Z_RLE);
+	if (!(flags_ & TASKFLAG_NO_ZLIB_DEFAULT)) {
+		InitZlib(zDefault_, Z_DEFAULT_STRATEGY);
+	}
+	if (!(flags_ & TASKFLAG_NO_ZLIB_BRUTE)) {
+		InitZlib(zFiltered_, Z_FILTERED);
+		InitZlib(zHuffman_, Z_HUFFMAN_ONLY);
+		InitZlib(zRLE_, Z_RLE);
+	}
 
-	Deflate7z::Options opts;
-	Deflate7z::SetDefaults(&opts);
-	opts.level = 9;
-	Deflate7z::Alloc(&deflate7z_, &opts);
+	if (!(flags_ & TASKFLAG_NO_7ZIP)) {
+		Deflate7z::Options opts;
+		Deflate7z::SetDefaults(&opts);
+		opts.level = 9;
+		Deflate7z::Alloc(&deflate7z_, &opts);
+	}
 }
 
 Sector::~Sector() {
 	// Maybe should throw an error if it wasn't released?
 	Release();
 
-	EndZlib(zDefault_);
-	EndZlib(zFiltered_);
-	EndZlib(zHuffman_);
-	EndZlib(zRLE_);
+	if (!(flags_ & TASKFLAG_NO_ZLIB_DEFAULT)) {
+		EndZlib(zDefault_);
+	}
+	if (!(flags_ & TASKFLAG_NO_ZLIB_BRUTE)) {
+		EndZlib(zFiltered_);
+		EndZlib(zHuffman_);
+		EndZlib(zRLE_);
+	}
 
-	Deflate7z::Release(&deflate7z_);
+	if (!(flags_ & TASKFLAG_NO_7ZIP)) {
+		Deflate7z::Release(&deflate7z_);
+	}
 }
 
 void Sector::Process(uv_loop_t *loop, int64_t pos, uint8_t *buffer, SectorCallback ready) {
