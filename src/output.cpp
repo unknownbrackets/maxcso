@@ -116,7 +116,7 @@ void Output::HandleReadySector(Sector *sector) {
 	std::vector<Sector *> sectors;
 	sectors.push_back(sector);
 	// TODO: Try other numbers.
-	static const size_t MAX_BUFS = 4;
+	static const size_t MAX_BUFS = 8;
 	int64_t nextPos = srcPos_ + SECTOR_SIZE;
 	auto it = pendingSectors_.find(nextPos);
 	while (it != pendingSectors_.end()) {
