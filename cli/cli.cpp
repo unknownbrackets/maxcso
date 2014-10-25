@@ -252,8 +252,8 @@ int main(int argc, char *argv[]) {
 		uv_write(&write_req, reinterpret_cast<uv_stream_t *>(&tty), bufs, nbufs, nullptr);
 	};
 	maxcso::ErrorCallback error = [&args, formatting, &tty] (const maxcso::Task *task, maxcso::TaskStatus status, const char *reason) {
-		std::string line;
-		uv_buf_t buf;
+		static std::string line;
+		static uv_buf_t buf;
 		uv_write_t write_req;
 
 		if (args.quiet) {
