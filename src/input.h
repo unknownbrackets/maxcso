@@ -21,7 +21,9 @@ public:
 
 private:
 	void DetectFormat();
+	void SetupCache(uint32_t minSize);
 	void ReadSector();
+	void EnqueueDecompressSector(uint8_t *buffer, uint32_t len);
 	bool DecompressSector(uint8_t *dst, const uint8_t *src, unsigned int len, std::string &err);
 
 	enum FileType {
@@ -45,6 +47,9 @@ private:
 	bool resumeShouldRead_;
 	int64_t pos_;
 	int64_t size_;
+	uint8_t *cache_;
+	int64_t cachePos_;
+	int32_t cacheSize_;
 
 	uint8_t csoShift_;
 	// TODO: Endian?
