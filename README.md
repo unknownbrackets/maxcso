@@ -80,6 +80,19 @@ To build on Windows, simply open cli/maxcso.sln and build.  Visual Studio 2013 i
 Express for Windows Desktop works just fine.
 
 
+Credits and Licensing
+===========
+
+The larger portion of code here is from others' wonderful work in decompression and I/O
+libraries.  Licensing is as follows:
+
+ * maxcso is licensed under ISC.
+ * [7-zip] (http://7-zip.org/) is licensed under LGPL.
+ * [Zopfli] (http://code.google.com/p/zopfli/) is licensed under Apache 2.0.
+ * [libuv] (https://github.com/joyent/libuv) is licensed under MIT.
+ * [zlib] (https://github.com/madler/zlib) is licensed under zlib.
+
+
 Other tools
 ===========
 
