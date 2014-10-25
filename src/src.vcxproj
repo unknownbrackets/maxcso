@@ -135,7 +135,7 @@
       <MinimalRebuild>false</MinimalRebuild>
       <RuntimeTypeInfo>false</RuntimeTypeInfo>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
-      <AdditionalIncludeDirectories>../libuv/include;../zlib</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../libuv/include;../zlib;../zopfli/src;../7zip</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -163,7 +163,7 @@
       <MinimalRebuild>false</MinimalRebuild>
       <RuntimeTypeInfo>false</RuntimeTypeInfo>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
-      <AdditionalIncludeDirectories>../libuv/include;../zlib</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../libuv/include;../zlib;../zopfli/src;../7zip</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -192,7 +192,7 @@
       <WholeProgramOptimization>true</WholeProgramOptimization>
       <OmitFramePointers>true</OmitFramePointers>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
-      <AdditionalIncludeDirectories>../libuv/include;../zlib</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../libuv/include;../zlib;../zopfli/src;../7zip</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
