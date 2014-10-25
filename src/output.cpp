@@ -180,9 +180,7 @@ void Output::HandleReadySector(Sector *sector) {
 		srcPos_ = nextPos;
 		dstPos_ += totalWrite;
 
-		// TODO: Better (including index?)
-		float prog = static_cast<float>(srcPos_) / static_cast<float>(srcSize_);
-		progress_(prog);
+		progress_(srcPos_, srcSize_, dstPos_);
 
 		if (nextPos == srcSize_) {
 			state_ |= STATE_DATA_WRITTEN;

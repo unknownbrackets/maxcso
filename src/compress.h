@@ -7,6 +7,8 @@
 
 namespace maxcso {
 
+static const char *VERSION = "1.0.0";
+
 struct Task;
 
 enum TaskStatus {
@@ -32,12 +34,14 @@ enum TaskFlags {
 	TASKFLAG_FORCE_ALL = 0x10,
 };
 
-typedef std::function<void (const Task *, TaskStatus status, float completion)> Callback;
+typedef std::function<void (const Task *, TaskStatus status, int64_t pos, int64_t total, int64_t written)> ProgressCallback;
+typedef std::function<void (const Task *, TaskStatus status, const char *reason)> ErrorCallback;
 
 struct Task {
 	std::string input;
 	std::string output;
-	Callback progress;
+	ProgressCallback progress;
+	ErrorCallback error;
 	uint32_t flags;
 };
 

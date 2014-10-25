@@ -9,7 +9,7 @@
 
 namespace maxcso {
 
-typedef std::function<void (float progress)> OutputCallback;
+typedef std::function<void (int64_t pos, int64_t total, int64_t written)> OutputCallback;
 typedef std::function<void (bool status, const char *reason)> OutputFinishCallback;
 
 class Output {

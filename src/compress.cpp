@@ -21,8 +21,15 @@ public:
 	void Cleanup();
 
 private:
-	void Notify(TaskStatus status, float progress = 1.0f) {
-		task_.progress(&task_, status, progress);
+	void Notify(TaskStatus status, int64_t pos = -1, int64_t total = -1, int64_t written = -1) {
+		if (status == TASK_INPROGRESS || status == TASK_SUCCESS) {
+			task_.progress(&task_, status, pos, total, written);
+		} else {
+			task_.error(&task_, status, nullptr);
+		}
+	}
+	void Notify(TaskStatus status, const char *reason) {
+		task_.error(&task_, status, reason);
 	}
 
 	void BeginProcessing();
@@ -44,12 +51,12 @@ void CompressionTask::Enqueue() {
 	// We open input and output in order in case there are errors.
 	uv_.fs_open(loop_, &read_, task_.input.c_str(), O_RDONLY, 0444, [this](uv_fs_t *req) {
 		if (req->result < 0) {
-			Notify(TASK_BAD_INPUT);
+			Notify(TASK_BAD_INPUT, "Could not open input file");
 		} else {
 			input_ = static_cast<uv_file>(req->result);
 			uv_.fs_open(loop_, &write_, task_.output.c_str(), O_CREAT | O_TRUNC | O_WRONLY, 0644, [this](uv_fs_t *req) {
 				if (req->result < 0) {
-					Notify(TASK_BAD_OUTPUT);
+					Notify(TASK_BAD_OUTPUT, "Could not open output file");
 				} else {
 					output_ = static_cast<uv_file>(req->result);
 
@@ -81,35 +88,28 @@ void CompressionTask::Cleanup() {
 void CompressionTask::BeginProcessing() {
 	inputHandler_.OnFinish([this](bool success, const char *reason) {
 		if (!success) {
-			Notify(TASK_INVALID_DATA);
-			if (reason) {
-				printf("error: %s\n", reason);
-			}
+			Notify(TASK_INVALID_DATA, reason);
 		}
 	});
 	outputHandler_.OnFinish([this](bool success, const char *reason) {
 		if (success) {
 			Notify(TASK_SUCCESS);
-			printf("success\n");
 		} else {
 			// Abort reading.
 			inputHandler_.Pause();
-			Notify(TASK_CANNOT_WRITE);
-			if (reason) {
-				printf("error: %s\n", reason);
-			}
+			Notify(TASK_CANNOT_WRITE, reason);
 		}
 	});
 
-	outputHandler_.OnProgress([this](float progress) {
+	outputHandler_.OnProgress([this](int64_t pos, int64_t total, int64_t written) {
 		// If it was paused, the queue has space now.
 		inputHandler_.Resume();
-		Notify(TASK_INPROGRESS, progress);
+		Notify(TASK_INPROGRESS, pos, total, written);
 	});
 
 	inputHandler_.OnBegin([this](int64_t size) {
 		outputHandler_.SetFile(output_, size);
-		Notify(TASK_INPROGRESS, 0.0f);
+		Notify(TASK_INPROGRESS, 0, size, 0);
 	});
 	inputHandler_.Pipe(input_, [this](int64_t pos, uint8_t *sector) {
 		outputHandler_.Enqueue(pos, sector);
