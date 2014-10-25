@@ -16,9 +16,32 @@ typedef std::function<void (uv_fs_t *req)> fs_func_cb;
 typedef std::function<void (uv_work_t *req)> work_func_cb;
 typedef std::function<void (uv_work_t *req, int status)> after_work_func_cb;
 
+struct Guard {
+	Guard(uv_mutex_t &mutex) : mutex_(mutex) {
+		uv_mutex_lock(&mutex_);
+	}
+	~Guard() {
+		uv_mutex_unlock(&mutex_);
+	}
+
+	uv_mutex_t &mutex_;
+};
+
 class UVHelper {
 public:
 	UVHelper() {
+		if (++mutexInit_ == 1) {
+			uv_mutex_init(&mutex_);
+		}
+	}
+	~UVHelper() {
+		uv_mutex_lock(&mutex_);
+		if (--mutexInit_ == 0) {
+			uv_mutex_unlock(&mutex_);
+			uv_mutex_destroy(&mutex_);
+		} else {
+			uv_mutex_unlock(&mutex_);
+		}
 	}
 
 	inline int fs_open(uv_loop_t *loop, uv_fs_t *req, const char *path, int flags, int mode, fs_func_cb &&cb) {
@@ -58,11 +81,13 @@ private:
 	}
 
 	inline static void *Freeze(fs_func_cb &&cb) {
+		Guard g(mutex_);
 		int ticket = ++ticket_;
 		fs_funcs_.emplace(ticket, std::move(cb));
 		return (void *)ticket;
 	}
 	inline static fs_func_cb ThawFS(void *data) {
+		Guard g(mutex_);
 		int ticket = (int)data;
 		fs_func_cb f = std::move(fs_funcs_.at(ticket));
 		fs_funcs_.erase(ticket);
@@ -79,16 +104,19 @@ private:
 	}
 
 	inline static void *Freeze(work_func_cb &&cb, after_work_func_cb &&after) {
+		Guard g(mutex_);
 		int ticket = ++ticket_;
 		work_funcs_.emplace(ticket, std::move(std::make_pair(std::move(cb), std::move(after))));
 		return (void *)ticket;
 	}
 	inline static work_func_cb ThawWork(void *data) {
+		Guard g(mutex_);
 		int ticket = (int)data;
 		work_func_cb f = std::move(work_funcs_.at(ticket).first);
 		return f;
 	}
 	inline static after_work_func_cb ThawAfterWork(void *data) {
+		Guard g(mutex_);
 		int ticket = (int)data;
 		after_work_func_cb f = std::move(work_funcs_.at(ticket).second);
 		work_funcs_.erase(ticket);
@@ -96,6 +124,8 @@ private:
 	}
 
 	static int ticket_;
+	static int mutexInit_;
+	static uv_mutex_t mutex_;
 	static std::unordered_map<int, fs_func_cb> fs_funcs_;
 	static std::unordered_map<int, std::pair<work_func_cb, after_work_func_cb> > work_funcs_;
 };

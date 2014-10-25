@@ -1,17 +1,7 @@
 #include "buffer_pool.h"
+#include "uv_helper.h"
 
 namespace maxcso {
-
-struct Guard {
-	Guard(uv_mutex_t &mutex) : mutex_(mutex) {
-		uv_mutex_lock(&mutex_);
-	}
-	~Guard() {
-		uv_mutex_unlock(&mutex_);
-	}
-
-	uv_mutex_t &mutex_;
-};
 
 BufferPool::BufferPool() {
 	uv_mutex_init(&mutex_);
