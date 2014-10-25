@@ -201,7 +201,8 @@ bool Output::ShouldCompress(int64_t pos, uint8_t *buffer) {
 		// This is the volume descriptor.
 		// TODO: Could read it in and map all the directory structures.
 		// Would just need to keep  a list, assuming they are sequential, we'd get most of them.
-		return false;
+		// TODO: This doesn't really seem to help anyone.  Rethink.
+		//return false;
 	}
 	// TODO
 	return true;
