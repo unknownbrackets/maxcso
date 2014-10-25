@@ -1,13 +1,15 @@
 #include "input.h"
 #include "buffer_pool.h"
 #include "cso.h"
+#include "dax.h"
 #define ZLIB_CONST
 #include "zlib.h"
 
 namespace maxcso {
 
 Input::Input(uv_loop_t *loop)
-	: loop_(loop), type_(UNKNOWN), paused_(false), resumeShouldRead_(false), size_(-1), cache_(nullptr), csoIndex_(nullptr) {
+	: loop_(loop), type_(UNKNOWN), paused_(false), resumeShouldRead_(false), size_(-1), cache_(nullptr),
+	csoIndex_(nullptr), daxSize_(nullptr), daxIsNC_(nullptr) {
 }
 
 Input::~Input() {
@@ -15,6 +17,10 @@ Input::~Input() {
 	cache_ = nullptr;
 	delete [] csoIndex_;
 	csoIndex_ = nullptr;
+	delete [] daxSize_;
+	daxSize_ = nullptr;
+	delete [] daxIsNC_;
+	daxIsNC_ = nullptr;
 }
 
 void Input::OnFinish(InputFinishCallback finish) {
@@ -67,7 +73,7 @@ void Input::DetectFormat() {
 				const uv_buf_t buf = uv_buf_init(reinterpret_cast<char *>(csoIndex_), bytes);
 				SetupCache(header->sector_size);
 
-				uv_.fs_read(loop_, &req_, file_, &buf, 1, 24, [this, bytes](uv_fs_t *req) {
+				uv_.fs_read(loop_, &req_, file_, &buf, 1, sizeof(CSOHeader), [this, bytes](uv_fs_t *req) {
 					if (req->result != bytes) {
 						// Index wasn't all there, this file is corrupt.
 						finish_(false, "Unable to read entire index");
@@ -75,6 +81,57 @@ void Input::DetectFormat() {
 						return;
 					}
 					uv_fs_req_cleanup(req);
+
+					begin_(size_);
+					ReadSector();
+				});
+			}
+		} else if (!memcmp(headerBuf, DAX_MAGIC, 4)) {
+			type_ = DAX;
+			const DAXHeader *const header = reinterpret_cast<DAXHeader *>(headerBuf);
+			if (header->version > 1) {
+				finish_(false, "DAX header indicates unsupported version");
+			} else if ((header->uncompressed_size & SECTOR_MASK) != 0) {
+				finish_(false, "DAX uncompressed size not aligned to sector size");
+			} else {
+				size_ = header->uncompressed_size;
+
+				const uint32_t frames = static_cast<uint32_t>((size_ + DAX_FRAME_SIZE - 1) >> DAX_FRAME_SHIFT);
+				daxIndex_ = new uint32_t[frames];
+				daxSize_ = new uint16_t[frames];
+				daxIsNC_ = new bool[frames];
+				memset(daxIsNC_, 0, sizeof(bool) * frames);
+
+				uv_buf_t bufs[3];
+				int nbufs = 2;
+				uint32_t bytes = frames * (sizeof(uint32_t) + sizeof(uint16_t));
+				bufs[0] = uv_buf_init(reinterpret_cast<char *>(daxIndex_), frames * sizeof(uint32_t));
+				bufs[1] = uv_buf_init(reinterpret_cast<char *>(daxSize_), frames * sizeof(uint16_t));
+
+				int nareas = header->version >= 1 ? header->nc_areas : 0;
+				DAXNCArea *areas = nareas > 0 ? new DAXNCArea[nareas] : nullptr;
+				if (areas != nullptr) {
+					bufs[nbufs++] = uv_buf_init(reinterpret_cast<char *>(areas), nareas * sizeof(DAXNCArea));
+					bytes += nareas * sizeof(DAXNCArea);
+				}
+				SetupCache(DAX_FRAME_SIZE);
+
+				uv_.fs_read(loop_, &req_, file_, bufs, nbufs, sizeof(DAXHeader), [this, bytes, areas, nareas](uv_fs_t *req) {
+					if (req->result != bytes) {
+						// Index wasn't all there, this file is corrupt.
+						finish_(false, "Unable to read entire index");
+						uv_fs_req_cleanup(req);
+						return;
+					}
+					uv_fs_req_cleanup(req);
+
+					// Map the areas to an index and free.
+					for (int i = 0; i < nareas; ++i) {
+						for (uint32_t frame = 0; frame < areas[i].count; ++frame) {
+							daxIsNC_[areas[i].start + frame] = true;
+						}
+					}
+					delete [] areas;
 
 					begin_(size_);
 					ReadSector();
@@ -126,7 +183,10 @@ void Input::ReadSector() {
 		return;
 	}
 
+	// Position of data in file.
 	int64_t pos = pos_;
+	// Offset into position where our data is.
+	uint32_t offset = 0;
 	unsigned int len = SECTOR_SIZE;
 	bool compressed = false;
 	switch (type_) {
@@ -149,17 +209,29 @@ void Input::ReadSector() {
 			}
 		}
 		break;
+	case DAX:
+		{
+			const uint32_t frame = static_cast<uint32_t>(pos_ >> DAX_FRAME_SHIFT);
+			pos = daxIndex_[frame];
+			len = daxSize_[frame];
+			compressed = !daxIsNC_[frame];
+			offset = pos_ & DAX_FRAME_MASK;
+
+			if (!compressed && offset != 0) {
+				pos += offset;
+				offset = 0;
+			}
+		}
 	}
 
 	// This ends up being owned by the compressor.
 	uint8_t *const readBuf = pool.Alloc();
-
 	if (pos >= cachePos_ && pos + len <= cachePos_ + cacheSize_) {
 		// Already read in, let's just reuse.
-		memcpy(readBuf, cache_ + pos - cachePos_, len);
 		if (compressed) {
-			EnqueueDecompressSector(readBuf, len);
+			EnqueueDecompressSector(cache_ + pos - cachePos_, len, offset);
 		} else {
+			memcpy(readBuf, cache_ + pos - cachePos_, len);
 			callback_(pos_, readBuf);
 
 			pos_ += SECTOR_SIZE;
@@ -168,7 +240,7 @@ void Input::ReadSector() {
 	} else {
 		const uv_buf_t buf = uv_buf_init(reinterpret_cast<char *>(cache_), cacheSize_);
 		cachePos_ = pos;
-		uv_.fs_read(loop_, &req_, file_, &buf, 1, pos, [this, readBuf, len, compressed](uv_fs_t *req) {
+		uv_.fs_read(loop_, &req_, file_, &buf, 1, pos, [this, readBuf, len, offset, compressed](uv_fs_t *req) {
 			if (req->result < len) {
 				finish_(false, "Unable to read entire sector");
 				uv_fs_req_cleanup(req);
@@ -176,10 +248,10 @@ void Input::ReadSector() {
 			}
 			uv_fs_req_cleanup(req);
 
-			memcpy(readBuf, cache_, len);
 			if (compressed) {
-				EnqueueDecompressSector(readBuf, len);
+				EnqueueDecompressSector(cache_, len, offset);
 			} else {
+				memcpy(readBuf, cache_, len);
 				callback_(pos_, readBuf);
 
 				pos_ += SECTOR_SIZE;
@@ -189,21 +261,23 @@ void Input::ReadSector() {
 	}
 }
 
-void Input::EnqueueDecompressSector(uint8_t *buffer, uint32_t len) {
+void Input::EnqueueDecompressSector(uint8_t *src, uint32_t len, uint32_t offset) {
 	// We swap this with the compressed buf, and free the readBuf.
 	uint8_t *const actualBuf = pool.Alloc();
-	csoError_.clear();
-	uv_.queue_work(loop_, &work_, [this, actualBuf, buffer, len](uv_work_t *req) {
-		if (!DecompressSector(actualBuf, buffer, len, csoError_)) {
-			if (csoError_.empty()) {
-				csoError_ = "Unknown error";
+	decompressError_.clear();
+	uv_.queue_work(loop_, &work_, [this, actualBuf, src, len](uv_work_t *req) {
+		if (!DecompressSector(actualBuf, src, len, type_, decompressError_)) {
+			if (decompressError_.empty()) {
+				decompressError_ = "Unknown error";
 			}
 		}
-	}, [this, actualBuf, buffer](uv_work_t *req, int status) {
-		pool.Release(buffer);
+	}, [this, actualBuf, offset](uv_work_t *req, int status) {
+		if (offset != 0) {
+			memmove(actualBuf, actualBuf + offset, SECTOR_SIZE);
+		}
 
-		if (!csoError_.empty()) {
-			finish_(false, csoError_.c_str());
+		if (!decompressError_.empty()) {
+			finish_(false, decompressError_.c_str());
 			pool.Release(actualBuf);
 		} else if (status == -1) {
 			finish_(false, "Decompression work failed");
@@ -229,11 +303,11 @@ void Input::Resume() {
 	}
 }
 
-bool Input::DecompressSector(uint8_t *dst, const uint8_t *src, unsigned int len, std::string &err) {
+bool Input::DecompressSector(uint8_t *dst, const uint8_t *src, unsigned int len, FileType type, std::string &err) {
 	z_stream z;
 	memset(&z, 0, sizeof(z));
 	// TODO: inflateReset2?
-	if (inflateInit2(&z, -15) != Z_OK) {
+	if (inflateInit2(&z, type == CISO ? -15 : 15) != Z_OK) {
 		err = z.msg ? z.msg : "Unable to initialize inflate";
 		return false;
 	}
@@ -243,17 +317,19 @@ bool Input::DecompressSector(uint8_t *dst, const uint8_t *src, unsigned int len,
 	z.avail_out = BufferPool::BUFFER_SIZE;
 	z.next_in = src;
 
-	const int status = inflate(&z, Z_FULL_FLUSH);
+	const int status = inflate(&z, Z_FINISH);
 	if (status != Z_STREAM_END) {
 		err = z.msg ? z.msg : "Inflate failed";
 		inflateEnd(&z);
 		return false;
 	}
 
-	if (z.avail_out != BufferPool::BUFFER_SIZE - SECTOR_SIZE) {
-		err = "Expected to decompress into a full sector";
-		inflateEnd(&z);
-		return false;
+	if (type == CISO) {
+		if (z.avail_out != BufferPool::BUFFER_SIZE - SECTOR_SIZE) {
+			err = "Expected to decompress into a full sector";
+			inflateEnd(&z);
+			return false;
+		}
 	}
 
 	inflateEnd(&z);

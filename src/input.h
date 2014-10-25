@@ -23,14 +23,16 @@ private:
 	void DetectFormat();
 	void SetupCache(uint32_t minSize);
 	void ReadSector();
-	void EnqueueDecompressSector(uint8_t *buffer, uint32_t len);
-	bool DecompressSector(uint8_t *dst, const uint8_t *src, unsigned int len, std::string &err);
+	void EnqueueDecompressSector(uint8_t *src, uint32_t len, uint32_t offset);
 
 	enum FileType {
 		UNKNOWN,
 		ISO,
 		CISO,
+		DAX,
 	};
+
+	bool DecompressSector(uint8_t *dst, const uint8_t *src, unsigned int len, FileType type, std::string &err);
 
 	UVHelper uv_;
 	uv_loop_t *loop_;
@@ -51,10 +53,15 @@ private:
 	int64_t cachePos_;
 	int32_t cacheSize_;
 
+	std::string decompressError_;
 	uint8_t csoShift_;
 	// TODO: Endian?
-	uint32_t *csoIndex_;
-	std::string csoError_;
+	union {
+		uint32_t *csoIndex_;
+		uint32_t *daxIndex_;
+	};
+	uint16_t *daxSize_;
+	bool *daxIsNC_;
 };
 
 };
