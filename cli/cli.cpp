@@ -199,12 +199,17 @@ int main(int argc, char *argv[]) {
 	static const int64_t interval_ns = 50000000LL;
 	static const double interval_to_s = 1000.0 / 50.0;
 
-	maxcso::ProgressCallback progress = [&next, &lastPos, formatting, &tty] (const maxcso::Task *task, maxcso::TaskStatus status, int64_t pos, int64_t total, int64_t written) {
+	std::string statusInfo;
+	uv_write_t write_req;
+	uv_buf_t bufs[2];
+
+	maxcso::ProgressCallback progress = [&] (const maxcso::Task *task, maxcso::TaskStatus status, int64_t pos, int64_t total, int64_t written) {
 		if (!formatting) {
 			return;
 		}
 
-		std::string statusInfo;
+		statusInfo.clear();
+
 		if (status == maxcso::TASK_INPROGRESS) {
 			int64_t now = uv_hrtime();
 			if (now >= next) {
@@ -234,9 +239,6 @@ int main(int argc, char *argv[]) {
 			return;
 		}
 
-		uv_buf_t bufs[2];
-		uv_write_t write_req;
-
 		unsigned int nbufs = 0;
 		if (formatting) {
 			bufs[nbufs++] = uv_buf_init(ANSI_RESET_LINE);
@@ -251,18 +253,15 @@ int main(int argc, char *argv[]) {
 		bufs[nbufs++] = uv_buf_init(statusInfo);
 		uv_write(&write_req, reinterpret_cast<uv_stream_t *>(&tty), bufs, nbufs, nullptr);
 	};
-	maxcso::ErrorCallback error = [&args, formatting, &tty] (const maxcso::Task *task, maxcso::TaskStatus status, const char *reason) {
-		static std::string line;
-		static uv_buf_t buf;
-		uv_write_t write_req;
-
+	maxcso::ErrorCallback error = [&] (const maxcso::Task *task, maxcso::TaskStatus status, const char *reason) {
 		if (args.quiet) {
 			return;
 		}
 
-		line = (formatting ? ANSI_RESET_LINE : "") + "Error while processing " + task->input + ": " + reason + "\n";
-		buf = uv_buf_init(line);
-		uv_write(&write_req, reinterpret_cast<uv_stream_t *>(&tty), &buf, 1, nullptr);
+		const std::string prefix = status == maxcso::TASK_SUCCESS ? "" : "Error while processing ";
+		statusInfo = (formatting ? ANSI_RESET_LINE : "") + prefix + task->input + ": " + reason + "\n";
+		bufs[0] = uv_buf_init(statusInfo);
+		uv_write(&write_req, reinterpret_cast<uv_stream_t *>(&tty), bufs, 1, nullptr);
 	};
 
 	std::vector<maxcso::Task> tasks;
