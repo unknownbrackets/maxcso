@@ -81,7 +81,7 @@ void Output::Enqueue(int64_t pos, uint8_t *buffer) {
 
 	// Sector takes ownership of buffer either way.
 	if (tryCompress) {
-		sector->Process(loop_, pos, buffer, [this, sector](bool status, const char *reason) {
+		sector->Process(loop_, pos, buffer, align_, [this, sector](bool status, const char *reason) {
 			HandleReadySector(sector);
 		});
 	} else {
@@ -136,7 +136,8 @@ void Output::HandleReadySector(Sector *sector) {
 	unsigned int nbufs = 0;
 	static char padding[2048] = {0};
 	for (size_t i = 0; i < sectors.size(); ++i) {
-		bufs[nbufs++] = uv_buf_init(reinterpret_cast<char *>(sectors[i]->BestBuffer()), sectors[i]->BestSize());
+		unsigned int bestSize = sectors[i]->BestSize();
+		bufs[nbufs++] = uv_buf_init(reinterpret_cast<char *>(sectors[i]->BestBuffer()), bestSize);
 
 		// Update the index.
 		const int32_t s = static_cast<int32_t>(sectors[i]->Pos() >> SECTOR_SHIFT);
@@ -145,7 +146,7 @@ void Output::HandleReadySector(Sector *sector) {
 			index_[s] |= CSO_INDEX_UNCOMPRESSED;
 		}
 
-		dstPos += sectors[i]->BestSize();
+		dstPos += bestSize;
 		int32_t padSize = Align(dstPos);
 		if (padSize != 0) {
 			// We need uv to write the padding out as well.

@@ -19,7 +19,7 @@ public:
 	Sector(uint32_t flags);
 	~Sector();
 
-	void Process(uv_loop_t *loop, int64_t pos, uint8_t *buffer, SectorCallback ready);
+	void Process(uv_loop_t *loop, int64_t pos, uint8_t *buffer, uint32_t align, SectorCallback ready);
 	// For when compression is not desired, e.g. for fast sectors.
 	// This still marks as busy so WriteReq() can be used.
 	void Reserve(int64_t pos, uint8_t *buffer);
@@ -46,7 +46,16 @@ public:
 	}
 
 private:
+	uint32_t AlignedBestSize(uint32_t align) {
+		const uint32_t off = bestSize_ % align;
+		if (off != 0) {
+			return bestSize_ + align - off;
+		}
+		return bestSize_;
+	}
+
 	void Compress();
+	void FinalizeBest(uint32_t align);
 	void ZlibTrial(z_stream *z);
 	void ZopfliTrial();
 	void SevenZipTrial();

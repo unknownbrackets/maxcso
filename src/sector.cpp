@@ -57,7 +57,7 @@ Sector::~Sector() {
 	}
 }
 
-void Sector::Process(uv_loop_t *loop, int64_t pos, uint8_t *buffer, SectorCallback ready) {
+void Sector::Process(uv_loop_t *loop, int64_t pos, uint8_t *buffer, uint32_t align, SectorCallback ready) {
 	if (busy_) {
 		ready(false, "Already busy");
 		return;
@@ -71,8 +71,9 @@ void Sector::Process(uv_loop_t *loop, int64_t pos, uint8_t *buffer, SectorCallba
 	ready_ = ready;
 	bestSize_ = SECTOR_SIZE;
 
-	uv_.queue_work(loop_, &work_, [this](uv_work_t *req) {
+	uv_.queue_work(loop_, &work_, [this, align](uv_work_t *req) {
 		Compress();
+		FinalizeBest(align);
 	}, [this](uv_work_t *req, int status) {
 		if (status < 0) {
 			ready_(false, "Failed to compress sector");
@@ -80,6 +81,16 @@ void Sector::Process(uv_loop_t *loop, int64_t pos, uint8_t *buffer, SectorCallba
 			ready_(true, nullptr);
 		}
 	});
+}
+
+void Sector::FinalizeBest(uint32_t align) {
+	// If bestSize_ wouldn't be smaller after alignment, we should not compress.
+	// It won't save space, and it'll waste CPU on the decompression side.
+	if (AlignedBestSize(align) >= SECTOR_SIZE) {
+		pool.Release(best_);
+		best_ = nullptr;
+		bestSize_ = SECTOR_SIZE;
+	}
 }
 
 void Sector::Compress() {
