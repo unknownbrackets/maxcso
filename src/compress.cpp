@@ -2,6 +2,7 @@
 #include <fcntl.h>
 #include "compress.h"
 #include "uv_helper.h"
+#include "cso.h"
 #include "input.h"
 #include "output.h"
 #include "buffer_pool.h"
@@ -48,6 +49,19 @@ private:
 };
 
 void CompressionTask::Enqueue() {
+	if (task_.block_size > pool.BUFFER_SIZE) {
+		Notify(TASK_INVALID_OPTION, "Block size too large");
+		return;
+	}
+	if (task_.block_size < SECTOR_SIZE) {
+		Notify(TASK_INVALID_OPTION, "Block size too small, must be at least 2048");
+		return;
+	}
+	if ((task_.block_size & (task_.block_size - 1)) != 0) {
+		Notify(TASK_INVALID_OPTION, "Block size must be a power of two");
+		return;
+	}
+
 	// We open input and output in order in case there are errors.
 	uv_.fs_open(loop_, &read_, task_.input.c_str(), O_RDONLY, 0444, [this](uv_fs_t *req) {
 		if (req->result < 0) {

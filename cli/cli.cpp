@@ -20,11 +20,13 @@ void show_help(const char *arg0) {
 	fprintf(stderr, "   --quiet         Suppress status output\n");
 	fprintf(stderr, "   --crc           Log CRC32 checksums, ignore output files and methods\n");
 	fprintf(stderr, "   --fast          Use only basic zlib for fastest result\n");
+	fprintf(stderr, "   --block=N       Specify a block size (default is 2048)\n");
+	fprintf(stderr, "                   Most readers only support the 2048 size\n");
 	// TODO: Bring this back once it's functional.
 	//fprintf(stderr, "   --smallest      Force compression of all sectors for smallest result\n");
 	fprintf(stderr, "   --use-METHOD    Use a compression method: zlib, Zopfli, or 7zdeflate\n");
 	fprintf(stderr, "                   By default, zlib and 7zdeflate are used\n");
-	fprintf(stderr, "   --no-METHOD     Disable a compression method\n");
+	fprintf(stderr, "   --no-METHOD     Disable a compression method, same as above\n");
 }
 
 bool has_arg_value(int &i, char *argv[], const std::string &arg, const char *&val) {
@@ -53,6 +55,7 @@ struct Arguments {
 	std::vector<std::string> inputs;
 	std::vector<std::string> outputs;
 	int threads;
+	uint32_t block_size;
 	uint32_t flags;
 	bool quiet;
 	bool crc;
@@ -60,6 +63,7 @@ struct Arguments {
 
 void default_args(Arguments &args) {
 	args.threads = 0;
+	args.block_size = 2048;
 	args.flags = maxcso::TASKFLAG_NO_ZOPFLI;
 	args.quiet = false;
 	args.crc = false;
@@ -76,6 +80,8 @@ int parse_args(Arguments &args, int argc, char *argv[]) {
 			} else if (has_arg(i, argv, "--version") || has_arg(i, argv, "-v")) {
 				show_version();
 				return 1;
+			} else if (has_arg_value(i, argv, "--block", val)) {
+				args.block_size = atoi(val);
 			} else if (has_arg_value(i, argv, "--threads", val)) {
 				args.threads = atoi(val);
 			} else if (has_arg(i, argv, "--crc")) {
@@ -287,6 +293,7 @@ int main(int argc, char *argv[]) {
 		}
 		task.progress = progress;
 		task.error = error;
+		task.block_size = args.block_size;
 		task.flags = args.flags;
 		tasks.push_back(std::move(task));
 	}

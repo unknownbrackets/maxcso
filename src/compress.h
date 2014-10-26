@@ -18,6 +18,7 @@ enum TaskStatus {
 	TASK_BAD_OUTPUT,
 	TASK_INVALID_DATA,
 	TASK_CANNOT_WRITE,
+	TASK_INVALID_OPTION,
 };
 
 enum TaskFlags {
@@ -42,6 +43,7 @@ struct Task {
 	std::string output;
 	ProgressCallback progress;
 	ErrorCallback error;
+	uint32_t block_size;
 	uint32_t flags;
 };
 
