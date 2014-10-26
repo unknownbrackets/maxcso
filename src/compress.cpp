@@ -72,15 +72,13 @@ void CompressionTask::Enqueue() {
 
 void CompressionTask::Cleanup() {
 	if (input_ >= 0) {
-		uv_.fs_close(loop_, &read_, input_, [this](uv_fs_t *req) {
-			uv_fs_req_cleanup(req);
-		});
+		uv_fs_close(loop_, &read_, input_, nullptr);
+		uv_fs_req_cleanup(&read_);
 		input_ = -1;
 	}
 	if (output_ >= 0) {
-		uv_.fs_close(loop_, &write_, output_, [this](uv_fs_t *req) {
-			uv_fs_req_cleanup(req);
-		});
+		uv_fs_close(loop_, &write_, output_, nullptr);
+		uv_fs_req_cleanup(&write_);
 		output_ = -1;
 	}
 }
