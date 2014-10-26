@@ -20,6 +20,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="buffer_pool.cpp" />
+    <ClCompile Include="checksum.cpp" />
     <ClCompile Include="compress.cpp" />
     <ClCompile Include="input.cpp" />
     <ClCompile Include="output.cpp" />
@@ -28,6 +29,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="buffer_pool.h" />
+    <ClInclude Include="checksum.h" />
     <ClInclude Include="compress.h" />
     <ClInclude Include="cso.h" />
     <ClInclude Include="dax.h" />

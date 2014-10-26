@@ -7,6 +7,7 @@
     <ClCompile Include="buffer_pool.cpp" />
     <ClCompile Include="output.cpp" />
     <ClCompile Include="sector.cpp" />
+    <ClCompile Include="checksum.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="compress.h" />
@@ -17,5 +18,6 @@
     <ClInclude Include="sector.h" />
     <ClInclude Include="cso.h" />
     <ClInclude Include="dax.h" />
+    <ClInclude Include="checksum.h" />
   </ItemGroup>
 </Project>

@@ -1,8 +1,9 @@
-#include "../src/compress.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <vector>
 #include <string>
+#include "../src/compress.h"
+#include "../src/checksum.h"
 #include "../libuv/include/uv.h"
 
 void show_version() {
@@ -17,6 +18,7 @@ void show_help(const char *arg0) {
 	fprintf(stderr, "\n");
 	fprintf(stderr, "   --threads=N     Specify N threads for I/O and compression\n");
 	fprintf(stderr, "   --quiet         Suppress status output\n");
+	fprintf(stderr, "   --crc           Log CRC32 checksums, ignore output files and methods\n");
 	fprintf(stderr, "   --fast          Use only basic zlib for fastest result\n");
 	// TODO: Bring this back once it's functional.
 	//fprintf(stderr, "   --smallest      Force compression of all sectors for smallest result\n");
@@ -53,12 +55,14 @@ struct Arguments {
 	int threads;
 	uint32_t flags;
 	bool quiet;
+	bool crc;
 };
 
 void default_args(Arguments &args) {
 	args.threads = 0;
 	args.flags = maxcso::TASKFLAG_NO_ZOPFLI;
 	args.quiet = false;
+	args.crc = false;
 }
 
 int parse_args(Arguments &args, int argc, char *argv[]) {
@@ -74,6 +78,8 @@ int parse_args(Arguments &args, int argc, char *argv[]) {
 				return 1;
 			} else if (has_arg_value(i, argv, "--threads", val)) {
 				args.threads = atoi(val);
+			} else if (has_arg(i, argv, "--crc")) {
+				args.crc = true;
 			} else if (has_arg(i, argv, "--quiet")) {
 				args.quiet = true;
 			} else if (has_arg(i, argv, "--fast")) {
@@ -127,22 +133,30 @@ int validate_args(const char *arg0, Arguments &args) {
 		return 1;
 	}
 
-	// Automatically write to .cso files if not specified.
-	for (size_t i = args.outputs.size(); i < args.inputs.size(); ++i) {
-		if (args.inputs[i].size() <= 4) {
-			continue;
-		}
-
-		const std::string ext = args.inputs[i].substr(args.inputs[i].size() - 4);
-		if (ext == ".iso" || ext == ".ISO") {
-			args.outputs.push_back(args.inputs[i].substr(0, args.inputs[i].size() - 4) + ".cso");
-		}
-	}
-
-	if (args.inputs.size() != args.outputs.size()) {
+	if (args.crc) {
+		if (args.outputs.size()) {
 		show_help(arg0);
-		fprintf(stderr, "\nERROR: Too few output files.\n");
+		fprintf(stderr, "\nERROR: Output files not used with --crc.\n");
 		return 1;
+		}
+	} else {
+		// Automatically write to .cso files if not specified.
+		for (size_t i = args.outputs.size(); i < args.inputs.size(); ++i) {
+			if (args.inputs[i].size() <= 4) {
+				continue;
+			}
+
+			const std::string ext = args.inputs[i].substr(args.inputs[i].size() - 4);
+			if (ext == ".iso" || ext == ".ISO") {
+				args.outputs.push_back(args.inputs[i].substr(0, args.inputs[i].size() - 4) + ".cso");
+			}
+		}
+
+		if (args.inputs.size() != args.outputs.size()) {
+			show_help(arg0);
+			fprintf(stderr, "\nERROR: Too few output files.\n");
+			return 1;
+		}
 	}
 
 	if (args.inputs.empty()) {
@@ -268,14 +282,20 @@ int main(int argc, char *argv[]) {
 	for (size_t i = 0; i < args.inputs.size(); ++i) {
 		maxcso::Task task;
 		task.input = args.inputs[i];
-		task.output = args.outputs[i];
+		if (!args.crc) {
+			task.output = args.outputs[i];
+		}
 		task.progress = progress;
 		task.error = error;
 		task.flags = args.flags;
 		tasks.push_back(std::move(task));
 	}
-	
-	maxcso::Compress(tasks);
+
+	if (args.crc) {
+		maxcso::Checksum(tasks);
+	} else {
+		maxcso::Compress(tasks);
+	}
 
 	uv_tty_reset_mode();
 	uv_loop_close(&loop);
