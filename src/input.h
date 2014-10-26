@@ -54,7 +54,9 @@ private:
 	int32_t cacheSize_;
 
 	std::string decompressError_;
-	uint8_t csoShift_;
+	uint8_t csoIndexShift_;
+	uint8_t csoBlockShift_;
+	uint32_t csoBlockSize_;
 	// TODO: Endian?
 	union {
 		uint32_t *csoIndex_;

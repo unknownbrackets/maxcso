@@ -59,15 +59,21 @@ void Input::DetectFormat() {
 			const CSOHeader *const header = reinterpret_cast<CSOHeader *>(headerBuf);
 			if (header->version > 1) {
 				finish_(false, "CISO header indicates unsupported version");
-			} else if (header->sector_size != SECTOR_SIZE) {
+			} else if (header->sector_size < SECTOR_SIZE || header->sector_size > pool.BUFFER_SIZE) {
 				finish_(false, "CISO header indicates unsupported sector size");
 			} else if ((header->uncompressed_size & SECTOR_MASK) != 0) {
 				finish_(false, "CISO uncompressed size not aligned to sector size");
 			} else {
 				size_ = header->uncompressed_size;
-				csoShift_ = header->index_shift;
+				csoIndexShift_ = header->index_shift;
+				csoBlockSize_ = header->sector_size;
 
-				const uint32_t sectors = static_cast<uint32_t>(size_ >> SECTOR_SHIFT);
+				csoBlockShift_ = 0;
+				for (uint32_t i = header->sector_size; i > 0; i >>= 1) {
+					++csoBlockShift_;
+				}
+
+				const uint32_t sectors = static_cast<uint32_t>(size_ >> csoBlockShift_);
 				csoIndex_ = new uint32_t[sectors + 1];
 				const unsigned int bytes = (sectors + 1) * sizeof(uint32_t);
 				const uv_buf_t buf = uv_buf_init(reinterpret_cast<char *>(csoIndex_), bytes);
@@ -194,18 +200,19 @@ void Input::ReadSector() {
 		break;
 	case CISO:
 		{
-			const uint32_t sector = static_cast<uint32_t>(pos_ >> SECTOR_SHIFT);
-			const uint32_t index = csoIndex_[sector];
-			const uint32_t nextIndex = csoIndex_[sector + 1];
+			const uint32_t block = static_cast<uint32_t>(pos_ >> csoBlockShift_);
+			const uint32_t index = csoIndex_[block];
+			const uint32_t nextIndex = csoIndex_[block + 1];
 			compressed = (index & CSO_INDEX_UNCOMPRESSED) == 0;
 
-			pos = static_cast<uint64_t>(index & 0x7FFFFFFF) << csoShift_;
-			const int64_t nextPos = static_cast<uint64_t>(nextIndex & 0x7FFFFFFF) << csoShift_;
+			pos = static_cast<uint64_t>(index & 0x7FFFFFFF) << csoIndexShift_;
+			const int64_t nextPos = static_cast<uint64_t>(nextIndex & 0x7FFFFFFF) << csoIndexShift_;
 			len = static_cast<unsigned int>(nextPos - pos);
+			offset = pos_ & (csoBlockSize_ - 1);
 
-			if (!compressed && len != SECTOR_SIZE) {
-				finish_(false, "Uncompressed sector is not the expected size");
-				return;
+			if (!compressed && offset != 0) {
+				pos += offset;
+				offset = 0;
 			}
 		}
 		break;
@@ -326,12 +333,10 @@ bool Input::DecompressSector(uint8_t *dst, const uint8_t *src, unsigned int len,
 		return false;
 	}
 
-	if (type == CISO) {
-		if (z.avail_out != BufferPool::BUFFER_SIZE - SECTOR_SIZE) {
-			err = "Expected to decompress into a full sector";
-			inflateEnd(&z);
-			return false;
-		}
+	if (z.total_out < SECTOR_SIZE) {
+		err = "Expected to decompress into at least a full sector";
+		inflateEnd(&z);
+		return false;
 	}
 
 	inflateEnd(&z);
