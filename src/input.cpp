@@ -222,15 +222,16 @@ void Input::ReadSector() {
 				offset = 0;
 			}
 		}
+		break;
 	}
 
 	// This ends up being owned by the compressor.
-	uint8_t *const readBuf = pool.Alloc();
 	if (pos >= cachePos_ && pos + len <= cachePos_ + cacheSize_) {
 		// Already read in, let's just reuse.
 		if (compressed) {
 			EnqueueDecompressSector(cache_ + pos - cachePos_, len, offset);
 		} else {
+			uint8_t *readBuf = pool.Alloc();
 			memcpy(readBuf, cache_ + pos - cachePos_, len);
 			callback_(pos_, readBuf);
 
@@ -240,8 +241,8 @@ void Input::ReadSector() {
 	} else {
 		const uv_buf_t buf = uv_buf_init(reinterpret_cast<char *>(cache_), cacheSize_);
 		cachePos_ = pos;
-		uv_.fs_read(loop_, &req_, file_, &buf, 1, pos, [this, readBuf, len, offset, compressed](uv_fs_t *req) {
-			if (req->result < len) {
+		uv_.fs_read(loop_, &req_, file_, &buf, 1, pos, [this, len, offset, compressed](uv_fs_t *req) {
+			if (req->result < static_cast<ssize_t>(len)) {
 				finish_(false, "Unable to read entire sector");
 				uv_fs_req_cleanup(req);
 				return;
@@ -251,6 +252,7 @@ void Input::ReadSector() {
 			if (compressed) {
 				EnqueueDecompressSector(cache_, len, offset);
 			} else {
+				uint8_t *readBuf = pool.Alloc();
 				memcpy(readBuf, cache_, len);
 				callback_(pos_, readBuf);
 
