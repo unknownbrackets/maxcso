@@ -24,7 +24,7 @@ void show_help(const char *arg0) {
 	fprintf(stderr, "                   Most readers only support the 2048 size\n");
 	// TODO: Bring this back once it's functional.
 	//fprintf(stderr, "   --smallest      Force compression of all sectors for smallest result\n");
-	fprintf(stderr, "   --use-METHOD    Use a compression method: zlib, Zopfli, or 7zdeflate\n");
+	fprintf(stderr, "   --use-METHOD    Enable a compression method: zlib, Zopfli, or 7zdeflate\n");
 	fprintf(stderr, "                   By default, zlib and 7zdeflate are used\n");
 	fprintf(stderr, "   --no-METHOD     Disable a compression method, same as above\n");
 }
