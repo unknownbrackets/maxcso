@@ -86,7 +86,7 @@ void Sector::Process(uv_loop_t *loop, int64_t pos, uint8_t *buffer, uint32_t ali
 void Sector::FinalizeBest(uint32_t align) {
 	// If bestSize_ wouldn't be smaller after alignment, we should not compress.
 	// It won't save space, and it'll waste CPU on the decompression side.
-	if (AlignedBestSize(align) >= SECTOR_SIZE) {
+	if (AlignedBestSize(align) >= SECTOR_SIZE && best_ != nullptr) {
 		pool.Release(best_);
 		best_ = nullptr;
 		bestSize_ = SECTOR_SIZE;
