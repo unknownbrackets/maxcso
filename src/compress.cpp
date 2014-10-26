@@ -120,7 +120,7 @@ void CompressionTask::BeginProcessing() {
 	});
 
 	inputHandler_.OnBegin([this](int64_t size) {
-		outputHandler_.SetFile(output_, size);
+		outputHandler_.SetFile(output_, size, task_.block_size);
 		Notify(TASK_INPROGRESS, 0, size, 0);
 	});
 	inputHandler_.Pipe(input_, [this](int64_t pos, uint8_t *sector) {

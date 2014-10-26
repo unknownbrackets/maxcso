@@ -22,19 +22,28 @@ Output::~Output() {
 	for (auto pair : pendingSectors_) {
 		delete pair.second;
 	}
+	for (auto pair : partialSectors_) {
+		delete pair.second;
+	}
 	freeSectors_.clear();
 	pendingSectors_.clear();
+	partialSectors_.clear();
 
 	delete [] index_;
 	index_ = nullptr;
 }
 
-void Output::SetFile(uv_file file, int64_t srcSize) {
+void Output::SetFile(uv_file file, int64_t srcSize, uint32_t blockSize) {
 	file_ = file;
 	srcSize_ = srcSize;
 	srcPos_ = 0;
 
-	const uint32_t sectors = static_cast<uint32_t>(srcSize >> SECTOR_SHIFT);
+	blockSize_ = blockSize;
+	for (blockShift_ = 0; blockSize > 1; blockSize >>= 1) {
+		++blockShift_;
+	}
+
+	const uint32_t sectors = static_cast<uint32_t>(srcSize >> blockShift_);
 	// Start after the header and index, which we'll fill in later.
 	index_ = new uint32_t[sectors + 1];
 	// Start after the end of the index data and header.
@@ -44,50 +53,67 @@ void Output::SetFile(uv_file file, int64_t srcSize) {
 	// That would require either a second pass or keeping the entire result in RAM.
 	// For now, just take worst case (all blocks stored uncompressed.)
 	int64_t worstSize = dstPos_ + srcSize;
-	shift_ = 0;
+	indexShift_ = 0;
 	for (int i = 62; i >= 31; --i) {
 		int64_t max = 1LL << i;
 		if (worstSize >= max) {
 			// This means we need i + 1 bits to store the position.
 			// We have to shift enough off to fit into 31.
-			shift_ = i + 1 - 31;
+			indexShift_ = i + 1 - 31;
 			break;
 		}
 	}
 
 	// If the shift is above 11, the padding could make it need more space.
 	// But that would be > 4 TB anyway, so let's not worry about it.
-	align_ = 1 << shift_;
+	indexAlign_ = 1 << indexShift_;
 	Align(dstPos_);
 
 	state_ |= STATE_HAS_FILE;
+
+	for (Sector *sector : freeSectors_) {
+		sector->Setup(loop_, blockSize_, indexAlign_);
+	}
 }
 
 int32_t Output::Align(int64_t &pos) {
-	uint32_t off = static_cast<uint32_t>(pos % align_);
+	uint32_t off = static_cast<uint32_t>(pos % indexAlign_);
 	if (off != 0) {
-		pos += align_ - off;
-		return align_ - off;
+		pos += indexAlign_ - off;
+		return indexAlign_ - off;
 	}
 	return 0;
 }
 
 void Output::Enqueue(int64_t pos, uint8_t *buffer) {
-	Sector *sector = freeSectors_.back();
-	freeSectors_.pop_back();
-
 	// We might not compress all blocks.
 	const bool tryCompress = ShouldCompress(pos, buffer);
 
-	// Sector takes ownership of buffer either way.
-	if (tryCompress) {
-		sector->Process(loop_, pos, buffer, align_, [this, sector](bool status, const char *reason) {
-			HandleReadySector(sector);
-		});
+	const uint32_t block = static_cast<uint32_t>(pos >> blockShift_);
+
+	Sector *sector;
+	if (blockSize_ != SECTOR_SIZE) {
+		// Guaranteed to be zero-initialized on insert.
+		sector = partialSectors_[block];
+		if (sector == nullptr) {
+			sector = freeSectors_.back();
+			freeSectors_.pop_back();
+			partialSectors_[block] = sector;
+		}
 	} else {
-		sector->Reserve(pos, buffer);
-		HandleReadySector(sector);
+		sector = freeSectors_.back();
+		freeSectors_.pop_back();
 	}
+
+	if (!tryCompress) {
+		sector->DisableCompress();
+	}
+	sector->Process(pos, buffer, [this, sector, block](bool status, const char *reason) {
+		if (blockSize_ != SECTOR_SIZE) {
+			partialSectors_.erase(block);
+		}
+		HandleReadySector(sector);
+	});
 }
 
 void Output::HandleReadySector(Sector *sector) {
@@ -117,12 +143,12 @@ void Output::HandleReadySector(Sector *sector) {
 	sectors.push_back(sector);
 	// TODO: Try other numbers.
 	static const size_t MAX_BUFS = 8;
-	int64_t nextPos = srcPos_ + SECTOR_SIZE;
+	int64_t nextPos = srcPos_ + blockSize_;
 	auto it = pendingSectors_.find(nextPos);
 	while (it != pendingSectors_.end()) {
 		sectors.push_back(it->second);
 		pendingSectors_.erase(it);
-		nextPos += SECTOR_SIZE;
+		nextPos += blockSize_;
 		it = pendingSectors_.find(nextPos);
 
 		// Don't do more than 4 at a time.
@@ -140,8 +166,8 @@ void Output::HandleReadySector(Sector *sector) {
 		bufs[nbufs++] = uv_buf_init(reinterpret_cast<char *>(sectors[i]->BestBuffer()), bestSize);
 
 		// Update the index.
-		const int32_t s = static_cast<int32_t>(sectors[i]->Pos() >> SECTOR_SHIFT);
-		index_[s] = static_cast<int32_t>(dstPos >> shift_);
+		const int32_t s = static_cast<int32_t>(sectors[i]->Pos() >> blockShift_);
+		index_[s] = static_cast<int32_t>(dstPos >> indexShift_);
 		if (!sectors[i]->Compressed()) {
 			index_[s] |= CSO_INDEX_UNCOMPRESSED;
 		}
@@ -157,8 +183,8 @@ void Output::HandleReadySector(Sector *sector) {
 	// If we're working on the last sectors, then the index is ready to write.
 	if (nextPos == srcSize_) {
 		// Update the final index entry.
-		const int32_t s = static_cast<int32_t>(srcSize_ >> SECTOR_SHIFT);
-		index_[s] = static_cast<int32_t>(dstPos >> shift_);
+		const int32_t s = static_cast<int32_t>(srcSize_ >> blockShift_);
+		index_[s] = static_cast<int32_t>(dstPos >> indexShift_);
 
 		state_ |= STATE_INDEX_READY;
 		Flush();
@@ -231,13 +257,13 @@ void Output::Flush() {
 	memcpy(header->magic, CSO_MAGIC, sizeof(header->magic));
 	header->header_size = sizeof(CSOHeader);
 	header->uncompressed_size = srcSize_;
-	header->sector_size = SECTOR_SIZE;
+	header->sector_size = blockSize_;
 	header->version = 1;
-	header->index_shift = shift_;
+	header->index_shift = indexShift_;
 	header->unused[0] = 0;
 	header->unused[1] = 0;
 
-	const uint32_t sectors = static_cast<uint32_t>(srcSize_ >> SECTOR_SHIFT);
+	const uint32_t sectors = static_cast<uint32_t>(srcSize_ >> blockShift_);
 
 	uv_buf_t bufs[2];
 	bufs[0] = uv_buf_init(reinterpret_cast<char *>(header), sizeof(CSOHeader));

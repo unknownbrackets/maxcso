@@ -17,7 +17,7 @@ public:
 	Output(uv_loop_t *loop, const Task &task);
 	~Output();
 
-	void SetFile(uv_file file, int64_t srcSize);
+	void SetFile(uv_file file, int64_t srcSize, uint32_t blockSize);
 	void Enqueue(int64_t pos, uint8_t *buffer);
 	bool QueueFull();
 
@@ -53,14 +53,17 @@ private:
 	int64_t dstPos_;
 
 	uint32_t *index_;
-	uint8_t shift_;
-	uint32_t align_;
+	uint8_t indexShift_;
+	uint32_t indexAlign_;
+	uint32_t blockSize_;
+	uint8_t blockShift_;
 
 	OutputCallback progress_;
 	OutputFinishCallback finish_;
 
 	std::vector<Sector *> freeSectors_;
 	std::map<int64_t, Sector *> pendingSectors_;
+	std::unordered_map<uint32_t, Sector *> partialSectors_;
 };
 
 };

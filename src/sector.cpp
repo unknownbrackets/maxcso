@@ -20,7 +20,7 @@ static void EndZlib(z_stream *&z) {
 	z = nullptr;
 }
 
-Sector::Sector(uint32_t flags) : flags_(flags), busy_(false), buffer_(nullptr), best_(nullptr) {
+Sector::Sector(uint32_t flags) : flags_(flags), busy_(false), compress_(true), readySize_(0), buffer_(nullptr), best_(nullptr) {
 	// Set up the zlib streams, which we will reuse each time we hit this sector.
 	if (!(flags_ & TASKFLAG_NO_ZLIB_DEFAULT)) {
 		InitZlib(zDefault_, Z_DEFAULT_STRATEGY);
@@ -57,39 +57,57 @@ Sector::~Sector() {
 	}
 }
 
-void Sector::Process(uv_loop_t *loop, int64_t pos, uint8_t *buffer, uint32_t align, SectorCallback ready) {
-	if (busy_) {
-		ready(false, "Already busy");
+void Sector::Process(int64_t pos, uint8_t *buffer, SectorCallback ready) {
+	if (!busy_) {
+		busy_ = true;
+
+		pos_ = pos & ~(blockSize_ - 1);
+		bestSize_ = blockSize_;
+
+		if (blockSize_ == SECTOR_SIZE) {
+			buffer_ = buffer;
+		} else {
+			buffer_ = pool.Alloc();
+			memcpy(buffer_ + pos - pos_, buffer, SECTOR_SIZE);
+			pool.Release(buffer);
+		}
+	} else if (pos - pos_ < pool.BUFFER_SIZE) {
+		memcpy(buffer_ + pos - pos_, buffer, SECTOR_SIZE);
+		pool.Release(buffer);
+	} else {
+		ready_(false, "Invalid buffer pos for this sector block");
+	}
+
+	readySize_ += SECTOR_SIZE;
+	if (readySize_ < blockSize_) {
+		// We can't process yet, wait for the other buffers.
 		return;
 	}
-	busy_ = true;
 
-	loop_ = loop;
-	pos_ = pos;
-	buffer_ = buffer;
-	best_ = nullptr;
-	ready_ = ready;
-	bestSize_ = SECTOR_SIZE;
-
-	uv_.queue_work(loop_, &work_, [this, align](uv_work_t *req) {
-		Compress();
-		FinalizeBest(align);
-	}, [this](uv_work_t *req, int status) {
-		if (status < 0) {
-			ready_(false, "Failed to compress sector");
-		} else {
-			ready_(true, nullptr);
-		}
-	});
+	if (compress_) {
+		ready_ = ready;
+		uv_.queue_work(loop_, &work_, [this](uv_work_t *req) {
+			Compress();
+			FinalizeBest(align_);
+		}, [this](uv_work_t *req, int status) {
+			if (status < 0) {
+				ready_(false, "Failed to compress sector");
+			} else {
+				ready_(true, nullptr);
+			}
+		});
+	} else {
+		ready(true, nullptr);
+	}
 }
 
 void Sector::FinalizeBest(uint32_t align) {
 	// If bestSize_ wouldn't be smaller after alignment, we should not compress.
 	// It won't save space, and it'll waste CPU on the decompression side.
-	if (AlignedBestSize(align) >= SECTOR_SIZE && best_ != nullptr) {
+	if (AlignedBestSize(align) >= blockSize_ && best_ != nullptr) {
 		pool.Release(best_);
 		best_ = nullptr;
-		bestSize_ = SECTOR_SIZE;
+		bestSize_ = blockSize_;
 	}
 }
 
@@ -124,7 +142,7 @@ void Sector::ZlibTrial(z_stream *z) {
 	}
 
 	z->next_in = buffer_;
-	z->avail_in = SECTOR_SIZE;
+	z->avail_in = blockSize_;
 
 	uint8_t *result = pool.Alloc();
 
@@ -158,7 +176,7 @@ void Sector::ZopfliTrial() {
 	// Also doesn't return failure?
 	unsigned char *out = nullptr;
 	size_t outsize = 0;
-	ZopfliCompress(&opt, ZOPFLI_FORMAT_DEFLATE, buffer_, SECTOR_SIZE, &out, &outsize);
+	ZopfliCompress(&opt, ZOPFLI_FORMAT_DEFLATE, buffer_, blockSize_, &out, &outsize);
 	if (out != nullptr) {
 		if (outsize > 0 && outsize < static_cast<size_t>(bestSize_)) {
 			// So that we have proper release semantics, we copy to our buffer.
@@ -173,7 +191,7 @@ void Sector::ZopfliTrial() {
 void Sector::SevenZipTrial() {
 	uint8_t *result = pool.Alloc();
 	uint32_t resultSize = 0;
-	if (Deflate7z::Deflate(deflate7z_, result, pool.BUFFER_SIZE, buffer_, SECTOR_SIZE, &resultSize)) {
+	if (Deflate7z::Deflate(deflate7z_, result, pool.BUFFER_SIZE, buffer_, blockSize_, &resultSize)) {
 		SubmitTrial(result, resultSize);
 	} else {
 		pool.Release(result);
@@ -195,14 +213,6 @@ bool Sector::SubmitTrial(uint8_t *result, uint32_t size) {
 	}
 }
 
-void Sector::Reserve(int64_t pos, uint8_t *buffer) {
-	busy_ = true;
-	pos_ = pos;
-	buffer_ = buffer;
-	best_ = nullptr;
-	bestSize_ = SECTOR_SIZE;
-}
-
 void Sector::Release() {
 	if (best_ != nullptr) {
 		pool.Release(best_);
@@ -210,10 +220,12 @@ void Sector::Release() {
 	}
 	if (buffer_ != nullptr) {
 		pool.Release(buffer_);
+		buffer_ = nullptr;
 	}
-	buffer_ = nullptr;
 
 	busy_ = false;
+	compress_ = true;
+	readySize_ = 0;
 }
 
 };

@@ -19,12 +19,18 @@ public:
 	Sector(uint32_t flags);
 	~Sector();
 
-	void Process(uv_loop_t *loop, int64_t pos, uint8_t *buffer, uint32_t align, SectorCallback ready);
-	// For when compression is not desired, e.g. for fast sectors.
-	// This still marks as busy so WriteReq() can be used.
-	void Reserve(int64_t pos, uint8_t *buffer);
+	void Setup(uv_loop_t *loop, uint32_t blockSize, uint32_t align) {
+		loop_ = loop;
+		blockSize_ = blockSize;
+		align_ = align;
+	}
+
+	void Process(int64_t pos, uint8_t *buffer, SectorCallback ready);
 	// Call after Process() or Release().
 	void Release();
+	void DisableCompress() {
+		compress_ = false;
+	}
 
 	uint8_t *BestBuffer() {
 		return best_ == nullptr ? buffer_ : best_;
@@ -64,7 +70,12 @@ private:
 	UVHelper uv_;
 	uv_loop_t *loop_;
 	uint32_t flags_;
+	uint32_t align_;
 	bool busy_;
+	bool compress_;
+
+	uint32_t blockSize_;
+	uint32_t readySize_;
 
 	int64_t pos_;
 	uint8_t *buffer_;
