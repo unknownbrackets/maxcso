@@ -71,11 +71,12 @@ void Sector::Process(int64_t pos, uint8_t *buffer, SectorCallback ready) {
 			memcpy(buffer_ + pos - pos_, buffer, SECTOR_SIZE);
 			pool.Release(buffer);
 		}
-	} else if (pos - pos_ < pool.BUFFER_SIZE) {
+	} else if (static_cast<uint64_t>(pos - pos_) < pool.bufferSize) {
 		memcpy(buffer_ + pos - pos_, buffer, SECTOR_SIZE);
 		pool.Release(buffer);
 	} else {
 		ready_(false, "Invalid buffer pos for this sector block");
+		return;
 	}
 
 	readySize_ += SECTOR_SIZE;
@@ -147,7 +148,7 @@ void Sector::ZlibTrial(z_stream *z) {
 	uint8_t *result = pool.Alloc();
 
 	z->next_out = result;
-	z->avail_out = pool.BUFFER_SIZE;
+	z->avail_out = pool.bufferSize;
 
 	int res;
 	while ((res = deflate(z, Z_FINISH)) == Z_OK) {
@@ -191,7 +192,7 @@ void Sector::ZopfliTrial() {
 void Sector::SevenZipTrial() {
 	uint8_t *result = pool.Alloc();
 	uint32_t resultSize = 0;
-	if (Deflate7z::Deflate(deflate7z_, result, pool.BUFFER_SIZE, buffer_, blockSize_, &resultSize)) {
+	if (Deflate7z::Deflate(deflate7z_, result, pool.bufferSize, buffer_, blockSize_, &resultSize)) {
 		SubmitTrial(result, resultSize);
 	} else {
 		pool.Release(result);

@@ -6,20 +6,24 @@
 
 namespace maxcso {
 
-// All buffers are 16 KB.  Might experiment with different later.
-// We compress 2 KB sectors, so this is really too much.  zlib has a 5 byte overhead.
-// However, we also decompress DAX 8KB buffers.
+// All buffers are the same size.  This just makes things simpler.
+// zlib has a 5 byte overhead, so we really only need them to be double the size of
+// our block size.  We also decompress DAX 8KB buffers, so we need at least that much.
 class BufferPool {
 public:
-	static const int BUFFER_SIZE = 16384;
+	uint32_t bufferSize;
 	
 	BufferPool();
 	~BufferPool();
 
+	bool SetBufferSize(uint32_t newSize);
 	uint8_t *Alloc();
 	void Release(uint8_t *p);
 
 private:
+	void Clear();
+
+	size_t allocations_;
 	std::vector<uint8_t *> free_;
 	uv_mutex_t mutex_;
 };

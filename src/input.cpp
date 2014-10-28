@@ -59,7 +59,7 @@ void Input::DetectFormat() {
 			const CSOHeader *const header = reinterpret_cast<CSOHeader *>(headerBuf);
 			if (header->version > 1) {
 				finish_(false, "CISO header indicates unsupported version");
-			} else if (header->sector_size < SECTOR_SIZE || header->sector_size > pool.BUFFER_SIZE) {
+			} else if (header->sector_size < SECTOR_SIZE || header->sector_size > pool.bufferSize) {
 				finish_(false, "CISO header indicates unsupported sector size");
 			} else if ((header->uncompressed_size & SECTOR_MASK) != 0) {
 				finish_(false, "CISO uncompressed size not aligned to sector size");
@@ -323,7 +323,7 @@ bool Input::DecompressSector(uint8_t *dst, const uint8_t *src, unsigned int len,
 
 	z.avail_in = len;
 	z.next_out = dst;
-	z.avail_out = BufferPool::BUFFER_SIZE;
+	z.avail_out = pool.bufferSize;
 	z.next_in = src;
 
 	const int status = inflate(&z, Z_FINISH);

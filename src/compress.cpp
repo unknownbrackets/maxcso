@@ -9,6 +9,9 @@
 
 namespace maxcso {
 
+// Anything above this is insane.  This value is even insane.
+static const uint32_t MAX_BLOCK_SIZE = 0x40000;
+
 class CompressionTask {
 public:
 	CompressionTask(uv_loop_t *loop, const Task &t)
@@ -49,7 +52,7 @@ private:
 };
 
 void CompressionTask::Enqueue() {
-	if (task_.block_size > pool.BUFFER_SIZE) {
+	if (task_.block_size > MAX_BLOCK_SIZE) {
 		Notify(TASK_INVALID_OPTION, "Block size too large");
 		return;
 	}
@@ -59,6 +62,10 @@ void CompressionTask::Enqueue() {
 	}
 	if ((task_.block_size & (task_.block_size - 1)) != 0) {
 		Notify(TASK_INVALID_OPTION, "Block size must be a power of two");
+		return;
+	}
+	if (!pool.SetBufferSize(task_.block_size * 2)) {
+		Notify(TASK_INVALID_OPTION, "Unable to update buffer size to match block size");
 		return;
 	}
 
