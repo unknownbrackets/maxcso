@@ -22,6 +22,7 @@ Features
   * Processes multiple files in one command.
   * Can take a CSO or DAX file as a source.
   * Able to output at larger block sizes.
+  * Support for experimental cso formats using [lz4][] (faster decompression)
 
 
 Compression
@@ -40,6 +41,9 @@ results are between 0.5% to 1.0% smaller.
 Larger block sizes than the default will help compression, in the range of 2-3%.  However, the
 files may not be compatible with some software.  For example, [PPSSPP][] versions released
 after 2014-10-26 will support larger block sizes.
+
+LZ4's compression ratios aren't as good, but it decompresses faster.  It can sometimes beat
+deflate in compression ratio, and CSO v2 allows them to be mixed.
 
 
 Speed
@@ -63,12 +67,19 @@ Multiple files may be specified.  Inputs can be iso or cso files.
    --threads=N     Specify N threads for I/O and compression
    --quiet         Suppress status output
    --crc           Log CRC32 checksums, ignore output files and methods
-   --fast          Use only basic zlib for fastest result
+   --fast          Use only basic zlib or lz4 for fastest result
    --block=N       Specify a block size (default is 2048)
                    Most readers only support the 2048 size
-   --use-METHOD    Enable a compression method: zlib, Zopfli, or 7zdeflate
-                   By default, zlib and 7zdeflate are used
-   --no-METHOD     Disable a compression method, same as above
+   --format=VER    Specify cso version (options: cso1, cso2, zso)
+                   These are experimental, default is cso1
+   --use-zlib      Enable trials with zlib for deflate compression
+   --use-zopfli    Enable trials with Zopfli for deflate compression
+   --use-7zdeflate Enable trials with 7-zip's deflate compression
+   --use-lz4       Enable trials with lz4hc for lz4 compression
+   --use-lz4brute  Enable bruteforce trials with lz4hc for lz4 compression
+   --only-METHOD   Only allow a certain compression method (zlib, etc. above)
+   --no-METHOD     Disable a certain compression method (zlib, etc. above)
+                   The default is to use zlib and 7zdeflate only
 ```
 
 Because Zopfli is significantly slower than the other methods, and uses a lot more memory, it
@@ -119,3 +130,4 @@ Other tools
 [CisoMC]: http://wololo.net/talk/viewtopic.php?f=20&t=32659
 [ciso]: http://sourceforge.net/projects/ciso/
 [ciso-python]: http://virtuousflame.blog.163.com/blog/static/177177172201111833413485/
+[lz4]: https://code.google.com/p/lz4/

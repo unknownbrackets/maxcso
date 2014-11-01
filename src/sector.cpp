@@ -132,7 +132,7 @@ void Sector::Compress() {
 	if (!(flags_ & TASKFLAG_NO_7ZIP)) {
 		SevenZipTrial();
 	}
-	if (!(flags_ & TASKFLAG_NO_LZ4_HC)) {
+	if (!(flags_ & (TASKFLAG_NO_LZ4_HC | TASKFLAG_NO_LZ4_HC_BRUTE))) {
 		LZ4HCTrial(!(flags_ & TASKFLAG_NO_LZ4_HC_BRUTE));
 	}
 	if (!(flags_ & TASKFLAG_NO_LZ4_DEFAULT)) {

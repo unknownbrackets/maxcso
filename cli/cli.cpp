@@ -19,14 +19,21 @@ void show_help(const char *arg0) {
 	fprintf(stderr, "   --threads=N     Specify N threads for I/O and compression\n");
 	fprintf(stderr, "   --quiet         Suppress status output\n");
 	fprintf(stderr, "   --crc           Log CRC32 checksums, ignore output files and methods\n");
-	fprintf(stderr, "   --fast          Use only basic zlib for fastest result\n");
+	fprintf(stderr, "   --fast          Use only basic zlib or lz4 for fastest result\n");
 	fprintf(stderr, "   --block=N       Specify a block size (default is 2048)\n");
 	fprintf(stderr, "                   Most readers only support the 2048 size\n");
+	fprintf(stderr, "   --format=VER    Specify cso version (options: cso1, cso2, zso)\n");
+	fprintf(stderr, "                   These are experimental, default is cso1\n");
 	// TODO: Bring this back once it's functional.
 	//fprintf(stderr, "   --smallest      Force compression of all sectors for smallest result\n");
-	fprintf(stderr, "   --use-METHOD    Enable a compression method: zlib, Zopfli, or 7zdeflate\n");
-	fprintf(stderr, "                   By default, zlib and 7zdeflate are used\n");
-	fprintf(stderr, "   --no-METHOD     Disable a compression method, same as above\n");
+	fprintf(stderr, "   --use-zlib      Enable trials with zlib for deflate compression\n");
+	fprintf(stderr, "   --use-zopfli    Enable trials with Zopfli for deflate compression\n");
+	fprintf(stderr, "   --use-7zdeflate Enable trials with 7-zip\'s deflate compression\n");
+	fprintf(stderr, "   --use-lz4       Enable trials with lz4hc for lz4 compression\n");
+	fprintf(stderr, "   --use-lz4brute  Enable bruteforce trials with lz4hc for lz4 compression\n");
+	fprintf(stderr, "   --only-METHOD   Only allow a certain compression method (zlib, etc. above)\n");
+	fprintf(stderr, "   --no-METHOD     Disable a certain compression method (zlib, etc. above)\n");
+	fprintf(stderr, "                   The default is to use zlib and 7zdeflate only\n");
 }
 
 bool has_arg_value(int &i, char *argv[], const std::string &arg, const char *&val) {
@@ -36,6 +43,30 @@ bool has_arg_value(int &i, char *argv[], const std::string &arg, const char *&va
 			return true;
 		} else if (argv[i][arg.size()] == '=') {
 			val = argv[i] + arg.size() + 1;
+			return true;
+		}
+	}
+
+	return false;
+}
+
+bool has_arg_method(int &i, char *argv[], const std::string &arg, uint32_t &method) {
+	if (arg.compare(0, arg.npos, argv[i], arg.size()) == 0) {
+		const char *val = argv[i] + arg.size();
+		if (strcmp(val, "zlib") == 0) {
+			method = maxcso::TASKFLAG_NO_ZLIB;
+			return true;
+		} else if (strcmp(val, "zopfli") == 0) {
+			method = maxcso::TASKFLAG_NO_ZOPFLI;
+			return true;
+		} else if (strcmp(val, "7zdeflate") == 0 || strcmp(val, "7zip") == 0) {
+			method = maxcso::TASKFLAG_NO_7ZIP;
+			return true;
+		} else if (strcmp(val, "lz4") == 0) {
+			method = maxcso::TASKFLAG_NO_LZ4_DEFAULT | maxcso::TASKFLAG_NO_LZ4_HC;
+			return true;
+		} else if (strcmp(val, "lz4brute") == 0) {
+			method = maxcso::TASKFLAG_NO_LZ4_HC_BRUTE;
 			return true;
 		}
 	}
@@ -56,7 +87,17 @@ struct Arguments {
 	std::vector<std::string> outputs;
 	int threads;
 	uint32_t block_size;
-	uint32_t flags;
+
+	// Let's just use separate vars for each and figure out at the end.
+	// Clearer to translate the user's logic this way, with defaults.
+	uint32_t flags_fmt;
+	uint32_t flags_use;
+	uint32_t flags_no;
+	uint32_t flags_only;
+	uint32_t flags_final;
+
+	bool fast;
+	bool smallest;
 	bool quiet;
 	bool crc;
 };
@@ -64,13 +105,22 @@ struct Arguments {
 void default_args(Arguments &args) {
 	args.threads = 0;
 	args.block_size = 2048;
-	args.flags = maxcso::TASKFLAG_NO_ZOPFLI | maxcso::TASKFLAG_NO_LZ4;
+
+	args.flags_fmt = 0;
+	args.flags_use = 0;
+	args.flags_no = 0;
+	args.flags_only = 0;
+	args.flags_final = 0;
+
+	args.fast = false;
+	args.smallest = false;
 	args.quiet = false;
 	args.crc = false;
 }
 
 int parse_args(Arguments &args, int argc, char *argv[]) {
 	const char *val = nullptr;
+	uint32_t method = 0;
 	int i;
 	for (i = 1; i < argc; ++i) {
 		if (argv[i][0] == '-') {
@@ -84,26 +134,32 @@ int parse_args(Arguments &args, int argc, char *argv[]) {
 				args.block_size = atoi(val);
 			} else if (has_arg_value(i, argv, "--threads", val)) {
 				args.threads = atoi(val);
+			} else if (has_arg_value(i, argv, "--format", val)) {
+				if (strcmp(val, "cso1") == 0) {
+					args.flags_fmt = 0;
+				} else if (strcmp(val, "cso2") == 0) {
+					args.flags_fmt = maxcso::TASKFLAG_FMT_CSO_2;
+				} else if (strcmp(val, "zso") == 0) {
+					args.flags_fmt = maxcso::TASKFLAG_FMT_ZSO;
+				} else {
+					show_help(argv[0]);
+					fprintf(stderr, "\nERROR: Unknown format %s, expecting cso1, cso2, or zso.\n", val);
+					return 1;
+				}
 			} else if (has_arg(i, argv, "--crc")) {
 				args.crc = true;
 			} else if (has_arg(i, argv, "--quiet")) {
 				args.quiet = true;
 			} else if (has_arg(i, argv, "--fast")) {
-				args.flags |= maxcso::TASKFLAG_NO_ZLIB_BRUTE | maxcso::TASKFLAG_NO_ZOPFLI | maxcso::TASKFLAG_NO_7ZIP;
+				args.fast = true;
 			} else if (has_arg(i, argv, "--smallest")) {
-				args.flags |= maxcso::TASKFLAG_FORCE_ALL;
-			} else if (has_arg(i, argv, "--use-zopfli")) {
-				args.flags &= ~maxcso::TASKFLAG_NO_ZOPFLI;
-			} else if (has_arg(i, argv, "--use-zlib")) {
-				args.flags &= ~maxcso::TASKFLAG_NO_ZLIB;
-			} else if (has_arg(i, argv, "--use-7zdeflate")) {
-				args.flags &= ~maxcso::TASKFLAG_NO_7ZIP;
-			} else if (has_arg(i, argv, "--no-zopfli")) {
-				args.flags |= maxcso::TASKFLAG_NO_ZOPFLI;
-			} else if (has_arg(i, argv, "--no-zlib")) {
-				args.flags |= maxcso::TASKFLAG_NO_ZLIB;
-			} else if (has_arg(i, argv, "--no-7zdeflate")) {
-				args.flags |= maxcso::TASKFLAG_NO_7ZIP;
+				args.smallest = true;
+			} else if (has_arg_method(i, argv, "--use-", method)) {
+				args.flags_use |= method;
+			} else if (has_arg_method(i, argv, "--no-", method)) {
+				args.flags_no |= method;
+			} else if (has_arg_method(i, argv, "--only-", method)) {
+				args.flags_only |= method;
 			} else if (has_arg_value(i, argv, "--out", val) || has_arg_value(i, argv, "-o", val)) {
 				args.outputs.push_back(val);
 			} else if (has_arg(i, argv, "--")) {
@@ -170,6 +226,35 @@ int validate_args(const char *arg0, Arguments &args) {
 		fprintf(stderr, "\nERROR: No input files.\n");
 		return 1;
 	}
+
+	// Cleanup flags: defaults first, by format.
+	if (args.flags_fmt & maxcso::TASKFLAG_FMT_CSO_2) {
+		args.flags_final = maxcso::TASKFLAG_NO_ZOPFLI | maxcso::TASKFLAG_NO_LZ4_HC_BRUTE;
+	} else if (args.flags_fmt & maxcso::TASKFLAG_FMT_ZSO) {
+		args.flags_final = maxcso::TASKFLAG_NO_ZLIB | maxcso::TASKFLAG_NO_7ZIP | maxcso::TASKFLAG_NO_ZOPFLI | maxcso::TASKFLAG_NO_LZ4_HC_BRUTE;
+	} else {
+		// CSO v1, just disable lz4.
+		args.flags_final = maxcso::TASKFLAG_NO_ZOPFLI | maxcso::TASKFLAG_NO_LZ4;
+	}
+
+	// Kill any of the NO flags for the --use-METHOD args.
+	args.flags_final &= ~args.flags_use;
+	// Then insert NO flags for --no-METHOD args.
+	args.flags_final |= args.flags_no;
+
+	// Lastly, if --only-METHOD was used, set all NOs and kill those NOs only.
+	if (args.flags_only != 0) {
+		args.flags_final |= maxcso::TASKFLAG_NO_ALL;
+		args.flags_final &= ~args.flags_only;
+	}
+
+	if (args.fast) {
+		args.flags_final |= maxcso::TASKFLAG_NO_ZLIB_BRUTE | maxcso::TASKFLAG_NO_ZOPFLI | maxcso::TASKFLAG_NO_7ZIP | maxcso::TASKFLAG_NO_LZ4_HC_BRUTE | maxcso::TASKFLAG_NO_LZ4_HC;
+	}
+	if (args.smallest) {
+		args.flags_final |= maxcso::TASKFLAG_FORCE_ALL;
+	}
+	args.flags_final |= args.flags_fmt;
 
 	return 0;
 }
@@ -294,7 +379,7 @@ int main(int argc, char *argv[]) {
 		task.progress = progress;
 		task.error = error;
 		task.block_size = args.block_size;
-		task.flags = args.flags;
+		task.flags = args.flags_final;
 		tasks.push_back(std::move(task));
 	}
 
