@@ -11,7 +11,7 @@ static const size_t QUEUE_SIZE = 32;
 Output::Output(uv_loop_t *loop, const Task &task)
 	: loop_(loop), flags_(task.flags), state_(STATE_INIT), fmt_(CSO_FMT_CSO1), srcSize_(-1), index_(nullptr) {
 	for (size_t i = 0; i < QUEUE_SIZE; ++i) {
-		freeSectors_.push_back(new Sector(flags_));
+		freeSectors_.push_back(new Sector(flags_, task.orig_max_cost, task.lz4_max_cost));
 	}
 }
 

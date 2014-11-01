@@ -23,6 +23,7 @@ Features
   * Can take a CSO or DAX file as a source.
   * Able to output at larger block sizes.
   * Support for experimental cso formats using [lz4][] (faster decompression)
+  * Tuning of deflate or lz4 compression threshold.
 
 
 Compression
@@ -43,7 +44,7 @@ files may not be compatible with some software.  For example, [PPSSPP][] version
 after 2014-10-26 will support larger block sizes.
 
 LZ4's compression ratios aren't as good, but it decompresses faster.  It can sometimes beat
-deflate in compression ratio, and CSO v2 allows them to be mixed.
+deflate in compression ratio, and CSO v2 allows it to be mixed with deflate.
 
 
 Speed
@@ -80,10 +81,15 @@ Multiple files may be specified.  Inputs can be iso or cso files.
    --only-METHOD   Only allow a certain compression method (zlib, etc. above)
    --no-METHOD     Disable a certain compression method (zlib, etc. above)
                    The default is to use zlib and 7zdeflate only
+   --lz4-cost=N    Allow lz4 to increase block size by N% at most (cso2 only)
+   --orig-cost=N   Allow uncompressed to increase block size by N% at most
 ```
 
 Because Zopfli is significantly slower than the other methods, and uses a lot more memory, it
 is disabled by default.  Add `--use-zopfli` for maximum compression.
+
+The cost arguments allow you to allow each block to be N% bigger by using lz4 or no
+compression.  This makes the file read faster (less cpu power), but take more space.
 
 
 Platforms

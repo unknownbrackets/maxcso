@@ -34,6 +34,8 @@ void show_help(const char *arg0) {
 	fprintf(stderr, "   --only-METHOD   Only allow a certain compression method (zlib, etc. above)\n");
 	fprintf(stderr, "   --no-METHOD     Disable a certain compression method (zlib, etc. above)\n");
 	fprintf(stderr, "                   The default is to use zlib and 7zdeflate only\n");
+	fprintf(stderr, "   --lz4-cost=N    Allow lz4 to increase block size by N%% at most (cso2 only)\n");
+	fprintf(stderr, "   --orig-cost=N   Allow uncompressed to increase block size by N%% at most\n");
 }
 
 bool has_arg_value(int &i, char *argv[], const std::string &arg, const char *&val) {
@@ -96,6 +98,9 @@ struct Arguments {
 	uint32_t flags_only;
 	uint32_t flags_final;
 
+	double orig_cost_percent;
+	double lz4_cost_percent;
+
 	bool fast;
 	bool smallest;
 	bool quiet;
@@ -111,6 +116,9 @@ void default_args(Arguments &args) {
 	args.flags_no = 0;
 	args.flags_only = 0;
 	args.flags_final = 0;
+
+	args.orig_cost_percent = 0.0;
+	args.lz4_cost_percent = 0.0;
 
 	args.fast = false;
 	args.smallest = false;
@@ -134,6 +142,10 @@ int parse_args(Arguments &args, int argc, char *argv[]) {
 				args.block_size = atoi(val);
 			} else if (has_arg_value(i, argv, "--threads", val)) {
 				args.threads = atoi(val);
+			} else if (has_arg_value(i, argv, "--orig-cost", val)) {
+				args.orig_cost_percent = atof(val);
+			} else if (has_arg_value(i, argv, "--lz4-cost", val)) {
+				args.lz4_cost_percent = atof(val);
 			} else if (has_arg_value(i, argv, "--format", val)) {
 				if (strcmp(val, "cso1") == 0) {
 					args.flags_fmt = 0;
@@ -380,6 +392,8 @@ int main(int argc, char *argv[]) {
 		task.error = error;
 		task.block_size = args.block_size;
 		task.flags = args.flags_final;
+		task.orig_max_cost = static_cast<uint32_t>((args.orig_cost_percent * args.block_size) / 100);
+		task.lz4_max_cost = static_cast<uint32_t>((args.lz4_cost_percent * args.block_size) / 100);
 		tasks.push_back(std::move(task));
 	}
 

@@ -22,7 +22,9 @@ static void EndZlib(z_stream *&z) {
 	z = nullptr;
 }
 
-Sector::Sector(uint32_t flags) : flags_(flags), busy_(false), compress_(true), readySize_(0), buffer_(nullptr), best_(nullptr) {
+Sector::Sector(uint32_t flags, uint32_t orig_max_cost, uint32_t lz4_max_cost)
+	: flags_(flags), origMaxCost_(orig_max_cost), lz4MaxCost_(lz4_max_cost), busy_(false),
+	compress_(true), readySize_(0), buffer_(nullptr), best_(nullptr) {
 	// Set up the zlib streams, which we will reuse each time we hit this sector.
 	if (!(flags_ & TASKFLAG_NO_ZLIB_DEFAULT)) {
 		InitZlib(zDefault_, Z_DEFAULT_STRATEGY);
@@ -235,7 +237,19 @@ void Sector::LZ4Trial() {
 
 // Frees result if it's not better (takes ownership.)
 bool Sector::SubmitTrial(uint8_t *result, uint32_t size, SectorFormat fmt) {
-	if (size < bestSize_) {
+	bool better = size + origMaxCost_ < bestSize_;
+
+	// Based on the old and new format, we may want to apply some fuzzing for lz4.
+	if (fmt == SECTOR_FMT_LZ4 && bestFmt_ == SECTOR_FMT_DEFLATE) {
+		// Allow lz4 to make it larger by a max cost.
+		// Also, use lz4 if it's the same size, since it decompresses faster.
+		better = size <= bestSize_ + lz4MaxCost_;
+	} else if (fmt == SECTOR_FMT_DEFLATE && bestFmt_ == SECTOR_FMT_LZ4) {
+		// Reverse of the above.
+		better = size + lz4MaxCost_ < bestSize_;
+	}
+
+	if (better) {
 		bestSize_ = size;
 		if (best_) {
 			pool.Release(best_);

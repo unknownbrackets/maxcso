@@ -55,6 +55,8 @@ struct Task {
 	ErrorCallback error;
 	uint32_t block_size;
 	uint32_t flags;
+	uint32_t orig_max_cost;
+	uint32_t lz4_max_cost;
 };
 
 void Compress(const std::vector<Task> &tasks);
