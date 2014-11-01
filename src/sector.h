@@ -14,6 +14,13 @@ namespace maxcso {
 
 typedef std::function<void (bool status, const char *reason)> SectorCallback;
 
+enum SectorFormat {
+	SECTOR_FMT_ORIG,
+	SECTOR_FMT_DEFLATE,
+	SECTOR_FMT_LZ4,
+};
+
+// Actually block.
 class Sector {
 public:
 	Sector(uint32_t flags);
@@ -44,6 +51,9 @@ public:
 	int64_t Pos() {
 		return pos_;
 	}
+	SectorFormat Format() {
+		return bestFmt_;
+	}
 
 	// Just so it has some place to live.
 	// Otherwise, Output needs to handle a list of these.
@@ -65,7 +75,9 @@ private:
 	void ZlibTrial(z_stream *z);
 	void ZopfliTrial();
 	void SevenZipTrial();
-	bool SubmitTrial(uint8_t *result, uint32_t size);
+	void LZ4HCTrial(bool allowBrute);
+	void LZ4Trial();
+	bool SubmitTrial(uint8_t *result, uint32_t size, SectorFormat fmt);
 
 	UVHelper uv_;
 	uv_loop_t *loop_;
@@ -81,6 +93,7 @@ private:
 	uint8_t *buffer_;
 	uint8_t *best_;
 	uint32_t bestSize_;
+	SectorFormat bestFmt_;
 
 	uv_work_t work_;
 	uv_fs_t write_;

@@ -5,11 +5,19 @@
 namespace maxcso {
 
 static const char *CSO_MAGIC = "CISO";
+static const char *ZSO_MAGIC = "ZISO";
 static const uint32_t CSO_INDEX_UNCOMPRESSED = 0x80000000;
+static const uint32_t CSO2_INDEX_LZ4 = 0x80000000;
 
 static const uint32_t SECTOR_SIZE = 0x800;
 static const uint32_t SECTOR_MASK = 0x7FF;
 static const uint8_t SECTOR_SHIFT = 11;
+
+enum CSOFormat {
+	CSO_FMT_CSO1,
+	CSO_FMT_CSO2,
+	CSO_FMT_ZSO,
+};
 
 #ifdef _MSC_VER
 #pragma pack(push, 1)

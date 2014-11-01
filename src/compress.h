@@ -33,6 +33,16 @@ enum TaskFlags {
 
 	// Disable heuristics and compress all sectors.
 	TASKFLAG_FORCE_ALL = 0x10,
+
+	// Flags for new formats.
+	TASKFLAG_FMT_ZSO = 0x20,
+	TASKFLAG_FMT_CSO_2 = 0x40,
+	TASKFLAG_NO_LZ4 = 0x380,
+	TASKFLAG_NO_LZ4_DEFAULT = 0x80,
+	TASKFLAG_NO_LZ4_HC = 0x100,
+	TASKFLAG_NO_LZ4_HC_BRUTE = 0x200,
+
+	TASKFLAG_NO_ALL = TASKFLAG_NO_ZLIB | TASKFLAG_NO_ZOPFLI | TASKFLAG_NO_7ZIP | TASKFLAG_NO_LZ4,
 };
 
 typedef std::function<void (const Task *, TaskStatus status, int64_t pos, int64_t total, int64_t written)> ProgressCallback;

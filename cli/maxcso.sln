@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Express 2013 for Windows Desktop
-VisualStudioVersion = 12.0.21005.1
+VisualStudioVersion = 12.0.30723.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "cli", "cli.vcxproj", "{726474B8-FA25-4D84-B5FD-60AD025CE1BF}"
 EndProject
@@ -14,6 +14,8 @@ EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "7zip", "..\7zip\7zip.vcxproj", "{6343B36E-030F-4A66-A588-758B2E2B5BEE}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "src", "..\src\src.vcxproj", "{F761046E-6C38-4428-A5F1-38391A37BB35}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "lz4", "D:\Users\Unknown\Documents\projects\zopfli-cso\lz4\lz4.vcxproj", "{F761046E-6C38-4428-B5F2-38391A37BB34}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -71,6 +73,14 @@ Global
 		{F761046E-6C38-4428-A5F1-38391A37BB35}.Release|Win32.Build.0 = Release|Win32
 		{F761046E-6C38-4428-A5F1-38391A37BB35}.Release|x64.ActiveCfg = Release|x64
 		{F761046E-6C38-4428-A5F1-38391A37BB35}.Release|x64.Build.0 = Release|x64
+		{F761046E-6C38-4428-B5F2-38391A37BB34}.Debug|Win32.ActiveCfg = Debug|Win32
+		{F761046E-6C38-4428-B5F2-38391A37BB34}.Debug|Win32.Build.0 = Debug|Win32
+		{F761046E-6C38-4428-B5F2-38391A37BB34}.Debug|x64.ActiveCfg = Debug|x64
+		{F761046E-6C38-4428-B5F2-38391A37BB34}.Debug|x64.Build.0 = Debug|x64
+		{F761046E-6C38-4428-B5F2-38391A37BB34}.Release|Win32.ActiveCfg = Release|Win32
+		{F761046E-6C38-4428-B5F2-38391A37BB34}.Release|Win32.Build.0 = Release|Win32
+		{F761046E-6C38-4428-B5F2-38391A37BB34}.Release|x64.ActiveCfg = Release|x64
+		{F761046E-6C38-4428-B5F2-38391A37BB34}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -64,7 +64,7 @@ struct Arguments {
 void default_args(Arguments &args) {
 	args.threads = 0;
 	args.block_size = 2048;
-	args.flags = maxcso::TASKFLAG_NO_ZOPFLI;
+	args.flags = maxcso::TASKFLAG_NO_ZOPFLI | maxcso::TASKFLAG_NO_LZ4;
 	args.quiet = false;
 	args.crc = false;
 }

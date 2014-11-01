@@ -51,6 +51,9 @@
     <ProjectReference Include="..\zopfli\zopfli.vcxproj">
       <Project>{6343b36e-030f-4a66-a588-758b2e2b5bed}</Project>
     </ProjectReference>
+    <ProjectReference Include="D:\Users\Unknown\Documents\projects\zopfli-cso\lz4\lz4.vcxproj">
+      <Project>{f761046e-6c38-4428-b5f2-38391a37bb34}</Project>
+    </ProjectReference>
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{F761046E-6C38-4428-A5F1-38391A37BB35}</ProjectGuid>
@@ -138,7 +141,7 @@
       <MinimalRebuild>false</MinimalRebuild>
       <RuntimeTypeInfo>false</RuntimeTypeInfo>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
-      <AdditionalIncludeDirectories>../libuv/include;../zlib;../zopfli/src;../7zip</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../libuv/include;../zlib;../zopfli/src;../7zip;../lz4</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -166,7 +169,7 @@
       <MinimalRebuild>false</MinimalRebuild>
       <RuntimeTypeInfo>false</RuntimeTypeInfo>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
-      <AdditionalIncludeDirectories>../libuv/include;../zlib;../zopfli/src;../7zip</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../libuv/include;../zlib;../zopfli/src;../7zip;../lz4</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -195,7 +198,7 @@
       <WholeProgramOptimization>true</WholeProgramOptimization>
       <OmitFramePointers>true</OmitFramePointers>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
-      <AdditionalIncludeDirectories>../libuv/include;../zlib;../zopfli/src;../7zip</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../libuv/include;../zlib;../zopfli/src;../7zip;../lz4</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -225,7 +228,7 @@
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <RuntimeTypeInfo>false</RuntimeTypeInfo>
       <WholeProgramOptimization>true</WholeProgramOptimization>
-      <AdditionalIncludeDirectories>../libuv/include;../zlib;../zopfli/src;../7zip</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../libuv/include;../zlib;../zopfli/src;../7zip;../lz4</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
     </ClCompile>
     <Link>

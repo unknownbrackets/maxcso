@@ -9,9 +9,9 @@ namespace maxcso {
 static const size_t QUEUE_SIZE = 32;
 
 Output::Output(uv_loop_t *loop, const Task &task)
-	: loop_(loop), flags_(task.flags), state_(STATE_INIT), srcSize_(-1), index_(nullptr) {
+	: loop_(loop), flags_(task.flags), state_(STATE_INIT), fmt_(CSO_FMT_CSO1), srcSize_(-1), index_(nullptr) {
 	for (size_t i = 0; i < QUEUE_SIZE; ++i) {
-		freeSectors_.push_back(new Sector(task.flags));
+		freeSectors_.push_back(new Sector(flags_));
 	}
 }
 
@@ -33,10 +33,11 @@ Output::~Output() {
 	index_ = nullptr;
 }
 
-void Output::SetFile(uv_file file, int64_t srcSize, uint32_t blockSize) {
+void Output::SetFile(uv_file file, int64_t srcSize, uint32_t blockSize, CSOFormat fmt) {
 	file_ = file;
 	srcSize_ = srcSize;
 	srcPos_ = 0;
+	fmt_ = fmt;
 
 	blockSize_ = blockSize;
 	for (blockShift_ = 0; blockSize > 1; blockSize >>= 1) {
@@ -168,8 +169,28 @@ void Output::HandleReadySector(Sector *sector) {
 		// Update the index.
 		const int32_t s = static_cast<int32_t>(sectors[i]->Pos() >> blockShift_);
 		index_[s] = static_cast<int32_t>(dstPos >> indexShift_);
-		if (!sectors[i]->Compressed()) {
+		// CSO2 doesn't use a flag for uncompressed, only the size of the block.
+		if (!sectors[i]->Compressed() && fmt_ != CSO_FMT_CSO2) {
 			index_[s] |= CSO_INDEX_UNCOMPRESSED;
+		}
+		switch (fmt_) {
+		case CSO_FMT_CSO1:
+			if (sectors[i]->Format() == SECTOR_FMT_LZ4) {
+				finish_(false, "LZ4 format not supported within CSO v1 file");
+				return;
+			}
+			break;
+		case CSO_FMT_ZSO:
+			if (sectors[i]->Format() == SECTOR_FMT_DEFLATE) {
+				finish_(false, "Deflate format not supported within ZSO file");
+				return;
+			}
+			break;
+		case CSO_FMT_CSO2:
+			if (sectors[i]->Format() == SECTOR_FMT_LZ4) {
+				index_[s] |= CSO2_INDEX_LZ4;
+			}
+			break;
 		}
 
 		dstPos += bestSize;
@@ -254,11 +275,15 @@ void Output::Flush() {
 	}
 
 	CSOHeader *header = new CSOHeader;
-	memcpy(header->magic, CSO_MAGIC, sizeof(header->magic));
+	if (fmt_ == CSO_FMT_ZSO) {
+		memcpy(header->magic, ZSO_MAGIC, sizeof(header->magic));
+	} else {
+		memcpy(header->magic, CSO_MAGIC, sizeof(header->magic));
+	}
 	header->header_size = sizeof(CSOHeader);
 	header->uncompressed_size = srcSize_;
 	header->sector_size = blockSize_;
-	header->version = 1;
+	header->version = fmt_ == CSO_FMT_CSO2 ? 2 : 1;
 	header->index_shift = indexShift_;
 	header->unused[0] = 0;
 	header->unused[1] = 0;

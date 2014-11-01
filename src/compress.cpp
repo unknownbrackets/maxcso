@@ -127,7 +127,13 @@ void CompressionTask::BeginProcessing() {
 	});
 
 	inputHandler_.OnBegin([this](int64_t size) {
-		outputHandler_.SetFile(output_, size, task_.block_size);
+		CSOFormat fmt = CSO_FMT_CSO1;
+		if (task_.flags & TASKFLAG_FMT_CSO_2) {
+			fmt = CSO_FMT_CSO2;
+		} else if (task_.flags & TASKFLAG_FMT_ZSO) {
+			fmt = CSO_FMT_ZSO;
+		}
+		outputHandler_.SetFile(output_, size, task_.block_size, fmt);
 		Notify(TASK_INPROGRESS, 0, size, 0);
 	});
 	inputHandler_.Pipe(input_, [this](int64_t pos, uint8_t *sector) {

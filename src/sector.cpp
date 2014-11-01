@@ -4,6 +4,8 @@
 #include "buffer_pool.h"
 #include "zopfli/zopfli.h"
 #include "deflate7z.h"
+#include "lz4.h"
+#include "lz4hc.h"
 #define ZLIB_CONST
 #include "zlib.h"
 
@@ -63,6 +65,7 @@ void Sector::Process(int64_t pos, uint8_t *buffer, SectorCallback ready) {
 
 		pos_ = pos & ~(blockSize_ - 1);
 		bestSize_ = blockSize_;
+		bestFmt_ = SECTOR_FMT_ORIG;
 
 		if (blockSize_ == SECTOR_SIZE) {
 			buffer_ = buffer;
@@ -109,6 +112,7 @@ void Sector::FinalizeBest(uint32_t align) {
 		pool.Release(best_);
 		best_ = nullptr;
 		bestSize_ = blockSize_;
+		bestFmt_ = SECTOR_FMT_ORIG;
 	}
 }
 
@@ -127,6 +131,12 @@ void Sector::Compress() {
 	}
 	if (!(flags_ & TASKFLAG_NO_7ZIP)) {
 		SevenZipTrial();
+	}
+	if (!(flags_ & TASKFLAG_NO_LZ4_HC)) {
+		LZ4HCTrial(!(flags_ & TASKFLAG_NO_LZ4_HC_BRUTE));
+	}
+	if (!(flags_ & TASKFLAG_NO_LZ4_DEFAULT)) {
+		LZ4Trial();
 	}
 }
 
@@ -156,7 +166,7 @@ void Sector::ZlibTrial(z_stream *z) {
 	}
 	if (res == Z_STREAM_END) {
 		// Success.  Let's check the size.
-		SubmitTrial(result, z->total_out);
+		SubmitTrial(result, z->total_out, SECTOR_FMT_DEFLATE);
 	} else {
 		// Failed, just ignore this result.
 		// TODO: Log or something?
@@ -183,7 +193,7 @@ void Sector::ZopfliTrial() {
 			// So that we have proper release semantics, we copy to our buffer.
 			uint8_t *result = pool.Alloc();
 			memcpy(result, out, outsize);
-			SubmitTrial(result, static_cast<uint32_t>(outsize));
+			SubmitTrial(result, static_cast<uint32_t>(outsize), SECTOR_FMT_DEFLATE);
 		}
 		free(out);
 	}
@@ -193,20 +203,45 @@ void Sector::SevenZipTrial() {
 	uint8_t *result = pool.Alloc();
 	uint32_t resultSize = 0;
 	if (Deflate7z::Deflate(deflate7z_, result, pool.bufferSize, buffer_, blockSize_, &resultSize)) {
-		SubmitTrial(result, resultSize);
+		SubmitTrial(result, resultSize, SECTOR_FMT_DEFLATE);
+	} else {
+		pool.Release(result);
+	}
+}
+
+void Sector::LZ4HCTrial(bool allowBrute) {
+	// Sometimes lower levels can actually win.  But, usually not, so only try a few.
+	int level = allowBrute ? 4 : 16;
+	for (; level <= 16; level += 3) {
+		uint8_t *result = pool.Alloc();
+		uint32_t resultSize = LZ4_compressHC2(reinterpret_cast<const char *>(buffer_), reinterpret_cast<char *>(result), blockSize_, level);
+		if (resultSize != 0) {
+			SubmitTrial(result, resultSize, SECTOR_FMT_LZ4);
+		} else {
+			pool.Release(result);
+		}
+	}
+}
+
+void Sector::LZ4Trial() {
+	uint8_t *result = pool.Alloc();
+	uint32_t resultSize = LZ4_compress(reinterpret_cast<const char *>(buffer_), reinterpret_cast<char *>(result), blockSize_);
+	if (resultSize != 0) {
+		SubmitTrial(result, resultSize, SECTOR_FMT_LZ4);
 	} else {
 		pool.Release(result);
 	}
 }
 
 // Frees result if it's not better (takes ownership.)
-bool Sector::SubmitTrial(uint8_t *result, uint32_t size) {
+bool Sector::SubmitTrial(uint8_t *result, uint32_t size, SectorFormat fmt) {
 	if (size < bestSize_) {
 		bestSize_ = size;
 		if (best_) {
 			pool.Release(best_);
 		}
 		best_ = result;
+		bestFmt_ = fmt;
 		return true;
 	} else {
 		pool.Release(result);

@@ -5,6 +5,7 @@
 #include <map>
 #include "uv_helper.h"
 #include "compress.h"
+#include "cso.h"
 #include "sector.h"
 
 namespace maxcso {
@@ -17,7 +18,7 @@ public:
 	Output(uv_loop_t *loop, const Task &task);
 	~Output();
 
-	void SetFile(uv_file file, int64_t srcSize, uint32_t blockSize);
+	void SetFile(uv_file file, int64_t srcSize, uint32_t blockSize, CSOFormat fmt);
 	void Enqueue(int64_t pos, uint8_t *buffer);
 	bool QueueFull();
 
@@ -43,6 +44,7 @@ private:
 	uv_loop_t *loop_;
 	uint32_t flags_;
 	uint32_t state_;
+	CSOFormat fmt_;
 
 	uv_file file_;
 	uv_fs_t req_;
