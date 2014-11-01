@@ -22,7 +22,7 @@ Features
   * Processes multiple files in one command.
   * Can take a CSO or DAX file as a source.
   * Able to output at larger block sizes.
-  * Support for experimental cso formats using [lz4][] (faster decompression)
+  * Support for experimental [CSO v2][] and [ZSO][] formats using [lz4][] (faster decompression.)
   * Tuning of deflate or lz4 compression threshold.
 
 
@@ -97,7 +97,7 @@ Platforms
 
 maxcso has only been tested on Windows so far.  The code was written to be portable, however.
 If you'd like to port it to another platform, pull requests are accepted.  It may just compile
-out of the box with a Makefile or similar.
+out of the box with a Makefile or similar, but 7-zip is probably the biggest problem.
 
 ### Windows
 
@@ -116,6 +116,7 @@ libraries.  Licensing is as follows:
  * [Zopfli][] is licensed under Apache 2.0.
  * [libuv][] is licensed under MIT.
  * [zlib][] is licensed under zlib.
+ * [lz4][] is licensed under BSD.
 
 
 Other tools
@@ -137,3 +138,5 @@ Other tools
 [ciso]: http://sourceforge.net/projects/ciso/
 [ciso-python]: http://virtuousflame.blog.163.com/blog/static/177177172201111833413485/
 [lz4]: https://code.google.com/p/lz4/
+[CSO v2]: README_CSO.md
+[ZSO]: README_ZSO.md

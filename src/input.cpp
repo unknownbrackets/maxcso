@@ -375,6 +375,7 @@ bool Input::DecompressSectorDeflate(uint8_t *dst, const uint8_t *src, unsigned i
 }
 
 bool Input::DecompressSectorLZ4(uint8_t *dst, const uint8_t *src, int dstSize, std::string &err) {
+	// Must use fast, because we don't know the size of the input data.  It could include padding.
 	if (LZ4_decompress_fast(reinterpret_cast<const char *>(src), reinterpret_cast<char *>(dst), dstSize) < 0) {
 		err = "LZ4 decompression failed.";
 		return false;
