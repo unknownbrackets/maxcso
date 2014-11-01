@@ -23,16 +23,19 @@ private:
 	void DetectFormat();
 	void SetupCache(uint32_t minSize);
 	void ReadSector();
-	void EnqueueDecompressSector(uint8_t *src, uint32_t len, uint32_t offset);
+	void EnqueueDecompressSector(uint8_t *src, uint32_t len, uint32_t offset, bool isLZ4);
 
 	enum FileType {
 		UNKNOWN,
 		ISO,
-		CISO,
+		CSO1,
+		CSO2,
+		ZSO,
 		DAX,
 	};
 
-	bool DecompressSector(uint8_t *dst, const uint8_t *src, unsigned int len, FileType type, std::string &err);
+	static bool DecompressSectorDeflate(uint8_t *dst, const uint8_t *src, unsigned int len, FileType type, std::string &err);
+	static bool DecompressSectorLZ4(uint8_t *dst, const uint8_t *src, int dstSize, std::string &err);
 
 	UVHelper uv_;
 	uv_loop_t *loop_;

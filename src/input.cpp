@@ -2,6 +2,7 @@
 #include "buffer_pool.h"
 #include "cso.h"
 #include "dax.h"
+#include "lz4.h"
 #define ZLIB_CONST
 #include "zlib.h"
 
@@ -54,15 +55,20 @@ void Input::DetectFormat() {
 		}
 		uv_fs_req_cleanup(req);
 
-		if (!memcmp(headerBuf, CSO_MAGIC, 4)) {
-			type_ = CISO;
+		const bool isZSO = !memcmp(headerBuf, ZSO_MAGIC, 4);
+		if (isZSO || !memcmp(headerBuf, CSO_MAGIC, 4)) {
 			const CSOHeader *const header = reinterpret_cast<CSOHeader *>(headerBuf);
-			if (header->version > 1) {
-				finish_(false, "CISO header indicates unsupported version");
+			if (isZSO) {
+				type_ = ZSO;
+			} else {
+				type_ = header->version == 2 ? CSO2 : CSO1;
+			}
+			if (header->version > 2) {
+				finish_(false, "CSO header indicates unsupported version");
 			} else if (header->sector_size < SECTOR_SIZE || header->sector_size > pool.bufferSize) {
-				finish_(false, "CISO header indicates unsupported sector size");
+				finish_(false, "CSO header indicates unsupported sector size");
 			} else if ((header->uncompressed_size & SECTOR_MASK) != 0) {
-				finish_(false, "CISO uncompressed size not aligned to sector size");
+				finish_(false, "CSO uncompressed size not aligned to sector size");
 			} else {
 				size_ = header->uncompressed_size;
 				csoIndexShift_ = header->index_shift;
@@ -194,23 +200,42 @@ void Input::ReadSector() {
 	// Offset into position where our data is.
 	uint32_t offset = 0;
 	unsigned int len = SECTOR_SIZE;
-	bool compressed = false;
+	bool compressedDeflate = false;
+	bool compressedLZ4 = false;
 	switch (type_) {
 	case ISO:
 		break;
-	case CISO:
+	case CSO1:
+	case CSO2:
+	case ZSO:
 		{
 			const uint32_t block = static_cast<uint32_t>(pos_ >> csoBlockShift_);
 			const uint32_t index = csoIndex_[block];
 			const uint32_t nextIndex = csoIndex_[block + 1];
-			compressed = (index & CSO_INDEX_UNCOMPRESSED) == 0;
 
 			pos = static_cast<uint64_t>(index & 0x7FFFFFFF) << csoIndexShift_;
 			const int64_t nextPos = static_cast<uint64_t>(nextIndex & 0x7FFFFFFF) << csoIndexShift_;
 			len = static_cast<unsigned int>(nextPos - pos);
 			offset = pos_ & (csoBlockSize_ - 1);
 
-			if (!compressed && offset != 0) {
+			switch (type_) {
+			case CSO1:
+				compressedDeflate = (index & CSO_INDEX_UNCOMPRESSED) == 0;
+				break;
+			case CSO2:
+				// In v2, only smaller than csoBlockSize_ is compressed.  Flags means how.
+				if (index & CSO2_INDEX_LZ4) {
+					compressedLZ4 = len < csoBlockSize_;
+				} else {
+					compressedDeflate = len < csoBlockSize_;
+				}
+				break;
+			case ZSO:
+				compressedLZ4 = (index & CSO_INDEX_UNCOMPRESSED) == 0;
+				break;
+			}
+
+			if (!compressedDeflate && !compressedLZ4 && offset != 0) {
 				pos += offset;
 				offset = 0;
 			}
@@ -221,10 +246,10 @@ void Input::ReadSector() {
 			const uint32_t frame = static_cast<uint32_t>(pos_ >> DAX_FRAME_SHIFT);
 			pos = daxIndex_[frame];
 			len = daxSize_[frame];
-			compressed = !daxIsNC_[frame];
+			compressedDeflate = !daxIsNC_[frame];
 			offset = pos_ & DAX_FRAME_MASK;
 
-			if (!compressed && offset != 0) {
+			if (!compressedDeflate && offset != 0) {
 				pos += offset;
 				offset = 0;
 			}
@@ -235,8 +260,8 @@ void Input::ReadSector() {
 	// This ends up being owned by the compressor.
 	if (pos >= cachePos_ && pos + len <= cachePos_ + cacheSize_) {
 		// Already read in, let's just reuse.
-		if (compressed) {
-			EnqueueDecompressSector(cache_ + pos - cachePos_, len, offset);
+		if (compressedDeflate || compressedLZ4) {
+			EnqueueDecompressSector(cache_ + pos - cachePos_, len, offset, compressedLZ4);
 		} else {
 			uint8_t *readBuf = pool.Alloc();
 			memcpy(readBuf, cache_ + pos - cachePos_, len);
@@ -248,7 +273,7 @@ void Input::ReadSector() {
 	} else {
 		const uv_buf_t buf = uv_buf_init(reinterpret_cast<char *>(cache_), cacheSize_);
 		cachePos_ = pos;
-		uv_.fs_read(loop_, &req_, file_, &buf, 1, pos, [this, len, offset, compressed](uv_fs_t *req) {
+		uv_.fs_read(loop_, &req_, file_, &buf, 1, pos, [this, len, offset, compressedDeflate, compressedLZ4](uv_fs_t *req) {
 			if (req->result < static_cast<ssize_t>(len)) {
 				finish_(false, "Unable to read entire sector");
 				uv_fs_req_cleanup(req);
@@ -256,8 +281,8 @@ void Input::ReadSector() {
 			}
 			uv_fs_req_cleanup(req);
 
-			if (compressed) {
-				EnqueueDecompressSector(cache_, len, offset);
+			if (compressedDeflate || compressedLZ4) {
+				EnqueueDecompressSector(cache_, len, offset, compressedLZ4);
 			} else {
 				uint8_t *readBuf = pool.Alloc();
 				memcpy(readBuf, cache_, len);
@@ -270,12 +295,18 @@ void Input::ReadSector() {
 	}
 }
 
-void Input::EnqueueDecompressSector(uint8_t *src, uint32_t len, uint32_t offset) {
+void Input::EnqueueDecompressSector(uint8_t *src, uint32_t len, uint32_t offset, bool isLZ4) {
 	// We swap this with the compressed buf, and free the readBuf.
 	uint8_t *const actualBuf = pool.Alloc();
 	decompressError_.clear();
-	uv_.queue_work(loop_, &work_, [this, actualBuf, src, len](uv_work_t *req) {
-		if (!DecompressSector(actualBuf, src, len, type_, decompressError_)) {
+	uv_.queue_work(loop_, &work_, [this, actualBuf, src, len, isLZ4](uv_work_t *req) {
+		bool result;
+		if (isLZ4) {
+			result = DecompressSectorLZ4(actualBuf, src, csoBlockSize_, decompressError_);
+		} else {
+			result = DecompressSectorDeflate(actualBuf, src, len, type_, decompressError_);
+		}
+		if (!result) {
 			if (decompressError_.empty()) {
 				decompressError_ = "Unknown error";
 			}
@@ -312,11 +343,11 @@ void Input::Resume() {
 	}
 }
 
-bool Input::DecompressSector(uint8_t *dst, const uint8_t *src, unsigned int len, FileType type, std::string &err) {
+bool Input::DecompressSectorDeflate(uint8_t *dst, const uint8_t *src, unsigned int len, FileType type, std::string &err) {
 	z_stream z;
 	memset(&z, 0, sizeof(z));
 	// TODO: inflateReset2?
-	if (inflateInit2(&z, type == CISO ? -15 : 15) != Z_OK) {
+	if (inflateInit2(&z, type == DAX ? 15 : -15) != Z_OK) {
 		err = z.msg ? z.msg : "Unable to initialize inflate";
 		return false;
 	}
@@ -340,6 +371,14 @@ bool Input::DecompressSector(uint8_t *dst, const uint8_t *src, unsigned int len,
 	}
 
 	inflateEnd(&z);
+	return true;
+}
+
+bool Input::DecompressSectorLZ4(uint8_t *dst, const uint8_t *src, int dstSize, std::string &err) {
+	if (LZ4_decompress_fast(reinterpret_cast<const char *>(src), reinterpret_cast<char *>(dst), dstSize) < 0) {
+		err = "LZ4 decompression failed.";
+		return false;
+	}
 	return true;
 }
 
