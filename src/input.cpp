@@ -75,7 +75,7 @@ void Input::DetectFormat() {
 				csoBlockSize_ = header->sector_size;
 
 				csoBlockShift_ = 0;
-				for (uint32_t i = header->sector_size; i > 0; i >>= 1) {
+				for (uint32_t i = header->sector_size; i > 1; i >>= 1) {
 					++csoBlockShift_;
 				}
 
