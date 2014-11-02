@@ -115,6 +115,24 @@ void Output::Enqueue(int64_t pos, uint8_t *buffer) {
 		}
 		HandleReadySector(sector);
 	});
+
+	if (blockSize_ != SECTOR_SIZE) {
+		const bool lastBlock = pos + SECTOR_SIZE >= srcSize_;
+		const bool needsPad = pos + blockSize_ > srcSize_;
+		if (lastBlock && needsPad) {
+			// Our src is not aligned to the blockSize_, so this sector might not ever wake up.
+			// So let's send in some padding.
+			for (int64_t padPos = srcSize_; padPos < pos + blockSize_; padPos += SECTOR_SIZE) {
+				// Sector takes ownership, so we need a new one each time.
+				uint8_t *padBuffer = pool.Alloc();
+				memset(padBuffer, 0, SECTOR_SIZE);
+				sector->Process(padPos, padBuffer, [this, sector, block](bool status, const char *reason) {
+					partialSectors_.erase(block);
+					HandleReadySector(sector);
+				});
+			}
+		}
+	}
 }
 
 void Output::HandleReadySector(Sector *sector) {
@@ -202,7 +220,7 @@ void Output::HandleReadySector(Sector *sector) {
 	}
 
 	// If we're working on the last sectors, then the index is ready to write.
-	if (nextPos == srcSize_) {
+	if (nextPos >= srcSize_) {
 		// Update the final index entry.
 		const int32_t s = static_cast<int32_t>(srcSize_ >> blockShift_);
 		index_[s] = static_cast<int32_t>(dstPos >> indexShift_);
