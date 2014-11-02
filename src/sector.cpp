@@ -23,7 +23,7 @@ static void EndZlib(z_stream *&z) {
 }
 
 Sector::Sector(uint32_t flags, uint32_t orig_max_cost, uint32_t lz4_max_cost)
-	: flags_(flags), origMaxCost_(orig_max_cost), lz4MaxCost_(lz4_max_cost), busy_(false),
+	: flags_(flags), origMaxCost_(orig_max_cost), lz4MaxCost_(lz4_max_cost), busy_(false), enqueued_(false),
 	compress_(true), readySize_(0), buffer_(nullptr), best_(nullptr) {
 	// Set up the zlib streams, which we will reuse each time we hit this sector.
 	if (!(flags_ & TASKFLAG_NO_ZLIB_DEFAULT)) {
@@ -90,7 +90,13 @@ void Sector::Process(int64_t pos, uint8_t *buffer, SectorCallback ready) {
 		return;
 	}
 
+	if (enqueued_) {
+		ready_(false, "Sector already waiting for queued operation");
+		return;
+	}
+
 	if (compress_) {
+		enqueued_ = true;
 		ready_ = ready;
 		uv_.queue_work(loop_, &work_, [this](uv_work_t *req) {
 			Compress();
@@ -274,6 +280,7 @@ void Sector::Release() {
 	}
 
 	busy_ = false;
+	enqueued_ = false;
 	compress_ = true;
 	readySize_ = 0;
 }

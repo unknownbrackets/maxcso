@@ -116,21 +116,19 @@ void Output::Enqueue(int64_t pos, uint8_t *buffer) {
 		HandleReadySector(sector);
 	});
 
-	if (blockSize_ != SECTOR_SIZE) {
-		const bool lastBlock = pos + SECTOR_SIZE >= srcSize_;
-		const bool needsPad = pos + blockSize_ > srcSize_;
-		if (lastBlock && needsPad) {
-			// Our src is not aligned to the blockSize_, so this sector might not ever wake up.
-			// So let's send in some padding.
-			for (int64_t padPos = srcSize_; padPos < pos + blockSize_; padPos += SECTOR_SIZE) {
-				// Sector takes ownership, so we need a new one each time.
-				uint8_t *padBuffer = pool.Alloc();
-				memset(padBuffer, 0, SECTOR_SIZE);
-				sector->Process(padPos, padBuffer, [this, sector, block](bool status, const char *reason) {
-					partialSectors_.erase(block);
-					HandleReadySector(sector);
-				});
-			}
+	// Only check for the last block of a larger block size.
+	if (blockSize_ != SECTOR_SIZE && pos + SECTOR_SIZE >= srcSize_) {
+		// Our src may not be aligned to the blockSize_, so this sector might never wake up.
+		// So let's send in some padding if needed.
+		const int64_t paddedSize = (srcSize_ + blockSize_ - 1) & ~static_cast<int64_t>(blockSize_ - 1);
+		for (int64_t padPos = srcSize_; padPos < paddedSize; padPos += SECTOR_SIZE) {
+			// Sector takes ownership, so we need a new one each time.
+			uint8_t *padBuffer = pool.Alloc();
+			memset(padBuffer, 0, SECTOR_SIZE);
+			sector->Process(padPos, padBuffer, [this, sector, block](bool status, const char *reason) {
+				partialSectors_.erase(block);
+				HandleReadySector(sector);
+			});
 		}
 	}
 }
@@ -248,7 +246,7 @@ void Output::HandleReadySector(Sector *sector) {
 
 		progress_(srcPos_, srcSize_, dstPos_);
 
-		if (nextPos == srcSize_) {
+		if (nextPos >= srcSize_) {
 			state_ |= STATE_DATA_WRITTEN;
 			CheckFinish();
 		} else {

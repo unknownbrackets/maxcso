@@ -86,6 +86,7 @@ private:
 	uint32_t origMaxCost_;
 	uint32_t lz4MaxCost_;
 	bool busy_;
+	bool enqueued_;
 	bool compress_;
 
 	uint32_t blockSize_;
