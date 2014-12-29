@@ -44,7 +44,7 @@ void Output::SetFile(uv_file file, int64_t srcSize, uint32_t blockSize, CSOForma
 		++blockShift_;
 	}
 
-	const uint32_t sectors = static_cast<uint32_t>(srcSize >> blockShift_);
+	const uint32_t sectors = static_cast<uint32_t>((srcSize + blockSize_ - 1) >> blockShift_);
 	// Start after the header and index, which we'll fill in later.
 	index_ = new uint32_t[sectors + 1];
 	// Start after the end of the index data and header.
@@ -120,7 +120,7 @@ void Output::Enqueue(int64_t pos, uint8_t *buffer) {
 	if (blockSize_ != SECTOR_SIZE && pos + SECTOR_SIZE >= srcSize_) {
 		// Our src may not be aligned to the blockSize_, so this sector might never wake up.
 		// So let's send in some padding if needed.
-		const int64_t paddedSize = (srcSize_ + blockSize_ - 1) & ~static_cast<int64_t>(blockSize_ - 1);
+		const int64_t paddedSize = SrcSizeAligned() & ~static_cast<int64_t>(blockSize_ - 1);
 		for (int64_t padPos = srcSize_; padPos < paddedSize; padPos += SECTOR_SIZE) {
 			// Sector takes ownership, so we need a new one each time.
 			uint8_t *padBuffer = pool.Alloc();
@@ -220,7 +220,7 @@ void Output::HandleReadySector(Sector *sector) {
 	// If we're working on the last sectors, then the index is ready to write.
 	if (nextPos >= srcSize_) {
 		// Update the final index entry.
-		const int32_t s = static_cast<int32_t>(srcSize_ >> blockShift_);
+		const int32_t s = static_cast<int32_t>(SrcSizeAligned() >> blockShift_);
 		index_[s] = static_cast<int32_t>(dstPos >> indexShift_);
 
 		state_ |= STATE_INDEX_READY;
@@ -304,7 +304,7 @@ void Output::Flush() {
 	header->unused[0] = 0;
 	header->unused[1] = 0;
 
-	const uint32_t sectors = static_cast<uint32_t>(srcSize_ >> blockShift_);
+	const uint32_t sectors = static_cast<uint32_t>(SrcSizeAligned() >> blockShift_);
 
 	uv_buf_t bufs[2];
 	bufs[0] = uv_buf_init(reinterpret_cast<char *>(header), sizeof(CSOHeader));
@@ -326,6 +326,10 @@ void Output::CheckFinish() {
 	if ((state_ & STATE_INDEX_WRITTEN) && (state_ & STATE_DATA_WRITTEN)) {
 		finish_(true, nullptr);
 	}
+}
+
+inline int64_t Output::SrcSizeAligned() {
+	return srcSize_ + blockSize_ - 1;
 }
 
 };

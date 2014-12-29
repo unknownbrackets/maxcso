@@ -24,6 +24,7 @@ private:
 	void SetupCache(uint32_t minSize);
 	void ReadSector();
 	void EnqueueDecompressSector(uint8_t *src, uint32_t len, uint32_t offset, bool isLZ4);
+	inline int64_t SizeAligned();
 
 	enum FileType {
 		UNKNOWN,

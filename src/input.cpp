@@ -79,7 +79,7 @@ void Input::DetectFormat() {
 					++csoBlockShift_;
 				}
 
-				const uint32_t sectors = static_cast<uint32_t>(size_ >> csoBlockShift_);
+				const uint32_t sectors = static_cast<uint32_t>(SizeAligned() >> csoBlockShift_);
 				csoIndex_ = new uint32_t[sectors + 1];
 				const unsigned int bytes = (sectors + 1) * sizeof(uint32_t);
 				const uv_buf_t buf = uv_buf_init(reinterpret_cast<char *>(csoIndex_), bytes);
@@ -381,6 +381,10 @@ bool Input::DecompressSectorLZ4(uint8_t *dst, const uint8_t *src, int dstSize, s
 		return false;
 	}
 	return true;
+}
+
+inline int64_t Input::SizeAligned() {
+	return size_ + csoBlockSize_ - 1;
 }
 
 };

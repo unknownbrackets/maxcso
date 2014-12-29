@@ -31,6 +31,7 @@ private:
 	int32_t Align(int64_t &pos);
 	void HandleReadySector(Sector *sector);
 	bool ShouldCompress(int64_t pos, uint8_t *buffer);
+	inline int64_t SrcSizeAligned();
 
 	enum State {
 		STATE_INIT = 0x00,
