@@ -15,7 +15,7 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "7zip", "..\7zip\7zip.vcxpro
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "src", "..\src\src.vcxproj", "{F761046E-6C38-4428-A5F1-38391A37BB35}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "lz4", "D:\Users\Unknown\Documents\projects\zopfli-cso\lz4\lz4.vcxproj", "{F761046E-6C38-4428-B5F2-38391A37BB34}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "lz4", "..\lz4\lz4.vcxproj", "{F761046E-6C38-4428-B5F2-38391A37BB34}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

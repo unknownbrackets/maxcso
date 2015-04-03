@@ -51,7 +51,7 @@
     <ProjectReference Include="..\zopfli\zopfli.vcxproj">
       <Project>{6343b36e-030f-4a66-a588-758b2e2b5bed}</Project>
     </ProjectReference>
-    <ProjectReference Include="D:\Users\Unknown\Documents\projects\zopfli-cso\lz4\lz4.vcxproj">
+    <ProjectReference Include="..\lz4\lz4.vcxproj">
       <Project>{f761046e-6c38-4428-b5f2-38391a37bb34}</Project>
     </ProjectReference>
   </ItemGroup>
