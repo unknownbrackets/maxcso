@@ -65,7 +65,7 @@ void Sector::Process(int64_t pos, uint8_t *buffer, SectorCallback ready) {
 	if (!busy_) {
 		busy_ = true;
 
-		pos_ = pos & ~(blockSize_ - 1);
+		pos_ = pos & ~static_cast<uint64_t>(blockSize_ - 1);
 		bestSize_ = blockSize_;
 		bestFmt_ = SECTOR_FMT_ORIG;
 

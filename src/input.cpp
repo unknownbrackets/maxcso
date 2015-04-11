@@ -216,7 +216,7 @@ void Input::ReadSector() {
 			pos = static_cast<uint64_t>(index & 0x7FFFFFFF) << csoIndexShift_;
 			const int64_t nextPos = static_cast<uint64_t>(nextIndex & 0x7FFFFFFF) << csoIndexShift_;
 			len = static_cast<unsigned int>(nextPos - pos);
-			offset = pos_ & (csoBlockSize_ - 1);
+			offset = pos_ & static_cast<uint64_t>(csoBlockSize_ - 1);
 
 			switch (type_) {
 			case CSO1:
