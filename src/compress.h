@@ -7,7 +7,7 @@
 
 namespace maxcso {
 
-static const char *VERSION = "1.4.5";
+static const char *VERSION = "1.4.6";
 
 struct Task;
 

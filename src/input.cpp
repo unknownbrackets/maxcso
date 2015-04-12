@@ -237,6 +237,7 @@ void Input::ReadSector() {
 
 			if (!compressedDeflate && !compressedLZ4 && offset != 0) {
 				pos += offset;
+				len -= offset;
 				offset = 0;
 			}
 		}
@@ -251,6 +252,7 @@ void Input::ReadSector() {
 
 			if (!compressedDeflate && offset != 0) {
 				pos += offset;
+				len -= offset;
 				offset = 0;
 			}
 		}
