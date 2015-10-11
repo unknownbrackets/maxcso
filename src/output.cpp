@@ -110,7 +110,12 @@ void Output::Enqueue(int64_t pos, uint8_t *buffer) {
 		sector->DisableCompress();
 	}
 	sector->Process(pos, buffer, [this, sector, block](bool status, const char *reason) {
+		if (!status) {
+			finish_(false, reason);
+			return;
+		}
 		if (blockSize_ != SECTOR_SIZE) {
+			// Not in progress anymore.
 			partialSectors_.erase(block);
 		}
 		HandleReadySector(sector);
@@ -126,6 +131,10 @@ void Output::Enqueue(int64_t pos, uint8_t *buffer) {
 			uint8_t *padBuffer = pool.Alloc();
 			memset(padBuffer, 0, SECTOR_SIZE);
 			sector->Process(padPos, padBuffer, [this, sector, block](bool status, const char *reason) {
+				if (!status) {
+					finish_(false, reason);
+					return;
+				}
 				partialSectors_.erase(block);
 				HandleReadySector(sector);
 			});
