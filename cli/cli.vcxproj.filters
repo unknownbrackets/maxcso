@@ -3,4 +3,9 @@
   <ItemGroup>
     <ClCompile Include="cli.cpp" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="..\README.md" />
+    <None Include="..\README_CSO.md" />
+    <None Include="..\README_ZSO.md" />
+  </ItemGroup>
 </Project>

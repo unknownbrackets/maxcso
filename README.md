@@ -24,6 +24,7 @@ Features
   * Able to output at larger block sizes.
   * Support for experimental [CSO v2][] and [ZSO][] formats using [lz4][] (faster decompression.)
   * Tuning of deflate or lz4 compression threshold.
+  * Decompression of all supported inputs (including DAX and CSO v2.)
 
 
 Compression
@@ -31,10 +32,6 @@ Compression
 
 maxcso always uses compression level 9.  Decompression speed is about the same regardless of
 level, and disk access is faster with smaller files.
-
-It is possible to leave sectors or files in the iso uncompressed, which could improve speed.
-maxcso does not currently support this, however.  Benchmarks will need to be made to validate
-that the increased disk access time is worth it.
 
 Using 7-zip's deflate and Zopfli improves compression ratios, but don't expect a lot.  Usual
 results are between 0.5% to 1.0% smaller.
@@ -69,6 +66,7 @@ Multiple files may be specified.  Inputs can be iso or cso files.
    --quiet         Suppress status output
    --crc           Log CRC32 checksums, ignore output files and methods
    --fast          Use only basic zlib or lz4 for fastest result
+   --decompress    Write out to raw ISO, decompressing as needed
    --block=N       Specify a block size (default is 2048)
                    Most readers only support the 2048 size
    --format=VER    Specify cso version (options: cso1, cso2, zso)
