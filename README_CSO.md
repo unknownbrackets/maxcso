@@ -51,6 +51,8 @@ The final index entry indicates the end of the data segment and normally EOF.
 Format (version 2)
 ===========
 
+EXPERIMENTAL
+
 The header is more strictly defined:
 
     char[4]  magic;             // Always "CISO".

@@ -11,7 +11,14 @@ Basic Usage
 maxcso myfile.iso
 ```
 
-Or, drag the iso file into maxcso.exe.
+Or, drag the iso file into maxcso.exe on Windows.
+
+
+Release
+===========
+
+Get the latest release from the [GitHub releases][].  Use `maxcso.exe` on modern systems, and use
+`maxcso32.exe` on Windows XP and other 32-bit versions of Windows.
 
 
 Features
@@ -138,3 +145,4 @@ Other tools
 [lz4]: https://code.google.com/p/lz4/
 [CSO v2]: README_CSO.md
 [ZSO]: README_ZSO.md
+[GitHub releases]: https://github.com/unknownbrackets/maxcso/releases
