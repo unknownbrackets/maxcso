@@ -19,16 +19,17 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="lz4.c" />
-    <ClCompile Include="lz4frame.c" />
-    <ClCompile Include="lz4hc.c" />
-    <ClCompile Include="xxhash.c" />
+    <ClCompile Include="lib\lz4.c" />
+    <ClCompile Include="lib\lz4frame.c" />
+    <ClCompile Include="lib\lz4hc.c" />
+    <ClCompile Include="lib\xxhash.c" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="lz4.h" />
-    <ClInclude Include="lz4frame.h" />
-    <ClInclude Include="lz4hc.h" />
-    <ClInclude Include="xxhash.h" />
+    <ClInclude Include="lib\lz4.h" />
+    <ClInclude Include="lib\lz4frame.h" />
+    <ClInclude Include="lib\lz4frame_static.h" />
+    <ClInclude Include="lib\lz4hc.h" />
+    <ClInclude Include="lib\xxhash.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{F761046E-6C38-4428-B5F2-38391A37BB34}</ProjectGuid>
