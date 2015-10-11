@@ -330,8 +330,8 @@ int main(int argc, char *argv[]) {
 		if (status == maxcso::TASK_INPROGRESS) {
 			int64_t now = uv_hrtime();
 			if (now >= next) {
-				double percent = (pos * 100.0) / total;
-				double ratio = (written * 100.0) / pos;
+				double percent = total == 0 ? 0.0 : (pos * 100.0) / total;
+				double ratio = pos == 0 ? 0.0 : (written * 100.0) / pos;
 				double speed = 0.0;
 				int64_t diff = pos - lastPos;
 				if (diff > 0) {
