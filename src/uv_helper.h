@@ -82,13 +82,13 @@ private:
 
 	inline static void *Freeze(fs_func_cb &&cb) {
 		Guard g(mutex_);
-		int ticket = ++ticket_;
+		intptr_t ticket = ++nextTicket_;
 		fs_funcs_.emplace(ticket, std::move(cb));
-		return (void *)ticket;
+		return reinterpret_cast<void *>(ticket);
 	}
 	inline static fs_func_cb ThawFS(void *data) {
 		Guard g(mutex_);
-		int ticket = (int)data;
+		intptr_t ticket = reinterpret_cast<intptr_t>(data);
 		fs_func_cb f = std::move(fs_funcs_.at(ticket));
 		fs_funcs_.erase(ticket);
 		return f;
@@ -105,29 +105,29 @@ private:
 
 	inline static void *Freeze(work_func_cb &&cb, after_work_func_cb &&after) {
 		Guard g(mutex_);
-		int ticket = ++ticket_;
+		intptr_t ticket = ++nextTicket_;
 		work_funcs_.emplace(ticket, std::move(std::make_pair(std::move(cb), std::move(after))));
-		return (void *)ticket;
+		return reinterpret_cast<void *>(ticket);
 	}
 	inline static work_func_cb ThawWork(void *data) {
 		Guard g(mutex_);
-		int ticket = (int)data;
+		intptr_t ticket = reinterpret_cast<intptr_t>(data);
 		work_func_cb f = std::move(work_funcs_.at(ticket).first);
 		return f;
 	}
 	inline static after_work_func_cb ThawAfterWork(void *data) {
 		Guard g(mutex_);
-		int ticket = (int)data;
+		intptr_t ticket = reinterpret_cast<intptr_t>(data);
 		after_work_func_cb f = std::move(work_funcs_.at(ticket).second);
 		work_funcs_.erase(ticket);
 		return f;
 	}
 
-	static int ticket_;
+	static intptr_t nextTicket_;
 	static int mutexInit_;
 	static uv_mutex_t mutex_;
-	static std::unordered_map<int, fs_func_cb> fs_funcs_;
-	static std::unordered_map<int, std::pair<work_func_cb, after_work_func_cb> > work_funcs_;
+	static std::unordered_map<intptr_t, fs_func_cb> fs_funcs_;
+	static std::unordered_map<intptr_t, std::pair<work_func_cb, after_work_func_cb> > work_funcs_;
 };
 
 };
