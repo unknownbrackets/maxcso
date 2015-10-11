@@ -1,4 +1,5 @@
-/* Copyright Joyent, Inc. and other Node contributors. All rights reserved.
+/* Copyright (c) 2015 Saúl Ibarra Corretgé <saghul@gmail.com>.
+ * All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -19,7 +20,40 @@
  * IN THE SOFTWARE.
  */
 
-provider uv {
-  probe tick__start(void* loop, int mode);
-  probe tick__stop(void* loop, int mode);
-};
+#include "uv.h"
+#include "task.h"
+
+
+static void connection_cb(uv_stream_t* server, int status) {
+  ASSERT(0 && "this will never be called");
+}
+
+
+TEST_IMPL(pipe_pending_instances) {
+  int r;
+  uv_pipe_t pipe_handle;
+  uv_loop_t* loop;
+
+  loop = uv_default_loop();
+
+  r = uv_pipe_init(loop, &pipe_handle, 0);
+  ASSERT(r == 0);
+
+  uv_pipe_pending_instances(&pipe_handle, 8);
+
+  r = uv_pipe_bind(&pipe_handle, TEST_PIPENAME);
+  ASSERT(r == 0);
+
+  uv_pipe_pending_instances(&pipe_handle, 16);
+
+  r = uv_listen((uv_stream_t*)&pipe_handle, 128, connection_cb);
+  ASSERT(r == 0);
+
+  uv_close((uv_handle_t*)&pipe_handle, NULL);
+
+  r = uv_run(loop, UV_RUN_DEFAULT);
+  ASSERT(r == 0);
+
+  MAKE_VALGRIND_HAPPY();
+  return 0;
+}

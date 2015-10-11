@@ -34,6 +34,8 @@ libuv_la_SOURCES = src/fs-poll.c \
                    src/version.c
 
 if SUNOS
+# Can't be turned into a CC_CHECK_CFLAGS in configure.ac, it makes compilers
+# on other platforms complain that the argument is unused during compilation.
 libuv_la_CFLAGS += -pthread
 endif
 
@@ -43,7 +45,7 @@ include_HEADERS += include/uv-win.h include/tree.h
 AM_CPPFLAGS += -I$(top_srcdir)/src/win \
                -DWIN32_LEAN_AND_MEAN \
                -D_WIN32_WINNT=0x0600
-LIBS += -lws2_32 -lpsapi -liphlpapi -lshell32
+LIBS += -lws2_32 -lpsapi -liphlpapi -lshell32 -luserenv
 libuv_la_SOURCES += src/win/async.c \
                     src/win/atomicops-inl.h \
                     src/win/core.c \
@@ -81,7 +83,6 @@ else  # WINNT
 
 include_HEADERS += include/uv-unix.h
 AM_CPPFLAGS += -I$(top_srcdir)/src/unix
-libuv_la_CFLAGS += -g --std=gnu89 -pedantic -Wall -Wextra -Wno-unused-parameter
 libuv_la_SOURCES += src/unix/async.c \
                    src/unix/atomic-ops.h \
                    src/unix/core.c \
@@ -107,7 +108,24 @@ libuv_la_SOURCES += src/unix/async.c \
 endif  # WINNT
 
 EXTRA_DIST = test/fixtures/empty_file \
-             test/fixtures/load_error.node
+             test/fixtures/load_error.node \
+             include \
+             test \
+             docs \
+             img \
+             samples \
+             android-configure \
+             CONTRIBUTING.md \
+             LICENSE \
+             README.md \
+             checksparse.sh \
+             vcbuild.bat \
+             Makefile.mingw \
+             common.gypi \
+             gyp_uv.py \
+             uv.gyp
+
+
 
 TESTS = test/run-tests
 check_PROGRAMS = test/run-tests
@@ -147,6 +165,7 @@ test_run_tests_SOURCES = test/blackhole-server.c \
                          test/test-getnameinfo.c \
                          test/test-getsockname.c \
                          test/test-handle-fileno.c \
+                         test/test-homedir.c \
                          test/test-hrtime.c \
                          test/test-idle.c \
                          test/test-ip4-addr.c \
@@ -159,6 +178,7 @@ test_run_tests_SOURCES = test/blackhole-server.c \
                          test/test-loop-close.c \
                          test/test-loop-stop.c \
                          test/test-loop-time.c \
+                         test/test-loop-configure.c \
                          test/test-multiple-listen.c \
                          test/test-mutexes.c \
                          test/test-osx-select.c \
@@ -166,12 +186,17 @@ test_run_tests_SOURCES = test/blackhole-server.c \
                          test/test-ping-pong.c \
                          test/test-pipe-bind-error.c \
                          test/test-pipe-connect-error.c \
+                         test/test-pipe-connect-multiple.c \
+                         test/test-pipe-connect-prepare.c \
                          test/test-pipe-getsockname.c \
+                         test/test-pipe-pending-instances.c \
                          test/test-pipe-sendmsg.c \
                          test/test-pipe-server-close.c \
                          test/test-pipe-close-stdout-read-stdin.c \
+                         test/test-pipe-set-non-blocking.c \
                          test/test-platform-output.c \
                          test/test-poll-close.c \
+                         test/test-poll-close-doesnt-corrupt-stack.c \
                          test/test-poll-closesocket.c \
                          test/test-poll.c \
                          test/test-process-title.c \
@@ -192,6 +217,7 @@ test_run_tests_SOURCES = test/blackhole-server.c \
                          test/test-tcp-close-accept.c \
                          test/test-tcp-close-while-connecting.c \
                          test/test-tcp-close.c \
+                         test/test-tcp-create-socket-early.c \
                          test/test-tcp-connect-error-after-write.c \
                          test/test-tcp-connect-error.c \
                          test/test-tcp-connect-timeout.c \
@@ -201,9 +227,11 @@ test_run_tests_SOURCES = test/blackhole-server.c \
                          test/test-tcp-read-stop.c \
                          test/test-tcp-shutdown-after-write.c \
                          test/test-tcp-unexpected-read.c \
+                         test/test-tcp-oob.c \
                          test/test-tcp-write-to-half-open-connection.c \
                          test/test-tcp-write-after-connect.c \
                          test/test-tcp-writealot.c \
+                         test/test-tcp-write-fail.c \
                          test/test-tcp-try-write.c \
                          test/test-tcp-write-queue-order.c \
                          test/test-thread-equal.c \
@@ -215,6 +243,7 @@ test_run_tests_SOURCES = test/blackhole-server.c \
                          test/test-timer.c \
                          test/test-tty.c \
                          test/test-udp-bind.c \
+                         test/test-udp-create-socket-early.c \
                          test/test-udp-dgram-too-big.c \
                          test/test-udp-ipv6.c \
                          test/test-udp-multicast-interface.c \
@@ -251,6 +280,7 @@ endif
 
 if AIX
 libuv_la_CFLAGS += -D_ALL_SOURCE -D_XOPEN_SOURCE=500 -D_LINUX_SOURCE_COMPAT
+include_HEADERS += include/uv-aix.h
 libuv_la_SOURCES += src/unix/aix.c
 endif
 
@@ -274,7 +304,6 @@ endif
 
 if DRAGONFLY
 include_HEADERS += include/uv-bsd.h
-libuv_la_SOURCES += src/unix/kqueue.c src/unix/freebsd.c
 endif
 
 if FREEBSD
@@ -284,6 +313,7 @@ endif
 
 if LINUX
 include_HEADERS += include/uv-linux.h
+libuv_la_CFLAGS += -D_GNU_SOURCE
 libuv_la_SOURCES += src/unix/linux-core.c \
                     src/unix/linux-inotify.c \
                     src/unix/linux-syscalls.c \
@@ -307,46 +337,7 @@ libuv_la_CFLAGS += -D__EXTENSIONS__ -D_XOPEN_SOURCE=500
 libuv_la_SOURCES += src/unix/sunos.c
 endif
 
-if HAVE_DTRACE
-BUILT_SOURCES = include/uv-dtrace.h
-CLEANFILES += include/uv-dtrace.h
-if FREEBSD
-libuv_la_LDFLAGS += -lelf
-endif
-endif
-
-if DTRACE_NEEDS_OBJECTS
-libuv_la_SOURCES += src/unix/uv-dtrace.d
-libuv_la_DEPENDENCIES = src/unix/uv-dtrace.o
-libuv_la_LIBADD = uv-dtrace.lo
-CLEANFILES += src/unix/uv-dtrace.o src/unix/uv-dtrace.lo
-endif
-
 if HAVE_PKG_CONFIG
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = @PACKAGE_NAME@.pc
-endif
-
-if HAVE_DTRACE
-include/uv-dtrace.h: src/unix/uv-dtrace.d
-	$(AM_V_GEN)$(DTRACE) $(DTRACEFLAGS) -h -xnolibs -s $< -o $(top_srcdir)/$@
-endif
-
-if DTRACE_NEEDS_OBJECTS
-SUFFIXES = .d
-
-src/unix/uv-dtrace.o: src/unix/uv-dtrace.d ${libuv_la_OBJECTS}
-
-# It's ok to specify the output here, because we have 1 .d file, and we process
-# every created .o, most projects don't need to include more than one .d
-.d.o:
-	$(AM_V_GEN)$(DTRACE) $(DTRACEFLAGS) -G -o $(top_builddir)/uv-dtrace.o -s $< \
-		`find ${top_builddir}/src -name "*.o"`
-	$(AM_V_GEN)printf %s\\n \
-		'# ${top_builddir}/uv-dtrace.lo - a libtool object file' \
-		'# Generated by libtool (GNU libtool) 2.4' \
-		'# libtool wants a .lo not a .o' \
-		"pic_object='uv-dtrace.o'" \
-		"non_pic_object='uv-dtrace.o'" \
-	> ${top_builddir}/uv-dtrace.lo
 endif

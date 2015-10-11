@@ -16,6 +16,24 @@ Data types
 
     TTY handle type.
 
+.. c:type:: uv_tty_mode_t
+
+    .. versionadded:: 1.2.0
+
+    TTY mode type:
+
+    ::
+
+      typedef enum {
+          /* Initial/normal terminal mode */
+          UV_TTY_MODE_NORMAL,
+          /* Raw input mode (On Windows, ENABLE_WINDOW_INPUT is also enabled) */
+          UV_TTY_MODE_RAW,
+          /* Binary-safe I/O mode for IPC (Unix-only) */
+          UV_TTY_MODE_IO
+      } uv_tty_mode_t;
+
+
 
 Public members
 ^^^^^^^^^^^^^^
@@ -28,7 +46,7 @@ N/A
 API
 ---
 
-.. c:function:: int uv_tty_init(uv_loop_t*, uv_tty_t*, uv_file fd, int readable)
+.. c:function:: int uv_tty_init(uv_loop_t* loop, uv_tty_t* handle, uv_file fd, int readable)
 
     Initialize a new TTY stream with the given file descriptor. Usually the
     file descriptor will be:
@@ -40,12 +58,24 @@ API
     `readable`, specifies if you plan on calling :c:func:`uv_read_start` with
     this stream. stdin is readable, stdout is not.
 
+    On Unix this function will try to open ``/dev/tty`` and use it if the passed
+    file descriptor refers to a TTY. This lets libuv put the tty in non-blocking
+    mode without affecting other processes that share the tty.
+
     .. note::
-        TTY streams which are not readable have blocking writes.
+        If opening ``/dev/tty`` fails, libuv falls back to blocking writes for
+        non-readable TTY streams.
 
-.. c:function:: int uv_tty_set_mode(uv_tty_t*, int mode)
+    .. versionchanged:: 1.5.0: trying to initialize a TTY stream with a file
+                        descriptor that refers to a file returns `UV_EINVAL`
+                        on UNIX.
 
-    Set the TTY mode. 0 for normal, 1 for raw.
+.. c:function:: int uv_tty_set_mode(uv_tty_t* handle, uv_tty_mode_t mode)
+
+    .. versionchanged:: 1.2.0: the mode is specified as a
+                        :c:type:`uv_tty_mode_t` value.
+
+    Set the TTY using the specified terminal mode.
 
 .. c:function:: int uv_tty_reset_mode(void)
 
@@ -56,7 +86,7 @@ API
     code ``UV_EBUSY`` if you call it when execution is inside
     :c:func:`uv_tty_set_mode`.
 
-.. c:function:: int uv_tty_get_winsize(uv_tty_t*, int* width, int* height)
+.. c:function:: int uv_tty_get_winsize(uv_tty_t* handle, int* width, int* height)
 
     Gets the current Window size. On success it returns 0.
 

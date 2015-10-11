@@ -31,6 +31,51 @@
 #undef NANOSEC
 #define NANOSEC ((uint64_t) 1e9)
 
+
+struct thread_ctx {
+  void (*entry)(void* arg);
+  void* arg;
+};
+
+
+static void* uv__thread_start(void *arg)
+{
+  struct thread_ctx *ctx_p;
+  struct thread_ctx ctx;
+
+  ctx_p = arg;
+  ctx = *ctx_p;
+  uv__free(ctx_p);
+  ctx.entry(ctx.arg);
+
+  return 0;
+}
+
+
+int uv_thread_create(uv_thread_t *tid, void (*entry)(void *arg), void *arg) {
+  struct thread_ctx* ctx;
+  int err;
+
+  ctx = uv__malloc(sizeof(*ctx));
+  if (ctx == NULL)
+    return UV_ENOMEM;
+
+  ctx->entry = entry;
+  ctx->arg = arg;
+
+  err = pthread_create(tid, NULL, uv__thread_start, ctx);
+
+  if (err)
+    uv__free(ctx);
+
+  return -err;
+}
+
+
+uv_thread_t uv_thread_self(void) {
+  return pthread_self();
+}
+
 int uv_thread_join(uv_thread_t *tid) {
   return -pthread_join(*tid, NULL);
 }
@@ -79,14 +124,14 @@ void uv_mutex_lock(uv_mutex_t* mutex) {
 int uv_mutex_trylock(uv_mutex_t* mutex) {
   int err;
 
-  /* FIXME(bnoordhuis) EAGAIN means recursive lock limit reached. Arguably
-   * a bug, should probably abort rather than return -EAGAIN.
-   */
   err = pthread_mutex_trylock(mutex);
-  if (err && err != EBUSY && err != EAGAIN)
-    abort();
+  if (err) {
+    if (err != EBUSY && err != EAGAIN)
+      abort();
+    return -EBUSY;
+  }
 
-  return -err;
+  return 0;
 }
 
 
@@ -117,10 +162,13 @@ int uv_rwlock_tryrdlock(uv_rwlock_t* rwlock) {
   int err;
 
   err = pthread_rwlock_tryrdlock(rwlock);
-  if (err && err != EBUSY && err != EAGAIN)
-    abort();
+  if (err) {
+    if (err != EBUSY && err != EAGAIN)
+      abort();
+    return -EBUSY;
+  }
 
-  return -err;
+  return 0;
 }
 
 
@@ -140,10 +188,13 @@ int uv_rwlock_trywrlock(uv_rwlock_t* rwlock) {
   int err;
 
   err = pthread_rwlock_trywrlock(rwlock);
-  if (err && err != EBUSY && err != EAGAIN)
-    abort();
+  if (err) {
+    if (err != EBUSY && err != EAGAIN)
+      abort();
+    return -EBUSY;
+  }
 
-  return -err;
+  return 0;
 }
 
 
@@ -285,7 +336,7 @@ int uv_cond_init(uv_cond_t* cond) {
   if (err)
     return -err;
 
-#if !defined(__ANDROID__)
+#if !(defined(__ANDROID__) && defined(HAVE_PTHREAD_COND_TIMEDWAIT_MONOTONIC))
   err = pthread_condattr_setclock(&attr, CLOCK_MONOTONIC);
   if (err)
     goto error2;
@@ -343,7 +394,7 @@ int uv_cond_timedwait(uv_cond_t* cond, uv_mutex_t* mutex, uint64_t timeout) {
   timeout += uv__hrtime(UV_CLOCK_PRECISE);
   ts.tv_sec = timeout / NANOSEC;
   ts.tv_nsec = timeout % NANOSEC;
-#if defined(__ANDROID__)
+#if defined(__ANDROID__) && defined(HAVE_PTHREAD_COND_TIMEDWAIT_MONOTONIC)
   /*
    * The bionic pthread implementation doesn't support CLOCK_MONOTONIC,
    * but has this alternative function instead.

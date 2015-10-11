@@ -6,7 +6,7 @@
 
 `uv_req_t` is the base type for all libuv request types.
 
-Strcutures are aligned so that any libuv request can be cast to `uv_req_t`.
+Structures are aligned so that any libuv request can be cast to `uv_req_t`.
 All API functions defined here work with any request type.
 
 
@@ -25,7 +25,7 @@ Data types
 Public members
 ^^^^^^^^^^^^^^
 
-.. c:member:: void* uv_request_t.data
+.. c:member:: void* uv_req_t.data
 
     Space for user-defined arbitrary data. libuv does not use this field.
 
