@@ -70,8 +70,7 @@
     </ClCompile>
     <Lib>
       <OutputFile>$(OutDir)$(ProjectName)$(TargetExt)</OutputFile>
-      <AdditionalDependencies>
-      </AdditionalDependencies>
+      <AdditionalDependencies>userenv.lib</AdditionalDependencies>
     </Lib>
     <Link>
       <AdditionalDependencies>
@@ -114,8 +113,7 @@
     <Lib>
       <AdditionalOptions>/LTCG %(AdditionalOptions)</AdditionalOptions>
       <OutputFile>$(OutDir)$(ProjectName)$(TargetExt)</OutputFile>
-      <AdditionalDependencies>
-      </AdditionalDependencies>
+      <AdditionalDependencies>userenv.lib</AdditionalDependencies>
     </Lib>
     <Link>
       <AdditionalDependencies>
@@ -156,8 +154,7 @@
     </ClCompile>
     <Lib>
       <OutputFile>$(OutDir)$(ProjectName)$(TargetExt)</OutputFile>
-      <AdditionalDependencies>
-      </AdditionalDependencies>
+      <AdditionalDependencies>userenv.lib</AdditionalDependencies>
     </Lib>
     <Link>
       <AdditionalDependencies>
@@ -199,8 +196,7 @@
     <Lib>
       <AdditionalOptions>/LTCG %(AdditionalOptions)</AdditionalOptions>
       <OutputFile>$(OutDir)$(ProjectName)$(TargetExt)</OutputFile>
-      <AdditionalDependencies>
-      </AdditionalDependencies>
+      <AdditionalDependencies>userenv.lib</AdditionalDependencies>
     </Lib>
     <Link>
       <AdditionalDependencies>
