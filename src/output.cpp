@@ -47,8 +47,14 @@ void Output::SetFile(uv_file file, int64_t srcSize, uint32_t blockSize, CSOForma
 	const uint32_t sectors = static_cast<uint32_t>((srcSize + blockSize_ - 1) >> blockShift_);
 	// Start after the header and index, which we'll fill in later.
 	index_ = new uint32_t[sectors + 1];
-	// Start after the end of the index data and header.
-	dstPos_ = sizeof(CSOHeader) + (sectors + 1) * sizeof(uint32_t);
+	if (flags_ & TASKFLAG_DECOMPRESS) {
+		// Decompressing, so no header.
+		// We still track the index for code simplicity, but throw it away.
+		dstPos_ = 0;
+	} else {
+		// Start after the end of the index data and header.
+		dstPos_ = sizeof(CSOHeader) + (sectors + 1) * sizeof(uint32_t);
+	}
 
 	// TODO: We might be able to optimize shift better by running through the data.
 	// That would require either a second pass or keeping the entire result in RAM.
@@ -266,6 +272,9 @@ void Output::HandleReadySector(Sector *sector) {
 }
 
 bool Output::ShouldCompress(int64_t pos, uint8_t *buffer) {
+	if (flags_ & TASKFLAG_DECOMPRESS) {
+		return false;
+	}
 	if (flags_ & TASKFLAG_FORCE_ALL) {
 		return true;
 	}
@@ -296,6 +305,13 @@ void Output::OnFinish(OutputFinishCallback callback) {
 void Output::Flush() {
 	if (!(state_ & STATE_INDEX_READY)) {
 		finish_(false, "Flush called before index finalized");
+		return;
+	}
+
+	if (flags_ & TASKFLAG_DECOMPRESS) {
+		// Okay, we're done.  No header or index to write when decompressing.
+		state_ |= STATE_INDEX_WRITTEN;
+		CheckFinish();
 		return;
 	}
 

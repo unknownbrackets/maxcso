@@ -7,7 +7,7 @@
 
 namespace maxcso {
 
-static const char *VERSION = "1.4.6";
+static const char *VERSION = "1.5.0";
 
 struct Task;
 
@@ -43,6 +43,8 @@ enum TaskFlags {
 	TASKFLAG_NO_LZ4_HC_BRUTE = 0x200,
 
 	TASKFLAG_NO_ALL = TASKFLAG_NO_ZLIB | TASKFLAG_NO_ZOPFLI | TASKFLAG_NO_7ZIP | TASKFLAG_NO_LZ4,
+
+	TASKFLAG_DECOMPRESS = 0x400,
 };
 
 typedef std::function<void (const Task *, TaskStatus status, int64_t pos, int64_t total, int64_t written)> ProgressCallback;

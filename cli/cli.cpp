@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <algorithm>
 #include <vector>
 #include <string>
 #include "../src/compress.h"
@@ -20,6 +21,7 @@ void show_help(const char *arg0) {
 	fprintf(stderr, "   --quiet         Suppress status output\n");
 	fprintf(stderr, "   --crc           Log CRC32 checksums, ignore output files and methods\n");
 	fprintf(stderr, "   --fast          Use only basic zlib or lz4 for fastest result\n");
+	fprintf(stderr, "   --decompress    Write out to raw ISO, decompressing as needed\n");
 	fprintf(stderr, "   --block=N       Specify a block size (default is 2048)\n");
 	fprintf(stderr, "                   Most readers only support the 2048 size\n");
 	fprintf(stderr, "   --format=VER    Specify cso version (options: cso1, cso2, zso)\n");
@@ -105,6 +107,7 @@ struct Arguments {
 	bool smallest;
 	bool quiet;
 	bool crc;
+	bool decompress;
 };
 
 void default_args(Arguments &args) {
@@ -124,6 +127,7 @@ void default_args(Arguments &args) {
 	args.smallest = false;
 	args.quiet = false;
 	args.crc = false;
+	args.decompress = false;
 }
 
 int parse_args(Arguments &args, int argc, char *argv[]) {
@@ -166,6 +170,8 @@ int parse_args(Arguments &args, int argc, char *argv[]) {
 				args.fast = true;
 			} else if (has_arg(i, argv, "--smallest")) {
 				args.smallest = true;
+			} else if (has_arg(i, argv, "--decompress")) {
+				args.decompress = true;
 			} else if (has_arg_method(i, argv, "--use-", method)) {
 				args.flags_use |= method;
 			} else if (has_arg_method(i, argv, "--no-", method)) {
@@ -220,9 +226,13 @@ int validate_args(const char *arg0, Arguments &args) {
 				continue;
 			}
 
-			const std::string ext = args.inputs[i].substr(args.inputs[i].size() - 4);
-			if (ext == ".iso" || ext == ".ISO") {
+			std::string ext = args.inputs[i].substr(args.inputs[i].size() - 4);
+			std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+
+			if (!args.decompress && ext == ".iso") {
 				args.outputs.push_back(args.inputs[i].substr(0, args.inputs[i].size() - 4) + ".cso");
+			} else if (args.decompress && (ext == ".cso" || ext == ".zso")) {
+				args.outputs.push_back(args.inputs[i].substr(0, args.inputs[i].size() - 4) + ".iso");
 			}
 		}
 
@@ -265,6 +275,9 @@ int validate_args(const char *arg0, Arguments &args) {
 	}
 	if (args.smallest) {
 		args.flags_final |= maxcso::TASKFLAG_FORCE_ALL;
+	}
+	if (args.decompress) {
+		args.flags_final |= maxcso::TASKFLAG_DECOMPRESS;
 	}
 	args.flags_final |= args.flags_fmt;
 

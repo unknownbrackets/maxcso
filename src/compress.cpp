@@ -12,6 +12,7 @@ namespace maxcso {
 // Anything above this is insane.  This value is even insane.
 static const uint32_t MAX_BLOCK_SIZE = 0x40000;
 
+// This actually handles decompression too.  They're basically the same.
 class CompressionTask {
 public:
 	CompressionTask(uv_loop_t *loop, const Task &t)
