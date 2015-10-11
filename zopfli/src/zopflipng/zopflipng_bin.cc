@@ -151,7 +151,6 @@ int main(int argc, char *argv[]) {
   std::string prefix = "zopfli_";  // prefix for output filenames
 
   std::vector<std::string> files;
-  std::vector<char> options;
   for (int i = 1; i < argc; i++) {
     std::string arg = argv[i];
     if (arg[0] == '-' && arg.size() > 1 && arg[1] != '-') {
@@ -182,6 +181,8 @@ int main(int argc, char *argv[]) {
       int num = atoi(value.c_str());
       if (name == "--always_zopflify") {
         always_zopflify = true;
+      } else if (name == "--verbose") {
+        png_options.verbose = true;
       } else if (name == "--lossy_transparent") {
         png_options.lossy_transparent = true;
       } else if (name == "--lossy_8bit") {
@@ -291,7 +292,7 @@ int main(int argc, char *argv[]) {
     error = ZopfliPNGOptimize(origpng, png_options, true, &resultpng);
 
     if (error) {
-      printf("Decoding error %i: %s\n", error, lodepng_error_text(error));
+      printf("Decoding error %u: %s\n", error, lodepng_error_text(error));
     }
 
     // Verify result, check that the result causes no decoding errors
