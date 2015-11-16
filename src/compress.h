@@ -7,7 +7,9 @@
 
 namespace maxcso {
 
-static const char *VERSION = "1.5.0";
+static const char *VERSION = "1.6.0";
+
+static const uint32_t DEFAULT_BLOCK_SIZE = 0xFFFFFFFF;
 
 struct Task;
 
@@ -57,8 +59,8 @@ struct Task {
 	ErrorCallback error;
 	uint32_t block_size;
 	uint32_t flags;
-	uint32_t orig_max_cost;
-	uint32_t lz4_max_cost;
+	double orig_max_cost_percent;
+	double lz4_max_cost_percent;
 };
 
 void Compress(const std::vector<Task> &tasks);

@@ -22,8 +22,8 @@ void show_help(const char *arg0) {
 	fprintf(stderr, "   --crc           Log CRC32 checksums, ignore output files and methods\n");
 	fprintf(stderr, "   --fast          Use only basic zlib or lz4 for fastest result\n");
 	fprintf(stderr, "   --decompress    Write out to raw ISO, decompressing as needed\n");
-	fprintf(stderr, "   --block=N       Specify a block size (default is 2048)\n");
-	fprintf(stderr, "                   Most readers only support the 2048 size\n");
+	fprintf(stderr, "   --block=N       Specify a block size (default depends on iso size)\n");
+	fprintf(stderr, "                   Many readers only support the 2048 size\n");
 	fprintf(stderr, "   --format=VER    Specify cso version (options: cso1, cso2, zso)\n");
 	fprintf(stderr, "                   These are experimental, default is cso1\n");
 	// TODO: Bring this back once it's functional.
@@ -112,7 +112,7 @@ struct Arguments {
 
 void default_args(Arguments &args) {
 	args.threads = 0;
-	args.block_size = 2048;
+	args.block_size = maxcso::DEFAULT_BLOCK_SIZE;
 
 	args.flags_fmt = 0;
 	args.flags_use = 0;
@@ -414,8 +414,8 @@ int main(int argc, char *argv[]) {
 		task.error = error;
 		task.block_size = args.block_size;
 		task.flags = args.flags_final;
-		task.orig_max_cost = static_cast<uint32_t>((args.orig_cost_percent * args.block_size) / 100);
-		task.lz4_max_cost = static_cast<uint32_t>((args.lz4_cost_percent * args.block_size) / 100);
+		task.orig_max_cost_percent = args.orig_cost_percent;
+		task.lz4_max_cost_percent = args.lz4_cost_percent;
 		tasks.push_back(std::move(task));
 	}
 

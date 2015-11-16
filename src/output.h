@@ -46,6 +46,8 @@ private:
 	uint32_t flags_;
 	uint32_t state_;
 	CSOFormat fmt_;
+	double origMaxCostPercent_;
+	double lz4MaxCostPercent_;
 
 	uv_file file_;
 	uv_fs_t req_;

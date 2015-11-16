@@ -12,11 +12,18 @@ namespace maxcso {
 // Anything above this is insane.  This value is even insane.
 static const uint32_t MAX_BLOCK_SIZE = 0x40000;
 
+// These are the default block sizes.
+static const uint32_t SMALL_BLOCK_SIZE = 2048;
+static const uint32_t LARGE_BLOCK_SIZE = 16384;
+// We use the LARGE_BLOCK_SIZE default for files larger than 2GB.
+static const int64_t LARGE_BLOCK_SIZE_THRESH = 0x80000000;
+
 // This actually handles decompression too.  They're basically the same.
 class CompressionTask {
 public:
 	CompressionTask(uv_loop_t *loop, const Task &t)
-		: task_(t), loop_(loop), input_(-1), inputHandler_(loop), outputHandler_(loop, t), output_(-1) {
+		: task_(t), loop_(loop), input_(-1), inputHandler_(loop), outputHandler_(loop, t), output_(-1),
+		blockSize_(0) {
 	}
 	~CompressionTask() {
 		Cleanup();
@@ -50,22 +57,30 @@ private:
 	Input inputHandler_;
 	Output outputHandler_;
 	uv_file output_;
+	uint32_t blockSize_;
 };
 
 void CompressionTask::Enqueue() {
-	if (task_.block_size > MAX_BLOCK_SIZE) {
-		Notify(TASK_INVALID_OPTION, "Block size too large");
-		return;
+	if (task_.block_size == DEFAULT_BLOCK_SIZE) {
+		// Start with a small block size.
+		// We'll re-evaluate later.
+		blockSize_ = SMALL_BLOCK_SIZE;
+	} else {
+		if (task_.block_size > MAX_BLOCK_SIZE) {
+			Notify(TASK_INVALID_OPTION, "Block size too large");
+			return;
+		}
+		if (task_.block_size < SECTOR_SIZE) {
+			Notify(TASK_INVALID_OPTION, "Block size too small, must be at least 2048");
+			return;
+		}
+		if ((task_.block_size & (task_.block_size - 1)) != 0) {
+			Notify(TASK_INVALID_OPTION, "Block size must be a power of two");
+			return;
+		}
+		blockSize_ = task_.block_size;
 	}
-	if (task_.block_size < SECTOR_SIZE) {
-		Notify(TASK_INVALID_OPTION, "Block size too small, must be at least 2048");
-		return;
-	}
-	if ((task_.block_size & (task_.block_size - 1)) != 0) {
-		Notify(TASK_INVALID_OPTION, "Block size must be a power of two");
-		return;
-	}
-	if (!pool.SetBufferSize(task_.block_size * 2)) {
+	if (!pool.SetBufferSize(blockSize_ * 2)) {
 		Notify(TASK_INVALID_OPTION, "Unable to update buffer size to match block size");
 		return;
 	}
@@ -134,7 +149,19 @@ void CompressionTask::BeginProcessing() {
 		} else if (task_.flags & TASKFLAG_FMT_ZSO) {
 			fmt = CSO_FMT_ZSO;
 		}
-		outputHandler_.SetFile(output_, size, task_.block_size, fmt);
+
+		// Now that we know the file size, check if we should resize the blockSize_.
+		if (task_.block_size == DEFAULT_BLOCK_SIZE && size >= LARGE_BLOCK_SIZE_THRESH) {
+			blockSize_ = LARGE_BLOCK_SIZE;
+			if (!pool.SetBufferSize(blockSize_ * 2)) {
+				// Abort reading.
+				inputHandler_.Pause();
+				Notify(TASK_INVALID_OPTION, "Unable to update buffer size to match block size");
+				return;
+			}
+		}
+
+		outputHandler_.SetFile(output_, size, blockSize_, fmt);
 		Notify(TASK_INPROGRESS, 0, size, 0);
 	});
 	inputHandler_.Pipe(input_, [this](int64_t pos, uint8_t *sector) {

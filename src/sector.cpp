@@ -22,8 +22,8 @@ static void EndZlib(z_stream *&z) {
 	z = nullptr;
 }
 
-Sector::Sector(uint32_t flags, uint32_t orig_max_cost, uint32_t lz4_max_cost)
-	: flags_(flags), origMaxCost_(orig_max_cost), lz4MaxCost_(lz4_max_cost), busy_(false), enqueued_(false),
+Sector::Sector(uint32_t flags)
+	: flags_(flags), origMaxCost_(0), lz4MaxCost_(0), busy_(false), enqueued_(false),
 	compress_(true), readySize_(0), buffer_(nullptr), best_(nullptr) {
 	// Set up the zlib streams, which we will reuse each time we hit this sector.
 	if (!(flags_ & TASKFLAG_NO_ZLIB_DEFAULT)) {

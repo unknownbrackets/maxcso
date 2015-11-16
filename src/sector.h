@@ -23,13 +23,15 @@ enum SectorFormat {
 // Actually block.
 class Sector {
 public:
-	Sector(uint32_t flags, uint32_t orig_max_cost, uint32_t lz4_max_cost);
+	Sector(uint32_t flags);
 	~Sector();
 
-	void Setup(uv_loop_t *loop, uint32_t blockSize, uint32_t align) {
+	void Setup(uv_loop_t *loop, uint32_t blockSize, uint32_t align, uint32_t origMaxCost, uint32_t lz4MaxCost) {
 		loop_ = loop;
 		blockSize_ = blockSize;
 		align_ = align;
+		origMaxCost_ = origMaxCost;
+		lz4MaxCost_ = lz4MaxCost;
 	}
 
 	void Process(int64_t pos, uint8_t *buffer, SectorCallback ready);

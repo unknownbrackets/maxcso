@@ -74,8 +74,8 @@ Multiple files may be specified.  Inputs can be iso or cso files.
    --crc           Log CRC32 checksums, ignore output files and methods
    --fast          Use only basic zlib or lz4 for fastest result
    --decompress    Write out to raw ISO, decompressing as needed
-   --block=N       Specify a block size (default is 2048)
-                   Most readers only support the 2048 size
+   --block=N       Specify a block size (default depends on iso size)
+                   Many readers only support the 2048 size
    --format=VER    Specify cso version (options: cso1, cso2, zso)
                    These are experimental, default is cso1
    --use-zlib      Enable trials with zlib for deflate compression

@@ -9,9 +9,11 @@ namespace maxcso {
 static const size_t QUEUE_SIZE = 32;
 
 Output::Output(uv_loop_t *loop, const Task &task)
-	: loop_(loop), flags_(task.flags), state_(STATE_INIT), fmt_(CSO_FMT_CSO1), srcSize_(-1), index_(nullptr) {
+	: loop_(loop), flags_(task.flags), state_(STATE_INIT), fmt_(CSO_FMT_CSO1),
+	origMaxCostPercent_(task.orig_max_cost_percent), lz4MaxCostPercent_(task.lz4_max_cost_percent),
+	srcSize_(-1), index_(nullptr) {
 	for (size_t i = 0; i < QUEUE_SIZE; ++i) {
-		freeSectors_.push_back(new Sector(flags_, task.orig_max_cost, task.lz4_max_cost));
+		freeSectors_.push_back(new Sector(flags_));
 	}
 }
 
@@ -78,8 +80,10 @@ void Output::SetFile(uv_file file, int64_t srcSize, uint32_t blockSize, CSOForma
 
 	state_ |= STATE_HAS_FILE;
 
+	const uint32_t origMaxCost = static_cast<uint32_t>((origMaxCostPercent_ * blockSize_) / 100);
+	const uint32_t lz4MaxCost = static_cast<uint32_t>((lz4MaxCostPercent_ * blockSize_) / 100);
 	for (Sector *sector : freeSectors_) {
-		sector->Setup(loop_, blockSize_, indexAlign_);
+		sector->Setup(loop_, blockSize_, indexAlign_, origMaxCost, lz4MaxCost);
 	}
 }
 
