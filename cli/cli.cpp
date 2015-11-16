@@ -300,6 +300,12 @@ inline uv_buf_t uv_buf_init(const std::string &str) {
 
 const std::string ANSI_RESET_LINE = "\033[2K\033[0G";
 
+void update_threadpool(const Arguments &args) {
+	char threadpool_size[32];
+	sprintf(threadpool_size, "%d", args.threads);
+	setenv("UV_THREADPOOL_SIZE", threadpool_size, 1);
+}
+
 int main(int argc, char *argv[]) {
 	Arguments args;
 	default_args(args);
@@ -312,9 +318,7 @@ int main(int argc, char *argv[]) {
 		return result;
 	}
 
-	char threadpool_size[32];
-	sprintf(threadpool_size, "%d", args.threads);
-	setenv("UV_THREADPOOL_SIZE", threadpool_size, 1);
+	update_threadpool(args);
 
 	uv_loop_t loop;
 	uv_tty_t tty;
@@ -384,6 +388,11 @@ int main(int argc, char *argv[]) {
 		uv_write(&write_req, reinterpret_cast<uv_stream_t *>(&tty), bufs, nbufs, nullptr);
 	};
 	maxcso::ErrorCallback error = [&] (const maxcso::Task *task, maxcso::TaskStatus status, const char *reason) {
+		// Change the result to indicate failure.
+		if (status != maxcso::TASK_SUCCESS) {
+			result = 1;
+		}
+
 		if (args.quiet) {
 			return;
 		}
@@ -418,5 +427,6 @@ int main(int argc, char *argv[]) {
 
 	uv_tty_reset_mode();
 	uv_loop_close(&loop);
-	return 0;
+
+	return result;
 }
