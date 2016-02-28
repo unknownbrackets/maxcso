@@ -233,6 +233,11 @@ void Input::ReadSector() {
 			case ZSO:
 				compressedLZ4 = (index & CSO_INDEX_UNCOMPRESSED) == 0;
 				break;
+			case ISO:
+			case DAX:
+			case UNKNOWN:
+				finish_(false, "Unexpected input file type");
+				break;
 			}
 
 			if (!compressedDeflate && !compressedLZ4 && offset != 0) {
@@ -256,6 +261,9 @@ void Input::ReadSector() {
 				offset = 0;
 			}
 		}
+		break;
+	case UNKNOWN:
+		finish_(false, "Unexpected input file type");
 		break;
 	}
 
@@ -357,7 +365,8 @@ bool Input::DecompressSectorDeflate(uint8_t *dst, const uint8_t *src, unsigned i
 	z.avail_in = len;
 	z.next_out = dst;
 	z.avail_out = pool.bufferSize;
-	z.next_in = src;
+	// ZLIB_CONST doesn't seem to work on all platforms.
+	z.next_in = const_cast<uint8_t *>(src);
 
 	const int status = inflate(&z, Z_FINISH);
 	if (status != Z_STREAM_END) {

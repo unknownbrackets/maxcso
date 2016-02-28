@@ -1,3 +1,4 @@
+#include <cstdlib>
 #include "buffer_pool.h"
 #include "uv_helper.h"
 

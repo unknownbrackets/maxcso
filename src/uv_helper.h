@@ -106,7 +106,7 @@ private:
 	inline static void *Freeze(work_func_cb &&cb, after_work_func_cb &&after) {
 		Guard g(mutex_);
 		intptr_t ticket = ++nextTicket_;
-		work_funcs_.emplace(ticket, std::move(std::make_pair(std::move(cb), std::move(after))));
+		work_funcs_.emplace(ticket, std::make_pair(std::move(cb), std::move(after)));
 		return reinterpret_cast<void *>(ticket);
 	}
 	inline static work_func_cb ThawWork(void *data) {

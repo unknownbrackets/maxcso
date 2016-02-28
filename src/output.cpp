@@ -338,7 +338,7 @@ void Output::Flush() {
 	uv_buf_t bufs[2];
 	bufs[0] = uv_buf_init(reinterpret_cast<char *>(header), sizeof(CSOHeader));
 	bufs[1] = uv_buf_init(reinterpret_cast<char *>(index_), (sectors + 1) * sizeof(uint32_t));
-	const size_t totalBytes = sizeof(CSOHeader) + (sectors + 1) * sizeof(uint32_t);
+	const ssize_t totalBytes = sizeof(CSOHeader) + (sectors + 1) * sizeof(uint32_t);
 	uv_.fs_write(loop_, &flush_, file_, bufs, 2, 0, [this, header, totalBytes](uv_fs_t *req) {
 		if (req->result != totalBytes) {
 			finish_(false, "Unable to write header data");

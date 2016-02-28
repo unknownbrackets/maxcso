@@ -50,7 +50,6 @@ private:
 	double lz4MaxCostPercent_;
 
 	uv_file file_;
-	uv_fs_t req_;
 	uv_fs_t flush_;
 
 	int64_t srcSize_;
