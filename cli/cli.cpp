@@ -32,7 +32,9 @@ void show_help(const char *arg0) {
 	//fprintf(stderr, "   --smallest      Force compression of all sectors for smallest result\n");
 	fprintf(stderr, "   --use-zlib      Enable trials with zlib for deflate compression\n");
 	fprintf(stderr, "   --use-zopfli    Enable trials with Zopfli for deflate compression\n");
+#ifndef NO_DEFLATE7Z
 	fprintf(stderr, "   --use-7zdeflate Enable trials with 7-zip\'s deflate compression\n");
+#endif
 	fprintf(stderr, "   --use-lz4       Enable trials with lz4hc for lz4 compression\n");
 	fprintf(stderr, "   --use-lz4brute  Enable bruteforce trials with lz4hc for lz4 compression\n");
 	fprintf(stderr, "   --only-METHOD   Only allow a certain compression method (zlib, etc. above)\n");
@@ -65,9 +67,11 @@ bool has_arg_method(int &i, char *argv[], const std::string &arg, uint32_t &meth
 		} else if (strcmp(val, "zopfli") == 0) {
 			method = maxcso::TASKFLAG_NO_ZOPFLI;
 			return true;
+#ifndef NO_DEFLATE7Z
 		} else if (strcmp(val, "7zdeflate") == 0 || strcmp(val, "7zip") == 0) {
 			method = maxcso::TASKFLAG_NO_7ZIP;
 			return true;
+#endif
 		} else if (strcmp(val, "lz4") == 0) {
 			method = maxcso::TASKFLAG_NO_LZ4_DEFAULT | maxcso::TASKFLAG_NO_LZ4_HC;
 			return true;

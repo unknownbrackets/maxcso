@@ -4,7 +4,9 @@
 #define __COMMON_STRING_H
 
 #include <string.h>
+#ifdef _WIN32
 #include <windows.h>
+#endif
 
 #include "MyVector.h"
 
@@ -86,6 +88,14 @@ wchar_t * MyStringLower(wchar_t *s);
 
 #else // Standard-C
 wchar_t MyCharUpper(wchar_t c);
+
+inline wchar_t * MyStringUpper(wchar_t *s) {
+    while (*s != 0) {
+        *s = MyCharUpper(*s);
+        s++;
+    }
+    return s;
+}
 #endif
 
 //////////////////////////////////////

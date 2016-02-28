@@ -118,9 +118,13 @@ Aside from gcc/g++, you will also need:
 
 And then just compile using make.
 
+Note that 7-zip is currently disabled on Mac OS X because it doesn't work.
+
 ### Linux / Unix
 
 Aside from gcc/g++, you will also need liblz4-dev and libuv-dev, or similar.
+
+Note that 7-zip is currently disabled on Linux / Unix because it doesn't work.
 
 
 Credits and Licensing
@@ -130,7 +134,7 @@ The larger portion of code here is from others' wonderful work in decompression 
 libraries.  Licensing is as follows:
 
  * maxcso is licensed under ISC.
- * [7-zip][] is licensed under LGPL.
+ * [7-zip][] and [p7zip][] are licensed under LGPL.
  * [Zopfli][] is licensed under Apache 2.0.
  * [libuv][] is licensed under MIT.
  * [zlib][] is licensed under zlib.
@@ -148,6 +152,7 @@ Other tools
 
 [zlib]: https://github.com/madler/zlib
 [7-zip]: http://7-zip.org/
+[p7zip]: http://p7zip.sourceforge.net/
 [Zopfli]: http://code.google.com/p/zopfli/
 [PPSSPP]: https://github.com/hrydgard/ppsspp
 [libuv]: https://github.com/joyent/libuv

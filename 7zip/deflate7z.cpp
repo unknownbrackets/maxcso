@@ -14,7 +14,15 @@
 #include "CPP/7zip/Archive/DeflateProps.h"
 #include "CPP/7zip/Compress/DeflateEncoder.h"
 
+#ifdef _WIN32
 #include <propvarutil.h>
+#else
+inline HRESULT InitPropVariantFromUInt32(ULONG v, PROPVARIANT *pvar) {
+    pvar->vt = VT_UI4;
+    pvar->ulVal = v;
+    return S_OK;
+}
+#endif
 
 namespace Deflate7z {
 
@@ -114,7 +122,7 @@ void SetDefaults(Options *opts) {
 }
 
 static void SetupProperties(const Options *opts, NArchive::CDeflateProps &deflateProps) {
-	PROPVARIANT propValues[5] = {0};
+	PROPVARIANT propValues[5] = {};
 
 	InitPropVariantFromUInt32(opts->level, &propValues[0]);
 	InitPropVariantFromUInt32(opts->passes, &propValues[1]);
