@@ -3,7 +3,9 @@
 #include "cso.h"
 #include "buffer_pool.h"
 #include "zopfli/zopfli.h"
+#ifndef NO_DEFLATE7Z
 #include "deflate7z.h"
+#endif
 #include "lz4.h"
 #include "lz4hc.h"
 #define ZLIB_CONST
@@ -35,12 +37,14 @@ Sector::Sector(uint32_t flags)
 		InitZlib(zRLE_, Z_RLE);
 	}
 
+#ifndef NO_DEFLATE7Z
 	if (!(flags_ & TASKFLAG_NO_7ZIP)) {
 		Deflate7z::Options opts;
 		Deflate7z::SetDefaults(&opts);
 		opts.level = 9;
 		Deflate7z::Alloc(&deflate7z_, &opts);
 	}
+#endif
 }
 
 Sector::~Sector() {
@@ -56,9 +60,11 @@ Sector::~Sector() {
 		EndZlib(zRLE_);
 	}
 
+#ifndef NO_DEFLATE7Z
 	if (!(flags_ & TASKFLAG_NO_7ZIP)) {
 		Deflate7z::Release(&deflate7z_);
 	}
+#endif
 }
 
 void Sector::Process(int64_t pos, uint8_t *buffer, SectorCallback ready) {
@@ -208,6 +214,7 @@ void Sector::ZopfliTrial() {
 }
 
 void Sector::SevenZipTrial() {
+#ifndef NO_DEFLATE7Z
 	uint8_t *result = pool.Alloc();
 	uint32_t resultSize = 0;
 	if (Deflate7z::Deflate(deflate7z_, result, pool.bufferSize, buffer_, blockSize_, &resultSize)) {
@@ -215,6 +222,7 @@ void Sector::SevenZipTrial() {
 	} else {
 		pool.Release(result);
 	}
+#endif
 }
 
 void Sector::LZ4HCTrial(bool allowBrute) {

@@ -1,7 +1,4 @@
-#ifndef _WIN32
-#error Should only be compiled on Windows.
-#endif
-
+#ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <string>
@@ -46,3 +43,4 @@ char **winargs_get_utf8(int &argc) {
 
 	return &arg_pointers[0];
 }
+#endif

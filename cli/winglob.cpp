@@ -1,7 +1,4 @@
-#ifndef _WIN32
-#error Should only be compiled on Windows.
-#endif
-
+#ifdef _WIN32
 #define _WIN32_WINNT 0x501
 #include <string>
 #include <afx.h>
@@ -36,3 +33,4 @@ void winargs_get_wildcard(const char *arg, std::vector<std::string> &files) {
 	}
 	finder.Close();
 }
+#endif

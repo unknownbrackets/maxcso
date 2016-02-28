@@ -35,6 +35,7 @@
 *.exe
 *.out
 *.app
+/maxcso
 
 # User setting files
 *.vcxproj.user

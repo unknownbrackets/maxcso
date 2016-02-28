@@ -109,6 +109,19 @@ out of the box with a Makefile or similar, but 7-zip is probably the biggest pro
 To build on Windows, simply open cli/maxcso.sln and build.  Visual Studio 2013 is required, but
 Express for Windows Desktop works just fine.
 
+### Mac OS X
+
+Aside from gcc/g++, you will also need:
+
+    brew install lz4
+    brew install libuv
+
+And then just compile using make.
+
+### Linux / Unix
+
+Aside from gcc/g++, you will also need liblz4-dev and libuv-dev, or similar.
+
 
 Credits and Licensing
 ===========
