@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <vector>
 #include <string>
+#include "winargs.h"
 #include "../src/compress.h"
 #include "../src/checksum.h"
 #include "../libuv/include/uv.h"
@@ -307,6 +308,10 @@ void update_threadpool(const Arguments &args) {
 }
 
 int main(int argc, char *argv[]) {
+#ifdef _WIN32
+	argv = winargs_get_utf8(argc);
+#endif
+
 	Arguments args;
 	default_args(args);
 	int result = parse_args(args, argc, argv);

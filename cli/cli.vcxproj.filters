@@ -2,10 +2,14 @@
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <ClCompile Include="cli.cpp" />
+    <ClCompile Include="winargs.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\README.md" />
     <None Include="..\README_CSO.md" />
     <None Include="..\README_ZSO.md" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="winargs.h" />
   </ItemGroup>
 </Project>

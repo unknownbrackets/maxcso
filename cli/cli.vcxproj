@@ -185,6 +185,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="cli.cpp" />
+    <ClCompile Include="winargs.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\src\src.vcxproj">
@@ -195,6 +196,9 @@
     <None Include="..\README.md" />
     <None Include="..\README_CSO.md" />
     <None Include="..\README_ZSO.md" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="winargs.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
