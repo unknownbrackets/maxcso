@@ -3,6 +3,7 @@
   <ItemGroup>
     <ClCompile Include="cli.cpp" />
     <ClCompile Include="winargs.cpp" />
+    <ClCompile Include="winglob.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\README.md" />
@@ -11,5 +12,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="winargs.h" />
+    <ClInclude Include="winglob.h" />
   </ItemGroup>
 </Project>

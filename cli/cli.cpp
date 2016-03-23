@@ -4,6 +4,7 @@
 #include <vector>
 #include <string>
 #include "winargs.h"
+#include "winglob.h"
 #include "../src/compress.h"
 #include "../src/checksum.h"
 #include "../libuv/include/uv.h"
@@ -131,6 +132,15 @@ void default_args(Arguments &args) {
 	args.decompress = false;
 }
 
+void wildcard_to_inputs(const char *arg, std::vector<std::string> &files) {
+#ifdef _WIN32
+	winargs_get_wildcard(arg, files);
+#else
+	// TODO: Use glob.
+	files.push_back(arg);
+#endif
+}
+
 int parse_args(Arguments &args, int argc, char *argv[]) {
 	const char *val = nullptr;
 	uint32_t method = 0;
@@ -189,7 +199,7 @@ int parse_args(Arguments &args, int argc, char *argv[]) {
 				return 1;
 			}
 		} else {
-			args.inputs.push_back(argv[i]);
+			wildcard_to_inputs(argv[i], args.inputs);
 		}
 	}
 
