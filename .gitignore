@@ -5,6 +5,8 @@
 *.ko
 *.obj
 *.elf
+*.iobj
+*.ipdb
 
 # Precompiled Headers
 *.gch
@@ -36,4 +38,5 @@
 
 # User setting files
 *.vcxproj.user
+*.VC.opendb
 *.suo
