@@ -17,7 +17,10 @@ void winargs_get_wildcard(const char *arg, std::vector<std::string> &files) {
 		// It wasn't found.  Add the original arg for sane error handling.
 		files.push_back(arg);
 	} else {
-		while (finder.FindNextFile()) {
+		BOOL hasMore = TRUE;
+		while (hasMore) {
+			// Confusingly, FindNextFile returns false on the last file.
+			hasMore = finder.FindNextFile();
 			if (finder.IsDots()) {
 				continue;
 			}
