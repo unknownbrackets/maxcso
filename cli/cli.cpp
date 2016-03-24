@@ -205,7 +205,7 @@ int parse_args(Arguments &args, int argc, char *argv[]) {
 
 	for (; i < argc; ++i) {
 		// If we're here, it means we hit a "--".  The rest are inputs, not args.
-		args.inputs.push_back(argv[i]);
+		wildcard_to_inputs(argv[i], args.inputs);
 	}
 
 	return 0;
