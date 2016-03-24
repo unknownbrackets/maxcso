@@ -15,7 +15,7 @@ static std::vector<std::string> args;
 static std::vector<char *> arg_pointers;
 
 // Note: includes the null terminator.
-void str_to_utf8(const wchar_t *argw, std::string &arg) {
+void str_to_utf8z(const wchar_t *argw, std::string &arg) {
 	int bytes = WideCharToMultiByte(CP_UTF8, 0, argw, -1, nullptr, 0, nullptr, nullptr);
 
 	arg.resize(bytes);
@@ -23,7 +23,7 @@ void str_to_utf8(const wchar_t *argw, std::string &arg) {
 }
 
 // Note: includes the null terminator.
-void str_to_utf16(const char *arg, std::wstring &argw) {
+void str_to_utf16z(const char *arg, std::wstring &argw) {
 	int chars = MultiByteToWideChar(CP_UTF8, 0, arg, -1, nullptr, 0);
 
 	argw.resize(chars);
@@ -39,7 +39,7 @@ char **winargs_get_utf8(int &argc) {
 	arg_pointers.resize(argc);
 
 	for (int i = 0; i < argc; ++i) {
-		str_to_utf8(argvw[i], args[i]);
+		str_to_utf8z(argvw[i], args[i]);
 		// Note: already has a null terminator.
 		arg_pointers[i] = &args[i][0];
 	}

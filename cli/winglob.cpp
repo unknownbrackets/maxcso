@@ -10,7 +10,7 @@
 
 void winargs_get_wildcard(const char *arg, std::vector<std::string> &files) {
 	std::wstring argw;
-	str_to_utf16(arg, argw);
+	str_to_utf16z(arg, argw);
 
 	CFileFind finder;
 	if (!finder.FindFile(argw.c_str())) {
@@ -26,7 +26,11 @@ void winargs_get_wildcard(const char *arg, std::vector<std::string> &files) {
 			}
 
 			std::string filename;
-			str_to_utf8(finder.GetFilePath().GetString(), filename);
+			str_to_utf8z(finder.GetFilePath().GetString(), filename);
+			// Now truncate off the null - we don't need it here.
+			if (!filename.empty()) {
+				filename.resize(filename.size() - 1);
+			}
 			files.push_back(filename);
 		}
 	}
