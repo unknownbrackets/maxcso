@@ -4,7 +4,7 @@ Description
 A fast ISO to CSO compression program which uses multiple algorithms for best compression ratio.
 
 
-Basic Usage
+Basic Usage on Windows
 ===========
 
 ```sh
@@ -13,6 +13,16 @@ maxcso myfile.iso
 
 Or, drag the iso file into maxcso.exe on Windows.
 
+
+Basic Usage on Unix
+===========
+
+
+On non-windows OS you can use *wineconsole* util, that comes with *wine*
+
+```sh
+wineconsole maxcso32.exe myfile.iso
+```
 
 Release
 ===========
