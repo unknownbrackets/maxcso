@@ -1,3 +1,4 @@
+#include <cstring>
 #include "input.h"
 #include "buffer_pool.h"
 #include "cso.h"

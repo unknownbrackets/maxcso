@@ -3,7 +3,7 @@ CXX = g++
 
 CFLAGS = -W -Wall -Wextra -O2 -Wno-implicit-function-declaration
 CXXFLAGS = -W -Wall -Wextra -std=c++11 -O2 -Izopfli/src -I7zip \
-	-Wno-unused-parameter
+	-Wno-unused-parameter -pthread
 
 SRC_CXX_SRC = $(wildcard src/*.cpp)
 SRC_CXX_OBJ = $(SRC_CXX_SRC:.cpp=.o)
@@ -24,7 +24,7 @@ ZOPFLI_C_OBJ = $(ZOPFLI_C_SRC:.c=.o)
 	$(CC) -c $(CFLAGS) -o $@ $<
 
 maxcso: $(SRC_CXX_OBJ) $(CLI_CXX_OBJ) $(ZOPFLI_C_OBJ) 7zip/7zip.a
-	$(CXX) -lz -luv -llz4 -o $@ $(CXXFLAGS) $^
+	$(CXX) -o $@ $(CXXFLAGS) $^ -luv -llz4 -lz
 
 7zip/7zip.a:
 	$(MAKE) -C 7zip 7zip.a

@@ -1,3 +1,4 @@
+#include <cstring>
 #include "sector.h"
 #include "compress.h"
 #include "cso.h"

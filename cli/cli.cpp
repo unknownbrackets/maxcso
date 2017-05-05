@@ -1,8 +1,9 @@
-#include <stdio.h>
-#include <stdlib.h>
 #include <algorithm>
-#include <vector>
+#include <cstring>
+#include <cstdio>
+#include <cstdlib>
 #include <string>
+#include <vector>
 #include "winargs.h"
 #include "winglob.h"
 #include "../src/compress.h"

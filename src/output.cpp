@@ -1,3 +1,4 @@
+#include <cstring>
 #include "output.h"
 #include "buffer_pool.h"
 #include "compress.h"
