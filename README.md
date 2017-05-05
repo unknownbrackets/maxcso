@@ -1,10 +1,11 @@
 Description
 ===========
 
-A fast ISO to CSO compression program which uses multiple algorithms for best compression ratio.
+A fast ISO to CSO compression program for use with PSP and PS2 emulators, which uses multiple
+algorithms for best compression ratio.
 
 
-Basic Usage
+Basic usage
 ===========
 
 ```sh
@@ -47,8 +48,7 @@ Larger block sizes than the default will help compression, in the range of 2-3%.
 files may not be compatible with some software.  For example, [PPSSPP][] versions released
 after 2014-10-26 will support larger block sizes.
 
-LZ4's compression ratios aren't as good, but it decompresses faster.  It can sometimes beat
-deflate in compression ratio, and CSO v2 allows it to be mixed with deflate.
+LZ4 support is mostly for experimentation.
 
 
 Speed
@@ -60,8 +60,11 @@ compression.  Use `--fast` to get the fastest compression, which matches level 9
 Additionally, if you have better than a dual core processor, maxcso will use all of your cores,
 and perform even better.
 
+In usage, CSOs typically perform well in all known emulators.  Some versions of PSP firmware with
+support for CSOs have bugs in their CSO support, but this doesn't affect emulators.
 
-Full usage
+
+Full program usage
 ===========
 
 ```
@@ -100,34 +103,29 @@ compression.  This makes the file read faster (less cpu power), but take more sp
 Platforms
 ===========
 
-maxcso has only been tested on Windows so far.  The code was written to be portable, however.
+maxcso has only been tested on Windows and Mac so far.  The code was written to be portable, however.
 If you'd like to port it to another platform, pull requests are accepted.  It may just compile
-out of the box with a Makefile or similar, but 7-zip is probably the biggest problem.
+without any changes.
 
 ### Windows
 
-To build on Windows, simply open cli/maxcso.sln and build.  Visual Studio 2013 is required, but
-Express for Windows Desktop works just fine.
+To build on Windows, simply open cli/maxcso.sln and build.  Visual Studio 2015 is required.
 
 ### Mac OS X
 
-Aside from gcc/g++, you will also need:
+Aside from gcc/g++ or clang (from Xcode or brew), you will also need:
 
     brew install lz4
     brew install libuv
 
 And then just compile using make.
 
-Note that 7-zip is currently disabled on Mac OS X because it doesn't work.
-
 ### Linux / Unix
 
-Aside from gcc/g++, you will also need liblz4-dev and libuv-dev, or similar.
-
-Note that 7-zip is currently disabled on Linux / Unix because it doesn't work.
+Aside from gcc/g++ or clang, you will also need liblz4-dev and libuv-dev, or similar.
 
 
-Credits and Licensing
+Credits and licensing
 ===========
 
 The larger portion of code here is from others' wonderful work in decompression and I/O

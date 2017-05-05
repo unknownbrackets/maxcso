@@ -40,4 +40,5 @@
 # User setting files
 *.vcxproj.user
 *.VC.opendb
+*.VC.db
 *.suo
