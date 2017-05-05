@@ -230,7 +230,7 @@ void Sector::LZ4HCTrial(bool allowBrute) {
 	int level = allowBrute ? 4 : 16;
 	for (; level <= 16; level += 3) {
 		uint8_t *result = pool.Alloc();
-		uint32_t resultSize = LZ4_compressHC2(reinterpret_cast<const char *>(buffer_), reinterpret_cast<char *>(result), blockSize_, level);
+		uint32_t resultSize = LZ4_compress_HC(reinterpret_cast<const char *>(buffer_), reinterpret_cast<char *>(result), blockSize_, pool.bufferSize, level);
 		if (resultSize != 0) {
 			SubmitTrial(result, resultSize, SECTOR_FMT_LZ4);
 		} else {
@@ -241,7 +241,7 @@ void Sector::LZ4HCTrial(bool allowBrute) {
 
 void Sector::LZ4Trial() {
 	uint8_t *result = pool.Alloc();
-	uint32_t resultSize = LZ4_compress(reinterpret_cast<const char *>(buffer_), reinterpret_cast<char *>(result), blockSize_);
+	uint32_t resultSize = LZ4_compress_default(reinterpret_cast<const char *>(buffer_), reinterpret_cast<char *>(result), blockSize_, pool.bufferSize);
 	if (resultSize != 0) {
 		SubmitTrial(result, resultSize, SECTOR_FMT_LZ4);
 	} else {
