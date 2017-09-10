@@ -30,6 +30,8 @@
 *.cachefile
 *.ilk
 *.pdb
+*.pgd
+*.pgc
 
 # Executables
 *.exe
