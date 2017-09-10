@@ -71,6 +71,7 @@
     <Lib>
       <OutputFile>$(OutDir)$(ProjectName)$(TargetExt)</OutputFile>
       <AdditionalDependencies>userenv.lib</AdditionalDependencies>
+      <LinkTimeCodeGeneration>true</LinkTimeCodeGeneration>
     </Lib>
     <Link>
       <AdditionalDependencies>
@@ -114,6 +115,7 @@
       <AdditionalOptions>/LTCG %(AdditionalOptions)</AdditionalOptions>
       <OutputFile>$(OutDir)$(ProjectName)$(TargetExt)</OutputFile>
       <AdditionalDependencies>userenv.lib</AdditionalDependencies>
+      <LinkTimeCodeGeneration>true</LinkTimeCodeGeneration>
     </Lib>
     <Link>
       <AdditionalDependencies>
@@ -155,6 +157,7 @@
     <Lib>
       <OutputFile>$(OutDir)$(ProjectName)$(TargetExt)</OutputFile>
       <AdditionalDependencies>userenv.lib</AdditionalDependencies>
+      <LinkTimeCodeGeneration>true</LinkTimeCodeGeneration>
     </Lib>
     <Link>
       <AdditionalDependencies>
@@ -197,6 +200,7 @@
       <AdditionalOptions>/LTCG %(AdditionalOptions)</AdditionalOptions>
       <OutputFile>$(OutDir)$(ProjectName)$(TargetExt)</OutputFile>
       <AdditionalDependencies>userenv.lib</AdditionalDependencies>
+      <LinkTimeCodeGeneration>true</LinkTimeCodeGeneration>
     </Lib>
     <Link>
       <AdditionalDependencies>
