@@ -1,8 +1,8 @@
-CC = gcc
-CXX = g++
+CC ?= gcc
+CXX ?= g++
 
-CFLAGS = -W -Wall -Wextra -O2
-CXXFLAGS = -W -Wall -Wextra -std=c++11 -O2 -ICPP
+CFLAGS += -W -Wall -Wextra -O2
+CXXFLAGS += -W -Wall -Wextra -std=c++11 -O2 -ICPP
 
 7ZIP_CXX_SRC = CPP/7zip/Archive/Common/ParseProperties.cpp \
                CPP/7zip/Archive/DeflateProps.cpp \

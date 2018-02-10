@@ -1,8 +1,8 @@
-CC = gcc
-CXX = g++
+CC ?= gcc
+CXX ?= g++
 
-CFLAGS = -W -Wall -Wextra -O2 -Wno-implicit-function-declaration -DNDEBUG=1
-CXXFLAGS = -W -Wall -Wextra -std=c++11 -O2 -Izopfli/src -I7zip -DNDEBUG=1 \
+CFLAGS += -W -Wall -Wextra -O2 -Wno-implicit-function-declaration -DNDEBUG=1
+CXXFLAGS += -W -Wall -Wextra -std=c++11 -O2 -Izopfli/src -I7zip -DNDEBUG=1 \
 	-Wno-unused-parameter -pthread
 
 SRC_CXX_SRC = $(wildcard src/*.cpp)
