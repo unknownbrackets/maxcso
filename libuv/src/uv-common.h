@@ -41,6 +41,16 @@
 #include "tree.h"
 #include "queue.h"
 
+#if EDOM > 0
+# define UV__ERR(x) (-(x))
+#else
+# define UV__ERR(x) (x)
+#endif
+
+#if !defined(snprintf) && defined(_MSC_VER) && _MSC_VER < 1900
+extern int snprintf(char*, size_t, const char*, ...);
+#endif
+
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
 #define container_of(ptr, type, member) \
@@ -51,16 +61,19 @@
 
 #ifndef _WIN32
 enum {
+  UV__SIGNAL_ONE_SHOT = 0x80000,  /* On signal reception remove sighandler */
   UV__HANDLE_INTERNAL = 0x8000,
   UV__HANDLE_ACTIVE   = 0x4000,
   UV__HANDLE_REF      = 0x2000,
   UV__HANDLE_CLOSING  = 0 /* no-op on unix */
 };
 #else
-# define UV__HANDLE_INTERNAL  0x80
-# define UV__HANDLE_ACTIVE    0x40
-# define UV__HANDLE_REF       0x20
-# define UV__HANDLE_CLOSING   0x01
+# define UV__SIGNAL_ONE_SHOT_DISPATCHED   0x200
+# define UV__SIGNAL_ONE_SHOT              0x100
+# define UV__HANDLE_INTERNAL              0x80
+# define UV__HANDLE_ACTIVE                0x40
+# define UV__HANDLE_REF                   0x20
+# define UV__HANDLE_CLOSING               0x01
 #endif
 
 int uv__loop_configure(uv_loop_t* loop, uv_loop_option option, va_list ap);
@@ -211,6 +224,30 @@ void uv__fs_scandir_cleanup(uv_fs_t* req);
   }                                                                           \
   while (0)
 
+/* Note: uses an open-coded version of SET_REQ_SUCCESS() because of
+ * a circular dependency between src/uv-common.h and src/win/internal.h.
+ */
+#if defined(_WIN32)
+# define UV_REQ_INIT(req, typ)                                                \
+  do {                                                                        \
+    (req)->type = (typ);                                                      \
+    (req)->u.io.overlapped.Internal = 0;  /* SET_REQ_SUCCESS() */             \
+  }                                                                           \
+  while (0)
+#else
+# define UV_REQ_INIT(req, typ)                                                \
+  do {                                                                        \
+    (req)->type = (typ);                                                      \
+  }                                                                           \
+  while (0)
+#endif
+
+#define uv__req_init(loop, req, typ)                                          \
+  do {                                                                        \
+    UV_REQ_INIT(req, typ);                                                    \
+    uv__req_register(loop, req);                                              \
+  }                                                                           \
+  while (0)
 
 /* Allocator prototypes */
 void *uv__calloc(size_t count, size_t size);

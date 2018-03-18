@@ -53,6 +53,7 @@ src/unix/tty.c
 src/unix/udp.c
 src/uv-common.c
 src/uv-common.h
+src/uv-data-getter-setters.c
 "
 
 TESTS="
@@ -93,15 +94,20 @@ test/test-cwd-and-chdir.c
 test/test-delayed-accept.c
 test/test-dlerror.c
 test/test-embed.c
+test/test-env-vars.c
 test/test-error.c
 test/test-fail-always.c
+test/test-fs-copyfile.c
 test/test-fs-event.c
 test/test-fs-poll.c
 test/test-fs.c
+test/test-getters-setters.c
 test/test-get-currentexe.c
 test/test-get-loadavg.c
 test/test-get-memory.c
+test/test-get-passwd.c
 test/test-getaddrinfo.c
+test/test-gethostname.c
 test/test-getsockname.c
 test/test-homedir.c
 test/test-hrtime.c
@@ -122,6 +128,7 @@ test/test-platform-output.c
 test/test-poll-close.c
 test/test-poll.c
 test/test-process-title.c
+test/test-process-title-threadsafe.c
 test/test-ref.c
 test/test-run-nowait.c
 test/test-run-once.c
@@ -155,6 +162,7 @@ test/test-threadpool-cancel.c
 test/test-threadpool.c
 test/test-timer-again.c
 test/test-timer.c
+test/test-tmpdir.c
 test/test-tty.c
 test/test-udp-dgram-too-big.c
 test/test-udp-ipv6.c
@@ -163,6 +171,7 @@ test/test-udp-multicast-ttl.c
 test/test-udp-open.c
 test/test-udp-options.c
 test/test-udp-send-and-recv.c
+test/test-udp-send-hang-loop.c
 test/test-walk-handles.c
 test/test-watcher-cross-stop.c
 "
@@ -171,7 +180,17 @@ case `uname -s` in
 AIX)
   SPARSE_FLAGS="$SPARSE_FLAGS -D_AIX=1"
   SOURCES="$SOURCES
+           src/unix/aix-common.c
            src/unix/aix.c"
+  ;;
+OS400)
+  SPARSE_FLAGS="$SPARSE_FLAGS -D_PASE=1"
+  SOURCES="$SOURCES
+           src/unix/aix-common.c
+           src/unix/ibmi.c
+           src/unix/posix-poll.c
+           src/unix/no-fsevents.c
+           src/unix/no-proctitle.c"
   ;;
 Darwin)
   SPARSE_FLAGS="$SPARSE_FLAGS -D__APPLE__=1"

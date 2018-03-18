@@ -31,8 +31,8 @@ static int timer_less_than(const struct heap_node* ha,
   const uv_timer_t* a;
   const uv_timer_t* b;
 
-  a = container_of(ha, const uv_timer_t, heap_node);
-  b = container_of(hb, const uv_timer_t, heap_node);
+  a = container_of(ha, uv_timer_t, heap_node);
+  b = container_of(hb, uv_timer_t, heap_node);
 
   if (a->timeout < b->timeout)
     return 1;
@@ -66,7 +66,7 @@ int uv_timer_start(uv_timer_t* handle,
   uint64_t clamped_timeout;
 
   if (cb == NULL)
-    return -EINVAL;
+    return UV_EINVAL;
 
   if (uv__is_active(handle))
     uv_timer_stop(handle);
@@ -105,7 +105,7 @@ int uv_timer_stop(uv_timer_t* handle) {
 
 int uv_timer_again(uv_timer_t* handle) {
   if (handle->timer_cb == NULL)
-    return -EINVAL;
+    return UV_EINVAL;
 
   if (handle->repeat) {
     uv_timer_stop(handle);
@@ -135,7 +135,7 @@ int uv__next_timeout(const uv_loop_t* loop) {
   if (heap_node == NULL)
     return -1; /* block indefinitely */
 
-  handle = container_of(heap_node, const uv_timer_t, heap_node);
+  handle = container_of(heap_node, uv_timer_t, heap_node);
   if (handle->timeout <= loop->time)
     return 0;
 
