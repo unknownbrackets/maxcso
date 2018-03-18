@@ -10,6 +10,7 @@
 
 #include "CPP/Windows/PropVariant.h"
 
+#include "CPP/7zip/ICoder.h"
 #include "CPP/7zip/IStream.h"
 #include "CPP/7zip/Archive/DeflateProps.h"
 #include "CPP/7zip/Compress/DeflateEncoder.h"
@@ -26,7 +27,14 @@ inline HRESULT InitPropVariantFromUInt32(ULONG v, PROPVARIANT *pvar) {
 
 namespace Deflate7z {
 
-static const wchar_t *propNames[] = {L"X", L"PASS", L"FB", L"A", L"MC"};
+
+static const PROPID propIDs[] = {
+	NCoderPropID::kLevel,
+	NCoderPropID::kNumPasses,
+	NCoderPropID::kNumFastBytes,
+	NCoderPropID::kAlgorithm,
+	NCoderPropID::kMatchFinderCycles,
+};
 
 class CInBlockStream:
   public ISequentialInStream,
@@ -121,7 +129,7 @@ void SetDefaults(Options *opts) {
 	opts->matchcycles = 0xFFFFFFFF;
 }
 
-static void SetupProperties(const Options *opts, NArchive::CDeflateProps &deflateProps) {
+static void SetupProperties(const Options *opts, NCompress::NDeflate::NEncoder::CCOMCoder *coder) {
 	PROPVARIANT propValues[5] = {};
 
 	InitPropVariantFromUInt32(opts->level, &propValues[0]);
@@ -129,15 +137,12 @@ static void SetupProperties(const Options *opts, NArchive::CDeflateProps &deflat
 	InitPropVariantFromUInt32(opts->fastbytes, &propValues[2]);
 	InitPropVariantFromUInt32(opts->algo, &propValues[3]);
 	InitPropVariantFromUInt32(opts->matchcycles, &propValues[4]);
-	deflateProps.SetProperties(propNames, propValues, 5);
+	coder->SetCoderProperties(propIDs, propValues, 5);
 }
 
 void Alloc(Context **ctx, const Options *opts) {
 	Context *c = new Context();
 	*ctx = c;
-
-	NArchive::CDeflateProps deflateProps;
-	SetupProperties(opts, deflateProps);
 
 	c->in = new CInBlockStream();
 	c->out = new COutBlockStream();
@@ -145,7 +150,7 @@ void Alloc(Context **ctx, const Options *opts) {
 	c->out->AddRef();
 
 	c->coder = new NCompress::NDeflate::NEncoder::CCOMCoder();
-	deflateProps.SetCoderProperties(c->coder);
+	SetupProperties(opts, c->coder);
 }
 
 void Release(Context **ctx) {

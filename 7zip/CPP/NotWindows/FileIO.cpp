@@ -2,7 +2,7 @@
 
 //#include "StdAfx.h"
 
-#include "MyWindows.h"
+#include "../Common/MyWindows.h"
 #include "FileIO.h"
 #include "../Windows/Defs.h"
 #include "../Common/StringConvert.h"

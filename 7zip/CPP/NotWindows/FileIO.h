@@ -4,11 +4,27 @@
 #define __WINDOWS_FILEIO_H
 
 #include <Common/MyString.h>
-#include "MyWindows.h"
+#include "../Common/MyWindows.h"
 #include "../Windows/Defs.h"
 #include <time.h>
 
 #ifndef _WIN32
+#include <stdint.h>
+#include <errno.h>
+
+typedef unsigned char BOOLEAN;
+typedef int64_t INT64;
+typedef uint64_t UINT64;
+
+#define TRUE 1
+#define FALSE 0
+
+#define WINAPI
+
+#define CREATE_NEW    1
+#define CREATE_ALWAYS     2
+#define OPEN_EXISTING     3
+#define OPEN_ALWAYS   4
 
 #define FILE_SHARE_READ	1
 #define FILE_SHARE_WRITE 2
@@ -17,6 +33,26 @@
 #define FILE_CURRENT	SEEK_CUR
 #define FILE_END	SEEK_END
 #define INVALID_SET_FILE_POINTER	((DWORD)-1)
+
+#define ERROR_INVALID_HANDLE        EBADF
+
+#define FILE_ATTRIBUTE_READONLY             1
+#define FILE_ATTRIBUTE_HIDDEN               2
+#define FILE_ATTRIBUTE_SYSTEM               4
+#define FILE_ATTRIBUTE_DIRECTORY           16
+#define FILE_ATTRIBUTE_ARCHIVE             32
+#define FILE_ATTRIBUTE_DEVICE              64
+#define FILE_ATTRIBUTE_NORMAL             128
+#define FILE_ATTRIBUTE_TEMPORARY          256
+#define FILE_ATTRIBUTE_SPARSE_FILE        512
+#define FILE_ATTRIBUTE_REPARSE_POINT     1024
+#define FILE_ATTRIBUTE_COMPRESSED        2048
+#define FILE_ATTRIBUTE_OFFLINE          0x1000
+#define FILE_ATTRIBUTE_ENCRYPTED        0x4000
+#define FILE_ATTRIBUTE_UNIX_EXTENSION   0x8000   /* trick for Unix */
+
+inline DWORD WINAPI GetLastError(void) { return errno; }
+inline void WINAPI SetLastError( DWORD err ) { errno = err; }
 
 #endif
 
