@@ -2,6 +2,7 @@
 
 //#include "StdAfx.h"
 
+#include "../Common/Common.h"
 #include "../Common/MyWindows.h"
 #include "FileIO.h"
 #include "../Windows/Defs.h"

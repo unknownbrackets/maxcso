@@ -49,6 +49,12 @@
       <Filter>7zip</Filter>
     </ClInclude>
     <ClInclude Include="deflate7z.h" />
+    <ClInclude Include="CPP\7zip\Common\CWrappers.h">
+      <Filter>7zip</Filter>
+    </ClInclude>
+    <ClInclude Include="CPP\7zip\Common\StreamUtils.h">
+      <Filter>7zip</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="CPP\7zip\Archive\DeflateProps.cpp">
@@ -94,5 +100,11 @@
       <Filter>7zip</Filter>
     </ClCompile>
     <ClCompile Include="deflate7z.cpp" />
+    <ClCompile Include="CPP\7zip\Common\CWrappers.cpp">
+      <Filter>7zip</Filter>
+    </ClCompile>
+    <ClCompile Include="CPP\7zip\Common\StreamUtils.cpp">
+      <Filter>7zip</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>
