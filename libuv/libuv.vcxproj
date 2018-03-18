@@ -249,6 +249,7 @@
     <ClCompile Include="src\version.c" />
     <ClCompile Include="src\win\async.c" />
     <ClCompile Include="src\win\core.c" />
+    <ClCompile Include="src\win\detect-wakeup.c" />
     <ClCompile Include="src\win\dl.c" />
     <ClCompile Include="src\win\error.c" />
     <ClCompile Include="src\win\fs.c" />

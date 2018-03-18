@@ -237,7 +237,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <None Include="common.gypi"/>
+    <None Include="common.gypi" />
     <ClInclude Include="include\uv.h">
       <Filter>include</Filter>
     </ClInclude>
@@ -376,6 +376,11 @@
     <ClInclude Include="src\win\winsock.h">
       <Filter>src\win</Filter>
     </ClInclude>
-    <None Include="uv.gyp"/>
+    <None Include="uv.gyp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="src\win\detect-wakeup.c">
+      <Filter>src\win</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>
