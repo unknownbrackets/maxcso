@@ -43,6 +43,10 @@ Sector::Sector(uint32_t flags)
 		Deflate7z::Options opts;
 		Deflate7z::SetDefaults(&opts);
 		opts.level = 9;
+		opts.passes = 12;
+		opts.fastbytes = 64;
+		opts.matchcycles = 32;
+		opts.algo = 1;
 		Deflate7z::Alloc(&deflate7z_, &opts);
 	}
 #endif
