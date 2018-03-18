@@ -42,7 +42,7 @@ RSC=rc.exe
 # PROP Ignore_Export_Lib 0
 # PROP Target_Dir ""
 # ADD BASE CPP /nologo /W3 /GX /O2 /D "WIN32" /D "NDEBUG" /D "_CONSOLE" /D "_MBCS" /YX /FD /c
-# ADD CPP /nologo /Gz /MD /W3 /GX /O1 /I "..\..\..\\" /D "NDEBUG" /D "WIN32" /D "_CONSOLE" /D "_MBCS" /D "EXTRACT_ONLY" /D "_SFX" /D "NO_READ_FROM_CODER" /Yu"StdAfx.h" /FD /c
+# ADD CPP /nologo /Gz /MD /W4 /WX /GX /O1 /D "NDEBUG" /D "WIN32" /D "_CONSOLE" /D "_MBCS" /D "EXTRACT_ONLY" /D "_SFX" /D "NO_READ_FROM_CODER" /Yu"StdAfx.h" /FD /c
 # ADD BASE RSC /l 0x419 /d "NDEBUG"
 # ADD RSC /l 0x419 /d "NDEBUG"
 BSC32=bscmake.exe
@@ -50,7 +50,7 @@ BSC32=bscmake.exe
 # ADD BSC32 /nologo
 LINK32=link.exe
 # ADD BASE LINK32 kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /nologo /subsystem:console /machine:I386
-# ADD LINK32 kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /nologo /subsystem:console /machine:I386 /out:"C:\Util\7zCon.sfx" /opt:NOWIN98
+# ADD LINK32 kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /nologo /subsystem:console /machine:I386 /out:"C:\Util\7zCon.exe" /opt:NOWIN98
 # SUBTRACT LINK32 /pdb:none
 
 !ELSEIF  "$(CFG)" == "SFXCon - Win32 Debug"
@@ -67,7 +67,7 @@ LINK32=link.exe
 # PROP Ignore_Export_Lib 0
 # PROP Target_Dir ""
 # ADD BASE CPP /nologo /W3 /Gm /GX /ZI /Od /D "WIN32" /D "_DEBUG" /D "_CONSOLE" /D "_MBCS" /YX /FD /GZ /c
-# ADD CPP /nologo /Gz /MTd /W3 /Gm /GX /ZI /Od /I "..\..\..\..\\" /I "..\..\..\\" /D "_DEBUG" /D "WIN32" /D "_CONSOLE" /D "_MBCS" /D "EXTRACT_ONLY" /D "_SFX" /D "NO_READ_FROM_CODER" /Yu"StdAfx.h" /FD /GZ /c
+# ADD CPP /nologo /Gz /MTd /W4 /WX /Gm /GX /ZI /Od /I "..\..\..\..\\" /D "_DEBUG" /D "WIN32" /D "_CONSOLE" /D "_MBCS" /D "EXTRACT_ONLY" /D "_SFX" /D "NO_READ_FROM_CODER" /Yu"StdAfx.h" /FD /GZ /c
 # ADD BASE RSC /l 0x419 /d "_DEBUG"
 # ADD RSC /l 0x419 /d "_DEBUG"
 BSC32=bscmake.exe
@@ -75,7 +75,7 @@ BSC32=bscmake.exe
 # ADD BSC32 /nologo
 LINK32=link.exe
 # ADD BASE LINK32 kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /nologo /subsystem:console /debug /machine:I386 /pdbtype:sept
-# ADD LINK32 kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /nologo /subsystem:console /debug /machine:I386 /out:"C:\Util\7zCon.sfx" /pdbtype:sept
+# ADD LINK32 kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /nologo /subsystem:console /debug /machine:I386 /out:"C:\Util\7zCon.exe" /pdbtype:sept
 
 !ENDIF 
 
@@ -117,27 +117,19 @@ SOURCE=..\..\Archive\Common\CoderMixer2.h
 # End Source File
 # Begin Source File
 
-SOURCE=..\..\Archive\Common\CoderMixer2MT.cpp
-# End Source File
-# Begin Source File
-
-SOURCE=..\..\Archive\Common\CoderMixer2MT.h
-# End Source File
-# Begin Source File
-
-SOURCE=..\..\Archive\Common\CrossThreadProgress.cpp
-# End Source File
-# Begin Source File
-
-SOURCE=..\..\Archive\Common\CrossThreadProgress.h
-# End Source File
-# Begin Source File
-
 SOURCE=..\..\Archive\Common\ItemNameUtils.cpp
 # End Source File
 # Begin Source File
 
 SOURCE=..\..\Archive\Common\ItemNameUtils.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\Archive\Common\MultiStream.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\Archive\Common\MultiStream.h
 # End Source File
 # Begin Source File
 
@@ -189,6 +181,14 @@ SOURCE=..\..\UI\Console\OpenCallbackConsole.h
 # End Source File
 # Begin Source File
 
+SOURCE=..\..\UI\Console\PercentPrinter.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\UI\Console\PercentPrinter.h
+# End Source File
+# Begin Source File
+
 SOURCE=..\..\UI\Console\UserInputUtils.cpp
 # End Source File
 # Begin Source File
@@ -213,23 +213,11 @@ SOURCE=..\..\Archive\7z\7zExtract.cpp
 # End Source File
 # Begin Source File
 
-SOURCE=..\..\Archive\7z\7zFolderOutStream.cpp
-# End Source File
-# Begin Source File
-
-SOURCE=..\..\Archive\7z\7zFolderOutStream.h
-# End Source File
-# Begin Source File
-
 SOURCE=..\..\Archive\7z\7zHandler.cpp
 # End Source File
 # Begin Source File
 
 SOURCE=..\..\Archive\7z\7zHandler.h
-# End Source File
-# Begin Source File
-
-SOURCE=..\..\Archive\7z\7zHeader.cpp
 # End Source File
 # Begin Source File
 
@@ -250,6 +238,10 @@ SOURCE=..\..\Archive\7z\7zItem.h
 # Begin Source File
 
 SOURCE=..\..\Archive\7z\7zRegister.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\Archive\SplitHandler.cpp
 # End Source File
 # End Group
 # Begin Group "Compress"
@@ -273,7 +265,15 @@ SOURCE=..\..\Compress\BcjRegister.cpp
 # End Source File
 # Begin Source File
 
-SOURCE=..\..\Compress\BranchCoder.cpp
+SOURCE=..\..\Compress\BranchMisc.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\Compress\BranchMisc.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\Compress\BranchRegister.cpp
 # End Source File
 # Begin Source File
 
@@ -282,6 +282,10 @@ SOURCE=..\..\Compress\CopyCoder.cpp
 # Begin Source File
 
 SOURCE=..\..\Compress\CopyRegister.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\Compress\DeltaFilter.cpp
 # End Source File
 # Begin Source File
 
@@ -345,11 +349,11 @@ SOURCE=..\..\..\Windows\DLL.h
 # End Source File
 # Begin Source File
 
-SOURCE=..\..\..\Windows\Error.cpp
+SOURCE=..\..\..\Windows\ErrorMsg.cpp
 # End Source File
 # Begin Source File
 
-SOURCE=..\..\..\Windows\Error.h
+SOURCE=..\..\..\Windows\ErrorMsg.h
 # End Source File
 # Begin Source File
 
@@ -393,11 +397,11 @@ SOURCE=..\..\..\Windows\PropVariant.h
 # End Source File
 # Begin Source File
 
-SOURCE=..\..\..\Windows\PropVariantConversions.cpp
+SOURCE=..\..\..\Windows\PropVariantConv.cpp
 # End Source File
 # Begin Source File
 
-SOURCE=..\..\..\Windows\PropVariantConversions.h
+SOURCE=..\..\..\Windows\PropVariantConv.h
 # End Source File
 # Begin Source File
 
@@ -593,6 +597,18 @@ SOURCE=..\..\Common\ProgressUtils.h
 # End Source File
 # Begin Source File
 
+SOURCE=..\..\Common\PropId.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\Common\RegisterArc.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\Common\RegisterCodec.h
+# End Source File
+# Begin Source File
+
 SOURCE=..\..\Common\StreamBinder.cpp
 # End Source File
 # Begin Source File
@@ -746,6 +762,20 @@ SOURCE=..\..\..\..\C\Alloc.h
 # End Source File
 # Begin Source File
 
+SOURCE=..\..\..\..\C\Bcj2.c
+# SUBTRACT CPP /YX /Yc /Yu
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\..\C\Bcj2.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\..\C\Bra.c
+# SUBTRACT CPP /YX /Yc /Yu
+# End Source File
+# Begin Source File
+
 SOURCE=..\..\..\..\C\Bra.h
 # End Source File
 # Begin Source File
@@ -755,8 +785,31 @@ SOURCE=..\..\..\..\C\Bra86.c
 # End Source File
 # Begin Source File
 
+SOURCE=..\..\..\..\C\BraIA64.c
+# SUBTRACT CPP /YX /Yc /Yu
+# End Source File
+# Begin Source File
+
 SOURCE=..\..\..\..\C\CpuArch.c
 # SUBTRACT CPP /YX /Yc /Yu
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\..\C\Delta.c
+# SUBTRACT CPP /YX /Yc /Yu
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\..\C\Delta.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\..\C\DllSecur.c
+# SUBTRACT CPP /YX /Yc /Yu
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\..\C\DllSecur.h
 # End Source File
 # Begin Source File
 
@@ -815,7 +868,11 @@ SOURCE=.\7z.ico
 # End Source File
 # Begin Source File
 
-SOURCE=.\Main.cpp
+SOURCE=..\..\Archive\IArchive.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\SfxCon.cpp
 # End Source File
 # End Target
 # End Project

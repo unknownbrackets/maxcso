@@ -3,22 +3,21 @@
 #ifndef __COMPRESS_CALL_H
 #define __COMPRESS_CALL_H
 
-#include "Common/MyString.h"
+#include "../../../Common/MyString.h"
 
 UString GetQuotedString(const UString &s);
-
-extern HWND g_HWND;
-UString HResultToMessage(HRESULT errorCode);
 
 HRESULT CompressFiles(
     const UString &arcPathPrefix,
     const UString &arcName,
     const UString &arcType,
+    bool addExtension,
     const UStringVector &names,
     bool email, bool showDialog, bool waitFinish);
 
-HRESULT ExtractArchives(const UStringVector &arcPaths, const UString &outFolder, bool showDialog);
-HRESULT TestArchives(const UStringVector &arcPaths);
-HRESULT Benchmark();
+void ExtractArchives(const UStringVector &arcPaths, const UString &outFolder, bool showDialog, bool elimDup);
+void TestArchives(const UStringVector &arcPaths);
+void CalcChecksum(const UStringVector &paths, const UString &methodName);
+void Benchmark(bool totalMode);
 
 #endif

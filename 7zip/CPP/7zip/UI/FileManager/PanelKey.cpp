@@ -8,7 +8,9 @@
 #include "../../PropID.h"
 #include "App.h"
 
-// static LPCWSTR kHelpTopic = L"FM/index.htm";
+using namespace NWindows;
+
+// #define kHelpTopic "FM/index.htm"
 
 struct CVKeyPropIDPair
 {
@@ -16,7 +18,7 @@ struct CVKeyPropIDPair
   PROPID PropID;
 };
 
-static CVKeyPropIDPair g_VKeyPropIDPairs[] =
+static const CVKeyPropIDPair g_VKeyPropIDPairs[] =
 {
   { VK_F3, kpidName },
   { VK_F4, kpidExtension },
@@ -27,7 +29,7 @@ static CVKeyPropIDPair g_VKeyPropIDPairs[] =
 
 static int FindVKeyPropIDPair(WORD vKey)
 {
-  for (int i = 0; i < sizeof(g_VKeyPropIDPairs) / sizeof(g_VKeyPropIDPairs[0]); i++)
+  for (int i = 0; i < ARRAY_SIZE(g_VKeyPropIDPairs); i++)
     if (g_VKeyPropIDPairs[i].VKey == vKey)
       return i;
   return -1;
@@ -41,11 +43,11 @@ bool CPanel::OnKeyDown(LPNMLVKEYDOWN keyDownInfo, LRESULT &result)
     _panelCallback->OnTab();
     return false;
   }
-  bool alt = (::GetKeyState(VK_MENU) & 0x8000) != 0;
-  bool ctrl = (::GetKeyState(VK_CONTROL) & 0x8000) != 0;
-  // bool leftCtrl = (::GetKeyState(VK_LCONTROL) & 0x8000) != 0;
-  bool rightCtrl = (::GetKeyState(VK_RCONTROL) & 0x8000) != 0;
-  bool shift = (::GetKeyState(VK_SHIFT) & 0x8000) != 0;
+  bool alt = IsKeyDown(VK_MENU);
+  bool ctrl = IsKeyDown(VK_CONTROL);
+  // bool leftCtrl = IsKeyDown(VK_LCONTROL);
+  bool rightCtrl = IsKeyDown(VK_RCONTROL);
+  bool shift = IsKeyDown(VK_SHIFT);
   result = 0;
 
   if (keyDownInfo->wVKey >= '0' && keyDownInfo->wVKey <= '9' &&
@@ -76,14 +78,14 @@ bool CPanel::OnKeyDown(LPNMLVKEYDOWN keyDownInfo, LRESULT &result)
     g_App.SwitchOnOffOnePanel();
   }
 
-  if(keyDownInfo->wVKey >= VK_F3 && keyDownInfo->wVKey <= VK_F12 && ctrl)
+  if (keyDownInfo->wVKey >= VK_F3 && keyDownInfo->wVKey <= VK_F12 && ctrl)
   {
     int index = FindVKeyPropIDPair(keyDownInfo->wVKey);
     if (index >= 0)
       SortItemsWithPropID(g_VKeyPropIDPairs[index].PropID);
   }
 
-  switch(keyDownInfo->wVKey)
+  switch (keyDownInfo->wVKey)
   {
     case VK_SHIFT:
     {
@@ -107,11 +109,20 @@ bool CPanel::OnKeyDown(LPNMLVKEYDOWN keyDownInfo, LRESULT &result)
       }
       break;
     }
+    case VK_F3:
+    {
+      if (!alt && !ctrl && !shift)
+      {
+        EditItem(false);
+        return true;
+      }
+      break;
+    }
     case VK_F4:
     {
       if (!alt && !ctrl && !shift)
       {
-        EditItem();
+        EditItem(true);
         return true;
       }
       if (!alt && !ctrl && shift)
@@ -139,17 +150,18 @@ bool CPanel::OnKeyDown(LPNMLVKEYDOWN keyDownInfo, LRESULT &result)
       }
       break;
     }
-    /*
     case VK_F7:
     {
       if (!alt && !ctrl && !shift)
       {
+        /* we can process F7 via menu ACCELERATOR.
+          But menu loading can be slow in case of UNC paths and system menu.
+          So we use don't use ACCELERATOR */
         CreateFolder();
         return true;
       }
       break;
     }
-    */
     case VK_DELETE:
     {
       DeleteItems(!shift);
@@ -179,7 +191,7 @@ bool CPanel::OnKeyDown(LPNMLVKEYDOWN keyDownInfo, LRESULT &result)
     }
     case VK_DOWN:
     {
-      if(shift)
+      if (shift)
         OnArrowWithShift();
       return false;
     }
@@ -187,7 +199,7 @@ bool CPanel::OnKeyDown(LPNMLVKEYDOWN keyDownInfo, LRESULT &result)
     {
       if (alt)
         _panelCallback->OnSetSameFolder();
-      else if(shift)
+      else if (shift)
         OnArrowWithShift();
       return false;
     }
@@ -195,7 +207,7 @@ bool CPanel::OnKeyDown(LPNMLVKEYDOWN keyDownInfo, LRESULT &result)
     {
       if (alt)
         _panelCallback->OnSetSubFolder();
-      else if(shift)
+      else if (shift)
         OnArrowWithShift();
       return false;
     }
@@ -203,7 +215,7 @@ bool CPanel::OnKeyDown(LPNMLVKEYDOWN keyDownInfo, LRESULT &result)
     {
       if (alt)
         _panelCallback->OnSetSubFolder();
-      else if(shift)
+      else if (shift)
         OnArrowWithShift();
       return false;
     }
@@ -222,7 +234,7 @@ bool CPanel::OnKeyDown(LPNMLVKEYDOWN keyDownInfo, LRESULT &result)
         SelectByType(true);
       else if (shift)
         SelectAll(true);
-      else if(!ctrl)
+      else if (!ctrl)
         SelectSpec(true);
       return true;
     }
@@ -260,7 +272,7 @@ bool CPanel::OnKeyDown(LPNMLVKEYDOWN keyDownInfo, LRESULT &result)
     }
     */
     case 'A':
-      if(ctrl)
+      if (ctrl)
       {
         SelectAll(true);
         return true;
@@ -295,14 +307,14 @@ bool CPanel::OnKeyDown(LPNMLVKEYDOWN keyDownInfo, LRESULT &result)
       }
       return false;
     case 'R':
-      if(ctrl)
+      if (ctrl)
       {
         OnReload();
         return true;
       }
       return false;
     case 'Z':
-      if(ctrl)
+      if (ctrl)
       {
         ChangeComment();
         return true;
@@ -312,7 +324,7 @@ bool CPanel::OnKeyDown(LPNMLVKEYDOWN keyDownInfo, LRESULT &result)
     case '2':
     case '3':
     case '4':
-      if(ctrl)
+      if (ctrl)
       {
         int styleIndex = keyDownInfo->wVKey - '1';
         SetListViewMode(styleIndex);

@@ -42,7 +42,7 @@ RSC=rc.exe
 # PROP Ignore_Export_Lib 0
 # PROP Target_Dir ""
 # ADD BASE CPP /nologo /W3 /GX /O2 /D "WIN32" /D "NDEBUG" /D "_CONSOLE" /D "_MBCS" /YX /FD /c
-# ADD CPP /nologo /Gr /MD /W3 /GX /O2 /D "WIN32" /D "NDEBUG" /D "_CONSOLE" /D "_MBCS" /Yu"StdAfx.h" /FD /c
+# ADD CPP /nologo /Gr /MD /W4 /WX /GX /O2 /D "WIN32" /D "NDEBUG" /D "_CONSOLE" /D "_MBCS" /Yu"StdAfx.h" /FD /c
 # ADD BASE RSC /l 0x419 /d "NDEBUG"
 # ADD RSC /l 0x419 /d "NDEBUG"
 BSC32=bscmake.exe
@@ -66,7 +66,7 @@ LINK32=link.exe
 # PROP Ignore_Export_Lib 0
 # PROP Target_Dir ""
 # ADD BASE CPP /nologo /W3 /Gm /GX /ZI /Od /D "WIN32" /D "_DEBUG" /D "_CONSOLE" /D "_MBCS" /YX /FD /GZ /c
-# ADD CPP /nologo /MDd /W3 /Gm /GX /ZI /Od /D "WIN32" /D "_DEBUG" /D "_CONSOLE" /D "_MBCS" /Yu"StdAfx.h" /FD /GZ /c
+# ADD CPP /nologo /MDd /W4 /WX /Gm /GX /ZI /Od /D "WIN32" /D "_DEBUG" /D "_CONSOLE" /D "_MBCS" /Yu"StdAfx.h" /FD /GZ /c
 # ADD BASE RSC /l 0x419 /d "_DEBUG"
 # ADD RSC /l 0x419 /d "_DEBUG"
 BSC32=bscmake.exe
@@ -132,6 +132,14 @@ SOURCE=..\..\..\Windows\FileIO.h
 # End Source File
 # Begin Source File
 
+SOURCE=..\..\..\Windows\PropVariant.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\Windows\PropVariant.h
+# End Source File
+# Begin Source File
+
 SOURCE=..\..\..\Windows\Synchronization.cpp
 # End Source File
 # Begin Source File
@@ -169,6 +177,10 @@ SOURCE=..\..\..\Common\ComTry.h
 # Begin Source File
 
 SOURCE=..\..\..\Common\CRC.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\Common\CrcReg.cpp
 # End Source File
 # Begin Source File
 
@@ -280,6 +292,14 @@ SOURCE=..\..\Common\FilterCoder.h
 # End Source File
 # Begin Source File
 
+SOURCE=..\..\Common\MethodProps.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\Common\MethodProps.h
+# End Source File
+# Begin Source File
+
 SOURCE=..\..\Common\StreamUtils.cpp
 # End Source File
 # Begin Source File
@@ -343,6 +363,10 @@ SOURCE=..\..\..\..\C\7zCrc.h
 
 SOURCE=..\..\..\..\C\7zCrcOpt.c
 # SUBTRACT CPP /YX /Yc /Yu
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\..\C\7zTypes.h
 # End Source File
 # Begin Source File
 
@@ -443,10 +467,6 @@ SOURCE=..\..\..\..\C\Threads.c
 # Begin Source File
 
 SOURCE=..\..\..\..\C\Threads.h
-# End Source File
-# Begin Source File
-
-SOURCE=..\..\..\..\C\Types.h
 # End Source File
 # End Group
 # Begin Source File

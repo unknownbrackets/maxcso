@@ -25,67 +25,67 @@ namespace NBZip2 {
 
 class CMsbfEncoderTemp
 {
-  UInt32 m_Pos;
-  int m_BitPos;
-  Byte m_CurByte;
-  Byte *Buffer;
+  UInt32 _pos;
+  unsigned _bitPos;
+  Byte _curByte;
+  Byte *_buf;
 public:
-  void SetStream(Byte *buffer) { Buffer = buffer;  }
-  Byte *GetStream() const { return Buffer; }
+  void SetStream(Byte *buf) { _buf = buf;  }
+  Byte *GetStream() const { return _buf; }
 
   void Init()
   {
-    m_Pos = 0;
-    m_BitPos = 8;
-    m_CurByte = 0;
+    _pos = 0;
+    _bitPos = 8;
+    _curByte = 0;
   }
 
   void Flush()
   {
-    if (m_BitPos < 8)
-      WriteBits(0, m_BitPos);
+    if (_bitPos < 8)
+      WriteBits(0, _bitPos);
   }
 
-  void WriteBits(UInt32 value, int numBits)
+  void WriteBits(UInt32 value, unsigned numBits)
   {
     while (numBits > 0)
     {
-      int numNewBits = MyMin(numBits, m_BitPos);
+      unsigned numNewBits = MyMin(numBits, _bitPos);
       numBits -= numNewBits;
       
-      m_CurByte <<= numNewBits;
+      _curByte <<= numNewBits;
       UInt32 newBits = value >> numBits;
-      m_CurByte |= Byte(newBits);
+      _curByte |= Byte(newBits);
       value -= (newBits << numBits);
       
-      m_BitPos -= numNewBits;
+      _bitPos -= numNewBits;
       
-      if (m_BitPos == 0)
+      if (_bitPos == 0)
       {
-       Buffer[m_Pos++] = m_CurByte;
-        m_BitPos = 8;
+       _buf[_pos++] = _curByte;
+        _bitPos = 8;
       }
     }
   }
   
-  UInt32 GetBytePos() const { return m_Pos ; }
-  UInt32 GetPos() const { return m_Pos * 8 + (8 - m_BitPos); }
-  Byte GetCurByte() const { return m_CurByte; }
+  UInt32 GetBytePos() const { return _pos ; }
+  UInt32 GetPos() const { return _pos * 8 + (8 - _bitPos); }
+  Byte GetCurByte() const { return _curByte; }
   void SetPos(UInt32 bitPos)
   {
-    m_Pos = bitPos / 8;
-    m_BitPos = 8 - ((int)bitPos & 7);
+    _pos = bitPos >> 3;
+    _bitPos = 8 - ((unsigned)bitPos & 7);
   }
-  void SetCurState(int bitPos, Byte curByte)
+  void SetCurState(unsigned bitPos, Byte curByte)
   {
-    m_BitPos = 8 - bitPos;
-    m_CurByte = curByte;
+    _bitPos = 8 - bitPos;
+    _curByte = curByte;
   }
 };
 
 class CEncoder;
 
-const int kNumPassesMax = 10;
+const unsigned kNumPassesMax = 10;
 
 class CThreadInfo
 {
@@ -109,9 +109,9 @@ private:
 
   UInt32 m_BlockIndex;
 
-  void WriteBits2(UInt32 value, UInt32 numBits);
+  void WriteBits2(UInt32 value, unsigned numBits);
   void WriteByte2(Byte b);
-  void WriteBit2(bool v);
+  void WriteBit2(Byte v);
   void WriteCrc2(UInt32 v);
 
   void EncodeBlock(const Byte *block, UInt32 blockSize);
@@ -145,6 +145,20 @@ public:
   HRESULT EncodeBlock3(UInt32 blockSize);
 };
 
+struct CEncProps
+{
+  UInt32 BlockSizeMult;
+  UInt32 NumPasses;
+  
+  CEncProps()
+  {
+    BlockSizeMult = (UInt32)(Int32)-1;
+    NumPasses = (UInt32)(Int32)-1;
+  }
+  void Normalize(int level);
+  bool DoOptimizeNumTables() const { return NumPasses > 1; }
+};
+
 class CEncoder :
   public ICompressCoder,
   public ICompressSetCoderProperties,
@@ -153,17 +167,12 @@ class CEncoder :
   #endif
   public CMyUnknownImp
 {
-  UInt32 m_BlockSizeMult;
-  bool m_OptimizeNumTables;
-
-  UInt32 m_NumPassesPrev;
-
   UInt32 m_NumThreadsPrev;
 public:
   CInBuffer m_InStream;
   Byte MtPad[1 << 8]; // It's pad for Multi-Threading. Must be >= Cache_Line_Size.
   CBitmEncoder<COutBuffer> m_OutStream;
-  UInt32 NumPasses;
+  CEncProps _props;
   CBZip2CombinedCrc CombinedCrc;
 
   #ifndef _7ZIP_ST
@@ -184,12 +193,12 @@ public:
   CThreadInfo ThreadsInfo;
   #endif
 
-  UInt32 ReadRleBlock(Byte *buffer);
+  UInt32 ReadRleBlock(Byte *buf);
   void WriteBytes(const Byte *data, UInt32 sizeInBits, Byte lastByte);
 
-  void WriteBits(UInt32 value, UInt32 numBits);
+  void WriteBits(UInt32 value, unsigned numBits);
   void WriteByte(Byte b);
-  void WriteBit(bool v);
+  // void WriteBit(Byte v);
   void WriteCrc(UInt32 v);
 
   #ifndef _7ZIP_ST
@@ -205,28 +214,13 @@ public:
 
   HRESULT Flush() { return m_OutStream.Flush(); }
   
-  void ReleaseStreams()
-  {
-    m_InStream.ReleaseStream();
-    m_OutStream.ReleaseStream();
-  }
-
-  class CFlusher
-  {
-    CEncoder *_coder;
-  public:
-    CFlusher(CEncoder *coder): _coder(coder) {}
-    ~CFlusher()
-    {
-      _coder->ReleaseStreams();
-    }
-  };
-
+  MY_QUERYINTERFACE_BEGIN2(ICompressCoder)
   #ifndef _7ZIP_ST
-  MY_UNKNOWN_IMP2(ICompressSetCoderMt, ICompressSetCoderProperties)
-  #else
-  MY_UNKNOWN_IMP1(ICompressSetCoderProperties)
+  MY_QUERYINTERFACE_ENTRY(ICompressSetCoderMt)
   #endif
+  MY_QUERYINTERFACE_ENTRY(ICompressSetCoderProperties)
+  MY_QUERYINTERFACE_END
+  MY_ADDREF_RELEASE
 
   HRESULT CodeReal(ISequentialInStream *inStream, ISequentialOutStream *outStream,
       const UInt64 *inSize, const UInt64 *outSize, ICompressProgressInfo *progress);

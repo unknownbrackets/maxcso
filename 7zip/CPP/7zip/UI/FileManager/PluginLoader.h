@@ -3,21 +3,21 @@
 #ifndef __PLUGIN_LOADER_H
 #define __PLUGIN_LOADER_H
 
-#include "Windows/DLL.h"
+#include "../../../Windows/DLL.h"
 
-typedef UINT32 (WINAPI * CreateObjectPointer)(const GUID *clsID, const GUID *interfaceID, void **outObject);
+#include "IFolder.h"
 
 class CPluginLibrary: public NWindows::NDLL::CLibrary
 {
 public:
   HRESULT CreateManager(REFGUID clsID, IFolderManager **manager)
   {
-    CreateObjectPointer createObject = (CreateObjectPointer)GetProc("CreateObject");
-    if (createObject == NULL)
+    Func_CreateObject createObject = (Func_CreateObject)GetProc("CreateObject");
+    if (!createObject)
       return GetLastError();
     return createObject(&clsID, &IID_IFolderManager, (void **)manager);
   }
-  HRESULT LoadAndCreateManager(LPCWSTR filePath, REFGUID clsID, IFolderManager **manager)
+  HRESULT LoadAndCreateManager(CFSTR filePath, REFGUID clsID, IFolderManager **manager)
   {
     if (!Load(filePath))
       return GetLastError();

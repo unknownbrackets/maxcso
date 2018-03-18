@@ -2,20 +2,47 @@
 
 #include "StdAfx.h"
 
+// #include "CopyCoder.h"
+
+/*
+#include <stdio.h>
+#include "../../../C/CpuTicks.h"
+*/
+#define TICKS_START
+#define TICKS_UPDATE(n)
+
+
+/*
+#define PRIN(s) printf(s "\n"); fflush(stdout);
+#define PRIN_VAL(s, val) printf(s " = %u \n", val); fflush(stdout);
+*/
+
+#define PRIN(s)
+#define PRIN_VAL(s, val)
+
+#define PRIN_MT(s) PRIN("    " s)
+
 #include "../../../C/Alloc.h"
 
+#include "../Common/StreamUtils.h"
+
 #include "BZip2Decoder.h"
-#include "Mtf8.h"
+
 
 namespace NCompress {
 namespace NBZip2 {
 
-#undef NO_INLINE
-#define NO_INLINE
-  
-static const UInt32 kNumThreadsMax = 4;
+// #undef NO_INLINE
+#define NO_INLINE MY_NO_INLINE
 
-static const UInt32 kBufferSize = (1 << 17);
+#define BZIP2_BYTE_MODE
+
+
+static const UInt32 kInBufSize = (UInt32)1 << 17;
+static const size_t kOutBufSize = (size_t)1 << 20;
+
+static const UInt32 kProgressStep = (UInt32)1 << 16;
+
 
 static const UInt16 kRandNums[512] = {
    619, 720, 127, 481, 931, 816, 813, 233, 566, 247,
@@ -72,872 +99,1647 @@ static const UInt16 kRandNums[512] = {
    936, 638
 };
 
-bool CState::Alloc()
+
+
+enum EState
 {
-  if (!Counters)
-    Counters = (UInt32 *)::BigAlloc((256 + kBlockSizeMax) * sizeof(UInt32));
-  return (Counters != 0);
+  STATE_STREAM_SIGNATURE,
+  STATE_BLOCK_SIGNATURE,
+
+  STATE_BLOCK_START,
+  STATE_ORIG_BITS,
+  STATE_IN_USE,
+  STATE_IN_USE2,
+  STATE_NUM_TABLES,
+  STATE_NUM_SELECTORS,
+  STATE_SELECTORS,
+  STATE_LEVELS,
+  
+  STATE_BLOCK_SYMBOLS,
+
+  STATE_STREAM_FINISHED
+};
+
+
+#define UPDATE_VAL_2(val) { \
+  val |= (UInt32)(*_buf) << (24 - _numBits); \
+ _numBits += 8; \
+ _buf++; \
 }
 
-void CState::Free()
-{
-  ::BigFree(Counters);
-  Counters = 0;
+#define UPDATE_VAL  UPDATE_VAL_2(VAL)
+
+#define READ_BITS(res, num) { \
+  while (_numBits < num) { \
+    if (_buf == _lim) return SZ_OK; \
+    UPDATE_VAL_2(_value) } \
+  res = _value >> (32 - num); \
+  _value <<= num; \
+  _numBits -= num; \
 }
 
-UInt32 CDecoder::ReadBits(unsigned numBits) { return m_InStream.ReadBits(numBits); }
-Byte CDecoder::ReadByte() {return (Byte)ReadBits(8); }
-bool CDecoder::ReadBit() { return ReadBits(1) != 0; }
+#define READ_BITS_8(res, num) { \
+  if (_numBits < num) { \
+    if (_buf == _lim) return SZ_OK; \
+    UPDATE_VAL_2(_value) } \
+  res = _value >> (32 - num); \
+  _value <<= num; \
+  _numBits -= num; \
+}
 
-UInt32 CDecoder::ReadCrc()
+#define READ_BIT(res) READ_BITS_8(res, 1)
+
+
+
+#define VAL _value2
+#define BLOCK_SIZE blockSize2
+#define RUN_COUNTER runCounter2
+
+#define LOAD_LOCAL \
+    UInt32 VAL = this->_value; \
+    UInt32 BLOCK_SIZE = this->blockSize; \
+    UInt32 RUN_COUNTER = this->runCounter; \
+
+#define SAVE_LOCAL \
+    this->_value = VAL; \
+    this->blockSize = BLOCK_SIZE; \
+    this->runCounter = RUN_COUNTER; \
+
+
+
+SRes CBitDecoder::ReadByte(int &b)
 {
-  UInt32 crc = 0;
-  for (int i = 0; i < 4; i++)
+  b = -1;
+  READ_BITS_8(b, 8);
+  return SZ_OK;
+}
+
+
+NO_INLINE
+SRes CBase::ReadStreamSignature2()
+{
+  for (;;)
+  {
+    unsigned b;
+    READ_BITS_8(b, 8);
+
+    if (   state2 == 0 && b != kArSig0
+        || state2 == 1 && b != kArSig1
+        || state2 == 2 && b != kArSig2
+        || state2 == 3 && (b <= kArSig3 || b > kArSig3 + kBlockSizeMultMax))
+      return SZ_ERROR_DATA;
+    state2++;
+
+    if (state2 == 4)
+    {
+      blockSizeMax = (UInt32)(b - kArSig3) * kBlockSizeStep;
+      CombinedCrc.Init();
+      state = STATE_BLOCK_SIGNATURE;
+      state2 = 0;
+      return SZ_OK;
+    }
+  }
+}
+
+
+bool IsEndSig(const Byte *p) throw()
+{
+  return
+    p[0] == kFinSig0 &&
+    p[1] == kFinSig1 &&
+    p[2] == kFinSig2 &&
+    p[3] == kFinSig3 &&
+    p[4] == kFinSig4 &&
+    p[5] == kFinSig5;
+}
+
+bool IsBlockSig(const Byte *p) throw()
+{
+  return
+    p[0] == kBlockSig0 &&
+    p[1] == kBlockSig1 &&
+    p[2] == kBlockSig2 &&
+    p[3] == kBlockSig3 &&
+    p[4] == kBlockSig4 &&
+    p[5] == kBlockSig5;
+}
+
+
+NO_INLINE
+SRes CBase::ReadBlockSignature2()
+{
+  while (state2 < 10)
+  {
+    unsigned b;
+    READ_BITS_8(b, 8);
+    temp[state2] = (Byte)b;
+    state2++;
+  }
+
+  crc = 0;
+  for (unsigned i = 0; i < 4; i++)
   {
     crc <<= 8;
-    crc |= ReadByte();
+    crc |= temp[6 + i];
   }
-  return crc;
-}
 
-static UInt32 NO_INLINE ReadBits(NBitm::CDecoder<CInBuffer> *m_InStream, unsigned num)
-{
-  return m_InStream->ReadBits(num);
-}
-
-static UInt32 NO_INLINE ReadBit(NBitm::CDecoder<CInBuffer> *m_InStream)
-{
-  return m_InStream->ReadBits(1);
-}
-
-static HRESULT NO_INLINE ReadBlock(NBitm::CDecoder<CInBuffer> *m_InStream,
-    UInt32 *CharCounters, UInt32 blockSizeMax, Byte *m_Selectors, CHuffmanDecoder *m_HuffmanDecoders,
-    UInt32 *blockSizeRes, UInt32 *origPtrRes, bool *randRes)
-{
-  if (randRes)
-    *randRes = ReadBit(m_InStream) ? true : false;
-  *origPtrRes = ReadBits(m_InStream, kNumOrigBits);
-  
-  // in original code it compares OrigPtr to (UInt32)(10 + blockSizeMax)) : why ?
-  if (*origPtrRes >= blockSizeMax)
-    return S_FALSE;
-
-  CMtf8Decoder mtf;
-  mtf.StartInit();
-  
-  int numInUse = 0;
+  if (IsBlockSig(temp))
   {
-    Byte inUse16[16];
-    int i;
-    for (i = 0; i < 16; i++)
-      inUse16[i] = (Byte)ReadBit(m_InStream);
-    for (i = 0; i < 256; i++)
-      if (inUse16[i >> 4])
+    if (!IsBz)
+      NumStreams++;
+    NumBlocks++;
+    IsBz = true;
+    CombinedCrc.Update(crc);
+    state = STATE_BLOCK_START;
+    return SZ_OK;
+  }
+  
+  if (!IsEndSig(temp))
+    return SZ_ERROR_DATA;
+
+  if (!IsBz)
+    NumStreams++;
+  IsBz = true;
+
+  if (_value != 0)
+    MinorError = true;
+
+  AlignToByte();
+
+  state = STATE_STREAM_FINISHED;
+  if (crc != CombinedCrc.GetDigest())
+  {
+    StreamCrcError = true;
+    return SZ_ERROR_DATA;
+  }
+  return SZ_OK;
+}
+
+
+NO_INLINE
+SRes CBase::ReadBlock2()
+{
+  if (state != STATE_BLOCK_SYMBOLS) {
+  PRIN("ReadBlock2")
+
+  if (state == STATE_BLOCK_START)
+  {
+    if (Props.randMode)
+    {
+      READ_BIT(Props.randMode);
+    }
+    state = STATE_ORIG_BITS;
+    // g_Tick = GetCpuTicks();
+  }
+
+  if (state == STATE_ORIG_BITS)
+  {
+    READ_BITS(Props.origPtr, kNumOrigBits);
+    if (Props.origPtr >= blockSizeMax)
+      return SZ_ERROR_DATA;
+    state = STATE_IN_USE;
+  }
+  
+  // why original code compares origPtr to (UInt32)(10 + blockSizeMax)) ?
+
+  if (state == STATE_IN_USE)
+  {
+    READ_BITS(state2, 16);
+    state = STATE_IN_USE2;
+    state3 = 0;
+    numInUse = 0;
+    mtf.StartInit();
+  }
+
+  if (state == STATE_IN_USE2)
+  {
+    for (; state3 < 256; state3++)
+      if (state2 & ((UInt32)0x8000 >> (state3 >> 4)))
       {
-        if (ReadBit(m_InStream))
-          mtf.Add(numInUse++, (Byte)i);
+        unsigned b;
+        READ_BIT(b);
+        if (b)
+          mtf.Add(numInUse++, (Byte)state3);
       }
     if (numInUse == 0)
-      return S_FALSE;
-    // mtf.Init(numInUse);
+      return SZ_ERROR_DATA;
+    state = STATE_NUM_TABLES;
   }
-  int alphaSize = numInUse + 2;
 
-  int numTables = ReadBits(m_InStream, kNumTablesBits);
-  if (numTables < kNumTablesMin || numTables > kNumTablesMax)
-    return S_FALSE;
   
-  UInt32 numSelectors = ReadBits(m_InStream, kNumSelectorsBits);
-  if (numSelectors < 1 || numSelectors > kNumSelectorsMax)
-    return S_FALSE;
-
+  if (state == STATE_NUM_TABLES)
   {
-    Byte mtfPos[kNumTablesMax];
-    int t = 0;
-    do
-      mtfPos[t] = (Byte)t;
-    while(++t < numTables);
-    UInt32 i = 0;
-    do
-    {
-      int j = 0;
-      while (ReadBit(m_InStream))
-        if (++j >= numTables)
-          return S_FALSE;
-      Byte tmp = mtfPos[j];
-      for (;j > 0; j--)
-        mtfPos[j] = mtfPos[j - 1];
-      m_Selectors[i] = mtfPos[0] = tmp;
-    }
-    while(++i < numSelectors);
+    READ_BITS_8(numTables, kNumTablesBits);
+    state = STATE_NUM_SELECTORS;
+    if (numTables < kNumTablesMin || numTables > kNumTablesMax)
+      return SZ_ERROR_DATA;
+  }
+  
+  if (state == STATE_NUM_SELECTORS)
+  {
+    READ_BITS(numSelectors, kNumSelectorsBits);
+    state = STATE_SELECTORS;
+    state2 = 0x543210;
+    state3 = 0;
+    state4 = 0;
+    if (numSelectors == 0 || numSelectors > kNumSelectorsMax)
+      return SZ_ERROR_DATA;
   }
 
-  int t = 0;
-  do
+  if (state == STATE_SELECTORS)
   {
-    Byte lens[kMaxAlphaSize];
-    int len = (int)ReadBits(m_InStream, kNumLevelsBits);
-    int i;
-    for (i = 0; i < alphaSize; i++)
+    const unsigned kMtfBits = 4;
+    const UInt32 kMtfMask = (1 << kMtfBits) - 1;
+    do
     {
       for (;;)
       {
-        if (len < 1 || len > kMaxHuffmanLen)
-          return S_FALSE;
-        if (!ReadBit(m_InStream))
+        unsigned b;
+        READ_BIT(b);
+        if (!b)
           break;
-        len += 1 - (int)(ReadBit(m_InStream) << 1);
+        if (++state4 >= numTables)
+          return SZ_ERROR_DATA;
       }
-      lens[i] = (Byte)len;
+      UInt32 tmp = (state2 >> (kMtfBits * state4)) & kMtfMask;
+      UInt32 mask = ((UInt32)1 << ((state4 + 1) * kMtfBits)) - 1;
+      state4 = 0;
+      state2 = ((state2 << kMtfBits) & mask) | (state2 & ~mask) | tmp;
+      selectors[state3] = (Byte)tmp;
     }
-    for (; i < kMaxAlphaSize; i++)
-      lens[i] = 0;
-    if(!m_HuffmanDecoders[t].SetCodeLengths(lens))
-      return S_FALSE;
-  }
-  while(++t < numTables);
+    while (++state3 < numSelectors);
 
+    state = STATE_LEVELS;
+    state2 = 0;
+    state3 = 0;
+  }
+
+  if (state == STATE_LEVELS)
   {
-    for (int i = 0; i < 256; i++)
-      CharCounters[i] = 0;
+    do
+    {
+      if (state3 == 0)
+      {
+        READ_BITS_8(state3, kNumLevelsBits);
+        state4 = 0;
+        state5 = 0;
+      }
+      const unsigned alphaSize = numInUse + 2;
+      for (; state4 < alphaSize; state4++)
+      {
+        for (;;)
+        {
+          if (state3 < 1 || state3 > kMaxHuffmanLen)
+            return SZ_ERROR_DATA;
+          
+          if (state5 == 0)
+          {
+            unsigned b;
+            READ_BIT(b);
+            if (!b)
+              break;
+          }
+
+          state5 = 1;
+          unsigned b;
+          READ_BIT(b);
+
+          state5 = 0;
+          state3++;
+          state3 -= (b << 1);
+        }
+        lens[state4] = (Byte)state3;
+        state5 = 0;
+      }
+      
+      // lbzip2 2.5 can produce dummy tree, where lens[i] = kMaxHuffmanLen
+      // BuildFull() returns error for such tree
+      /*
+      for (unsigned i = state4; i < kMaxAlphaSize; i++)
+        lens[i] = 0;
+      if (!huffs[state2].Build(lens))
+      */
+      if (!huffs[state2].BuildFull(lens, state4))
+        return SZ_ERROR_DATA;
+      state3 = 0;
+    }
+    while (++state2 < numTables);
+
+    {
+      UInt32 *counters = this->Counters;
+      for (unsigned i = 0; i < 256; i++)
+        counters[i] = 0;
+    }
+
+    state = STATE_BLOCK_SYMBOLS;
+
+    groupIndex = 0;
+    groupSize = kGroupSize;
+    runPower = 0;
+    runCounter = 0;
+    blockSize = 0;
   }
   
-  UInt32 blockSize = 0;
+  if (state != STATE_BLOCK_SYMBOLS)
+    return SZ_ERROR_DATA;
+
+  // g_Ticks[3] += GetCpuTicks() - g_Tick;
+
+  }
+
   {
-    UInt32 groupIndex = 0;
-    UInt32 groupSize = 0;
-    CHuffmanDecoder *huffmanDecoder = 0;
-    int runPower = 0;
-    UInt32 runCounter = 0;
-    
+    LOAD_LOCAL
+    const CHuffmanDecoder *huff = &huffs[selectors[groupIndex]];
+
     for (;;)
     {
       if (groupSize == 0)
       {
-        if (groupIndex >= numSelectors)
-          return S_FALSE;
+        if (++groupIndex >= numSelectors)
+          return SZ_ERROR_DATA;
+        huff = &huffs[selectors[groupIndex]];
         groupSize = kGroupSize;
-        huffmanDecoder = &m_HuffmanDecoders[m_Selectors[groupIndex++]];
       }
-      groupSize--;
-        
-      UInt32 nextSym = huffmanDecoder->DecodeSymbol(m_InStream);
-      
-      if (nextSym < 2)
+
+      if (_numBits <= 8 &&
+          _buf != _lim) { UPDATE_VAL
+      if (_buf != _lim) { UPDATE_VAL
+      if (_buf != _lim) { UPDATE_VAL }}}
+
+      UInt32 sym;
+      UInt32 val = VAL >> (32 - kMaxHuffmanLen);
+      if (val >= huff->_limits[kNumTableBits])
       {
-        runCounter += ((UInt32)(nextSym + 1) << runPower++);
-        if (blockSizeMax - blockSize < runCounter)
-          return S_FALSE;
+        if (_numBits <= kMaxHuffmanLen && _buf != _lim) { UPDATE_VAL
+        if (_numBits <= kMaxHuffmanLen && _buf != _lim) { UPDATE_VAL }}
+
+        val = VAL >> (32 - kMaxHuffmanLen);
+        unsigned len;
+        for (len = kNumTableBits + 1; val >= huff->_limits[len]; len++);
+        /*
+        if (len > kNumBitsMax)
+          return SZ_ERROR_DATA; // that check is required, if NHuffman::Build() was used instead of BuildFull()
+        */
+        if (_numBits < len)
+        {
+          SAVE_LOCAL
+          return SZ_OK;
+        }
+        sym = huff->_symbols[huff->_poses[len] + ((val - huff->_limits[(size_t)len - 1]) >> (kNumBitsMax - len))];
+        VAL <<= len;
+        _numBits -= len;
+      }
+      else
+      {
+        sym = huff->_lens[val >> (kMaxHuffmanLen - kNumTableBits)];
+        unsigned len = (sym & NHuffman::kPairLenMask);
+        sym >>= NHuffman::kNumPairLenBits;
+        if (_numBits < len)
+        {
+          SAVE_LOCAL
+          return SZ_OK;
+        }
+        VAL <<= len;
+        _numBits -= len;
+      }
+
+      groupSize--;
+
+      if (sym < 2)
+      {
+        RUN_COUNTER += ((UInt32)(sym + 1) << runPower);
+        runPower++;
+        if (blockSizeMax - BLOCK_SIZE < RUN_COUNTER)
+          return SZ_ERROR_DATA;
         continue;
       }
-      if (runCounter != 0)
+
+      UInt32 *counters = this->Counters;
+      if (RUN_COUNTER != 0)
       {
-        UInt32 b = (UInt32)mtf.GetHead();
-        CharCounters[b] += runCounter;
-        do
-          CharCounters[256 + blockSize++] = b;
-        while(--runCounter != 0);
+        UInt32 b = (UInt32)(mtf.Buf[0] & 0xFF);
+        counters[b] += RUN_COUNTER;
         runPower = 0;
+        #ifdef BZIP2_BYTE_MODE
+          Byte *dest = (Byte *)(&counters[256 + kBlockSizeMax]) + BLOCK_SIZE;
+          const Byte *limit = dest + RUN_COUNTER;
+          BLOCK_SIZE += RUN_COUNTER;
+          RUN_COUNTER = 0;
+          do
+          {
+            dest[0] = (Byte)b;
+            dest[1] = (Byte)b;
+            dest[2] = (Byte)b;
+            dest[3] = (Byte)b;
+            dest += 4;
+          }
+          while (dest < limit);
+        #else
+          UInt32 *dest = &counters[256 + BLOCK_SIZE];
+          const UInt32 *limit = dest + RUN_COUNTER;
+          BLOCK_SIZE += RUN_COUNTER;
+          RUN_COUNTER = 0;
+          do
+          {
+            dest[0] = b;
+            dest[1] = b;
+            dest[2] = b;
+            dest[3] = b;
+            dest += 4;
+          }
+          while (dest < limit);
+        #endif
       }
-      if (nextSym <= (UInt32)numInUse)
+      
+      sym -= 1;
+      if (sym < numInUse)
       {
-        UInt32 b = (UInt32)mtf.GetAndMove((int)nextSym - 1);
-        if (blockSize >= blockSizeMax)
-          return S_FALSE;
-        CharCounters[b]++;
-        CharCounters[256 + blockSize++] = b;
+        if (BLOCK_SIZE >= blockSizeMax)
+          return SZ_ERROR_DATA;
+
+        // UInt32 b = (UInt32)mtf.GetAndMove((unsigned)sym);
+
+        const unsigned lim = sym >> MTF_MOVS;
+        const unsigned pos = (sym & MTF_MASK) << 3;
+        CMtfVar next = mtf.Buf[lim];
+        CMtfVar prev = (next >> pos) & 0xFF;
+        
+        #ifdef BZIP2_BYTE_MODE
+          ((Byte *)(counters + 256 + kBlockSizeMax))[BLOCK_SIZE++] = (Byte)prev;
+        #else
+          (counters + 256)[BLOCK_SIZE++] = (UInt32)prev;
+        #endif
+        counters[prev]++;
+
+        CMtfVar *m = mtf.Buf;
+        CMtfVar *mLim = m + lim;
+        if (lim != 0)
+        {
+          do
+          {
+            CMtfVar n0 = *m;
+            *m = (n0 << 8) | prev;
+            prev = (n0 >> (MTF_MASK << 3));
+          }
+          while (++m != mLim);
+        }
+
+        CMtfVar mask = (((CMtfVar)0x100 << pos) - 1);
+        *mLim = (next & ~mask) | (((next << 8) | prev) & mask);
+        continue;
       }
-      else if (nextSym == (UInt32)numInUse + 1)
-        break;
-      else
-        return S_FALSE;
+      
+      if (sym != numInUse)
+        return SZ_ERROR_DATA;
+      break;
     }
+
+    // we write additional item that will be read in DecodeBlock1 for prefetching
+    #ifdef BZIP2_BYTE_MODE
+      ((Byte *)(Counters + 256 + kBlockSizeMax))[BLOCK_SIZE] = 0;
+    #else
+      (counters + 256)[BLOCK_SIZE] = 0;
+    #endif
+
+    SAVE_LOCAL
+    Props.blockSize = blockSize;
+    state = STATE_BLOCK_SIGNATURE;
+    state2 = 0;
+
+    PRIN_VAL("origPtr", Props.origPtr);
+    PRIN_VAL("blockSize", Props.blockSize);
+
+    return (Props.origPtr < Props.blockSize) ? SZ_OK : SZ_ERROR_DATA;
   }
-  *blockSizeRes = blockSize;
-  return (*origPtrRes < blockSize) ? S_OK : S_FALSE;
 }
 
-static void NO_INLINE DecodeBlock1(UInt32 *charCounters, UInt32 blockSize)
+
+NO_INLINE
+static void DecodeBlock1(UInt32 *counters, UInt32 blockSize)
 {
   {
     UInt32 sum = 0;
     for (UInt32 i = 0; i < 256; i++)
     {
-      sum += charCounters[i];
-      charCounters[i] = sum - charCounters[i];
+      const UInt32 v = counters[i];
+      counters[i] = sum;
+      sum += v;
     }
   }
   
-  UInt32 *tt = charCounters + 256;
+  UInt32 *tt = counters + 256;
   // Compute the T^(-1) vector
-  UInt32 i = 0;
-  do
-    tt[charCounters[tt[i] & 0xFF]++] |= (i << 8);
-  while(++i < blockSize);
-}
 
-static UInt32 NO_INLINE DecodeBlock2(const UInt32 *tt, UInt32 blockSize, UInt32 OrigPtr, COutBuffer &m_OutStream)
-{
-  CBZip2Crc crc;
+  // blockSize--;
 
-  // it's for speed optimization: prefetch & prevByte_init;
-  UInt32 tPos = tt[tt[OrigPtr] >> 8];
-  unsigned prevByte = (unsigned)(tPos & 0xFF);
+  #ifdef BZIP2_BYTE_MODE
+
+  unsigned c = ((const Byte *)(tt + kBlockSizeMax))[0];
   
-  unsigned numReps = 0;
-
-  do
+  for (UInt32 i = 0; i < blockSize; i++)
   {
-    unsigned b = (unsigned)(tPos & 0xFF);
-    tPos = tt[tPos >> 8];
-    
-    if (numReps == kRleModeRepSize)
-    {
-      for (; b > 0; b--)
-      {
-        crc.UpdateByte(prevByte);
-        m_OutStream.WriteByte((Byte)prevByte);
-      }
-      numReps = 0;
-      continue;
-    }
-    if (b != prevByte)
-      numReps = 0;
-    numReps++;
-    prevByte = b;
-    crc.UpdateByte(b);
-    m_OutStream.WriteByte((Byte)b);
-
-    /*
-    prevByte = b;
-    crc.UpdateByte(b);
-    m_OutStream.WriteByte((Byte)b);
-    for (; --blockSize != 0;)
-    {
-      b = (unsigned)(tPos & 0xFF);
-      tPos = tt[tPos >> 8];
-      crc.UpdateByte(b);
-      m_OutStream.WriteByte((Byte)b);
-      if (b != prevByte)
-      {
-        prevByte = b;
-        continue;
-      }
-      if (--blockSize == 0)
-        break;
-      
-      b = (unsigned)(tPos & 0xFF);
-      tPos = tt[tPos >> 8];
-      crc.UpdateByte(b);
-      m_OutStream.WriteByte((Byte)b);
-      if (b != prevByte)
-      {
-        prevByte = b;
-        continue;
-      }
-      if (--blockSize == 0)
-        break;
-      
-      b = (unsigned)(tPos & 0xFF);
-      tPos = tt[tPos >> 8];
-      crc.UpdateByte(b);
-      m_OutStream.WriteByte((Byte)b);
-      if (b != prevByte)
-      {
-        prevByte = b;
-        continue;
-      }
-      --blockSize;
-      break;
-    }
-    if (blockSize == 0)
-      break;
-
-    b = (unsigned)(tPos & 0xFF);
-    tPos = tt[tPos >> 8];
-    
-    for (; b > 0; b--)
-    {
-      crc.UpdateByte(prevByte);
-      m_OutStream.WriteByte((Byte)prevByte);
-    }
-    */
+    unsigned c1 = c;
+    const UInt32 pos = counters[c];
+    c = ((const Byte *)(tt + kBlockSizeMax))[(size_t)i + 1];
+    counters[c1] = pos + 1;
+    tt[pos] = (i << 8) | ((const Byte *)(tt + kBlockSizeMax))[pos];
   }
-  while(--blockSize != 0);
-  return crc.GetDigest();
-}
 
-static UInt32 NO_INLINE DecodeBlock2Rand(const UInt32 *tt, UInt32 blockSize, UInt32 OrigPtr, COutBuffer &m_OutStream)
-{
-  CBZip2Crc crc;
-  
-  UInt32 randIndex = 1;
-  UInt32 randToGo = kRandNums[0] - 2;
-  
-  unsigned numReps = 0;
-
-  // it's for speed optimization: prefetch & prevByte_init;
-  UInt32 tPos = tt[tt[OrigPtr] >> 8];
-  unsigned prevByte = (unsigned)(tPos & 0xFF);
-  
-  do
+  /*
+  // last iteration without next character prefetching
   {
-    unsigned b = (unsigned)(tPos & 0xFF);
-    tPos = tt[tPos >> 8];
-    
-    {
-      if (randToGo == 0)
-      {
-        b ^= 1;
-        randToGo = kRandNums[randIndex++];
-        randIndex &= 0x1FF;
-      }
-      randToGo--;
-    }
-    
-    if (numReps == kRleModeRepSize)
-    {
-      for (; b > 0; b--)
-      {
-        crc.UpdateByte(prevByte);
-        m_OutStream.WriteByte((Byte)prevByte);
-      }
-      numReps = 0;
-      continue;
-    }
-    if (b != prevByte)
-      numReps = 0;
-    numReps++;
-    prevByte = b;
-    crc.UpdateByte(b);
-    m_OutStream.WriteByte((Byte)b);
+    const UInt32 pos = counters[c];
+    counters[c] = pos + 1;
+    tt[pos] = (blockSize << 8) | ((const Byte *)(tt + kBlockSizeMax))[pos];
   }
-  while(--blockSize != 0);
-  return crc.GetDigest();
-}
+  */
 
-
-CDecoder::CDecoder()
-{
-  #ifndef _7ZIP_ST
-  m_States = 0;
-  m_NumThreadsPrev = 0;
-  NumThreads = 1;
-  #endif
-  _needInStreamInit = true;
-}
-
-#ifndef _7ZIP_ST
-
-CDecoder::~CDecoder()
-{
-  Free();
-}
-
-#define RINOK_THREAD(x) { WRes __result_ = (x); if(__result_ != 0) return __result_; }
-
-HRESULT CDecoder::Create()
-{
-  RINOK_THREAD(CanProcessEvent.CreateIfNotCreated());
-  RINOK_THREAD(CanStartWaitingEvent.CreateIfNotCreated());
-  if (m_States != 0 && m_NumThreadsPrev == NumThreads)
-    return S_OK;
-  Free();
-  MtMode = (NumThreads > 1);
-  m_NumThreadsPrev = NumThreads;
-  try
-  {
-    m_States = new CState[NumThreads];
-    if (!m_States)
-      return E_OUTOFMEMORY;
-  }
-  catch(...) { return E_OUTOFMEMORY; }
-  for (UInt32 t = 0; t < NumThreads; t++)
-  {
-    CState &ti = m_States[t];
-    ti.Decoder = this;
-    if (MtMode)
-    {
-      HRESULT res = ti.Create();
-      if (res != S_OK)
-      {
-        NumThreads = t;
-        Free();
-        return res;
-      }
-    }
-  }
-  return S_OK;
-}
-
-void CDecoder::Free()
-{
-  if (!m_States)
-    return;
-  CloseThreads = true;
-  CanProcessEvent.Set();
-  for (UInt32 t = 0; t < NumThreads; t++)
-  {
-    CState &s = m_States[t];
-    if (MtMode)
-      s.Thread.Wait();
-    s.Free();
-  }
-  delete []m_States;
-  m_States = 0;
-}
-
-#endif
-
-HRESULT CDecoder::ReadSignatures(bool &wasFinished, UInt32 &crc)
-{
-  wasFinished = false;
-  Byte s[6];
-  for (int i = 0; i < 6; i++)
-    s[i] = ReadByte();
-  crc = ReadCrc();
-  if (s[0] == kFinSig0)
-  {
-    if (s[1] != kFinSig1 ||
-        s[2] != kFinSig2 ||
-        s[3] != kFinSig3 ||
-        s[4] != kFinSig4 ||
-        s[5] != kFinSig5)
-      return S_FALSE;
-    
-    wasFinished = true;
-    return (crc == CombinedCrc.GetDigest()) ? S_OK : S_FALSE;
-  }
-  if (s[0] != kBlockSig0 ||
-      s[1] != kBlockSig1 ||
-      s[2] != kBlockSig2 ||
-      s[3] != kBlockSig3 ||
-      s[4] != kBlockSig4 ||
-      s[5] != kBlockSig5)
-    return S_FALSE;
-  CombinedCrc.Update(crc);
-  return S_OK;
-}
-
-HRESULT CDecoder::DecodeFile(bool &isBZ, ICompressProgressInfo *progress)
-{
-  Progress = progress;
-  #ifndef _7ZIP_ST
-  RINOK(Create());
-  for (UInt32 t = 0; t < NumThreads; t++)
-  {
-    CState &s = m_States[t];
-    if (!s.Alloc())
-      return E_OUTOFMEMORY;
-    if (MtMode)
-    {
-      RINOK(s.StreamWasFinishedEvent.Reset());
-      RINOK(s.WaitingWasStartedEvent.Reset());
-      RINOK(s.CanWriteEvent.Reset());
-    }
-  }
   #else
-  if (!m_States[0].Alloc())
-    return E_OUTOFMEMORY;
+
+  unsigned c = (unsigned)(tt[0] & 0xFF);
+  
+  for (UInt32 i = 0; i < blockSize; i++)
+  {
+    unsigned c1 = c;
+    const UInt32 pos = counters[c];
+    c = (unsigned)(tt[(size_t)i + 1] & 0xFF);
+    counters[c1] = pos + 1;
+    tt[pos] |= (i << 8);
+  }
+
+  /*
+  {
+    const UInt32 pos = counters[c];
+    counters[c] = pos + 1;
+    tt[pos] |= (blockSize << 8);
+  }
+  */
+
   #endif
 
-  isBZ = false;
-  Byte s[6];
-  int i;
-  for (i = 0; i < 4; i++)
-    s[i] = ReadByte();
-  if (s[0] != kArSig0 ||
-      s[1] != kArSig1 ||
-      s[2] != kArSig2 ||
-      s[3] <= kArSig3 ||
-      s[3] > kArSig3 + kBlockSizeMultMax)
-    return S_OK;
-  isBZ = true;
-  UInt32 dicSize = (UInt32)(s[3] - kArSig3) * kBlockSizeStep;
 
-  CombinedCrc.Init();
-  #ifndef _7ZIP_ST
-  if (MtMode)
+  /*
+  for (UInt32 i = 0; i < blockSize; i++)
   {
-    NextBlockIndex = 0;
-    StreamWasFinished1 = StreamWasFinished2 = false;
-    CloseThreads = false;
-    CanStartWaitingEvent.Reset();
-    m_States[0].CanWriteEvent.Set();
-    BlockSizeMax = dicSize;
-    Result1 = Result2 = S_OK;
-    CanProcessEvent.Set();
-    UInt32 t;
-    for (t = 0; t < NumThreads; t++)
-      m_States[t].StreamWasFinishedEvent.Lock();
-    CanProcessEvent.Reset();
-    CanStartWaitingEvent.Set();
-    for (t = 0; t < NumThreads; t++)
-      m_States[t].WaitingWasStartedEvent.Lock();
-    CanStartWaitingEvent.Reset();
-    RINOK(Result2);
-    RINOK(Result1);
+    #ifdef BZIP2_BYTE_MODE
+      const unsigned c = ((const Byte *)(tt + kBlockSizeMax))[i];
+      const UInt32 pos = counters[c]++;
+      tt[pos] = (i << 8) | ((const Byte *)(tt + kBlockSizeMax))[pos];
+    #else
+      const unsigned c = (unsigned)(tt[i] & 0xFF);
+      const UInt32 pos = counters[c]++;
+      tt[pos] |= (i << 8);
+    #endif
   }
-  else
-  #endif
+  */
+}
+
+
+void CSpecState::Init(UInt32 origPtr, unsigned randMode) throw()
+{
+  _tPos = _tt[_tt[origPtr] >> 8];
+   _prevByte = (unsigned)(_tPos & 0xFF);
+  _reps = 0;
+  _randIndex = 0;
+  _randToGo = -1;
+  if (randMode)
   {
-    CState &state = m_States[0];
-    for (;;)
-    {
-      RINOK(SetRatioProgress(m_InStream.GetProcessedSize()));
-      bool wasFinished;
-      UInt32 crc;
-      RINOK(ReadSignatures(wasFinished, crc));
-      if (wasFinished)
-        return S_OK;
-
-      UInt32 blockSize, origPtr;
-      bool randMode;
-      RINOK(ReadBlock(&m_InStream, state.Counters, dicSize,
-        m_Selectors, m_HuffmanDecoders,
-        &blockSize, &origPtr, &randMode));
-      DecodeBlock1(state.Counters, blockSize);
-      if ((randMode ?
-          DecodeBlock2Rand(state.Counters + 256, blockSize, origPtr, m_OutStream) :
-          DecodeBlock2(state.Counters + 256, blockSize, origPtr, m_OutStream)) != crc)
-        return S_FALSE;
-    }
+    _randIndex = 1;
+    _randToGo = kRandNums[0] - 2;
   }
-  return SetRatioProgress(m_InStream.GetProcessedSize());
-}
-
-HRESULT CDecoder::CodeReal(ISequentialInStream *inStream, ISequentialOutStream *outStream,
-    bool &isBZ, ICompressProgressInfo *progress)
-{
-  isBZ = false;
-  try
-  {
-
-  if (!m_InStream.Create(kBufferSize))
-    return E_OUTOFMEMORY;
-  if (!m_OutStream.Create(kBufferSize))
-    return E_OUTOFMEMORY;
-
-  if (inStream)
-    m_InStream.SetStream(inStream);
-
-  CDecoderFlusher flusher(this, inStream != NULL);
-
-  if (_needInStreamInit)
-  {
-    m_InStream.Init();
-    _needInStreamInit = false;
-  }
-  _inStart = m_InStream.GetProcessedSize();
-
-  m_InStream.AlignToByte();
-
-  m_OutStream.SetStream(outStream);
-  m_OutStream.Init();
-
-  RINOK(DecodeFile(isBZ, progress));
-  flusher.NeedFlush = false;
-  return Flush();
-
-  }
-  catch(const CInBufferException &e)  { return e.ErrorCode; }
-  catch(const COutBufferException &e) { return e.ErrorCode; }
-  catch(...) { return E_FAIL; }
-}
-
-STDMETHODIMP CDecoder::Code(ISequentialInStream *inStream, ISequentialOutStream *outStream,
-    const UInt64 * /* inSize */, const UInt64 * /* outSize */, ICompressProgressInfo *progress)
-{
-  _needInStreamInit = true;
-  bool isBZ;
-  RINOK(CodeReal(inStream, outStream, isBZ, progress));
-  return isBZ ? S_OK : S_FALSE;
-}
-
-HRESULT CDecoder::CodeResume(ISequentialOutStream *outStream, bool &isBZ, ICompressProgressInfo *progress)
-{
-  return CodeReal(NULL, outStream, isBZ, progress);
-}
-
-STDMETHODIMP CDecoder::SetInStream(ISequentialInStream *inStream) { m_InStream.SetStream(inStream); return S_OK; }
-STDMETHODIMP CDecoder::ReleaseInStream() { m_InStream.ReleaseStream(); return S_OK; }
-
-#ifndef _7ZIP_ST
-
-static THREAD_FUNC_DECL MFThread(void *p) { ((CState *)p)->ThreadFunc(); return 0; }
-
-HRESULT CState::Create()
-{
-  RINOK_THREAD(StreamWasFinishedEvent.CreateIfNotCreated());
-  RINOK_THREAD(WaitingWasStartedEvent.CreateIfNotCreated());
-  RINOK_THREAD(CanWriteEvent.CreateIfNotCreated());
-  RINOK_THREAD(Thread.Create(MFThread, this));
-  return S_OK;
-}
-
-void CState::FinishStream()
-{
-  Decoder->StreamWasFinished1 = true;
-  StreamWasFinishedEvent.Set();
-  Decoder->CS.Leave();
-  Decoder->CanStartWaitingEvent.Lock();
-  WaitingWasStartedEvent.Set();
-}
-
-void CState::ThreadFunc()
-{
-  for (;;)
-  {
-    Decoder->CanProcessEvent.Lock();
-    Decoder->CS.Enter();
-    if (Decoder->CloseThreads)
-    {
-      Decoder->CS.Leave();
-      return;
-    }
-    if (Decoder->StreamWasFinished1)
-    {
-      FinishStream();
-      continue;
-    }
-    HRESULT res = S_OK;
-
-    UInt32 blockIndex = Decoder->NextBlockIndex;
-    UInt32 nextBlockIndex = blockIndex + 1;
-    if (nextBlockIndex == Decoder->NumThreads)
-      nextBlockIndex = 0;
-    Decoder->NextBlockIndex = nextBlockIndex;
-    UInt32 crc;
-    UInt64 packSize = 0;
-    UInt32 blockSize = 0, origPtr = 0;
-    bool randMode = false;
-
-    try
-    {
-      bool wasFinished;
-      res = Decoder->ReadSignatures(wasFinished, crc);
-      if (res != S_OK)
-      {
-        Decoder->Result1 = res;
-        FinishStream();
-        continue;
-      }
-      if (wasFinished)
-      {
-        Decoder->Result1 = res;
-        FinishStream();
-        continue;
-      }
-
-      res = ReadBlock(&Decoder->m_InStream, Counters, Decoder->BlockSizeMax,
-          Decoder->m_Selectors, Decoder->m_HuffmanDecoders,
-          &blockSize, &origPtr, &randMode);
-      if (res != S_OK)
-      {
-        Decoder->Result1 = res;
-        FinishStream();
-        continue;
-      }
-      packSize = Decoder->m_InStream.GetProcessedSize();
-    }
-    catch(const CInBufferException &e) { res = e.ErrorCode;  if (res != S_OK) res = E_FAIL; }
-    catch(...) { res = E_FAIL; }
-    if (res != S_OK)
-    {
-      Decoder->Result1 = res;
-      FinishStream();
-      continue;
-    }
-
-    Decoder->CS.Leave();
-
-    DecodeBlock1(Counters, blockSize);
-
-    bool needFinish = true;
-    try
-    {
-      Decoder->m_States[blockIndex].CanWriteEvent.Lock();
-      needFinish = Decoder->StreamWasFinished2;
-      if (!needFinish)
-      {
-        if ((randMode ?
-            DecodeBlock2Rand(Counters + 256, blockSize, origPtr, Decoder->m_OutStream) :
-            DecodeBlock2(Counters + 256, blockSize, origPtr, Decoder->m_OutStream)) == crc)
-          res = Decoder->SetRatioProgress(packSize);
-        else
-          res = S_FALSE;
-      }
-    }
-    catch(const COutBufferException &e) { res = e.ErrorCode; if (res != S_OK) res = E_FAIL; }
-    catch(...) { res = E_FAIL; }
-    if (res != S_OK)
-    {
-      Decoder->Result2 = res;
-      Decoder->StreamWasFinished2 = true;
-    }
-    Decoder->m_States[nextBlockIndex].CanWriteEvent.Set();
-    if (res != S_OK || needFinish)
-    {
-      StreamWasFinishedEvent.Set();
-      Decoder->CanStartWaitingEvent.Lock();
-      WaitingWasStartedEvent.Set();
-    }
-  }
-}
-
-STDMETHODIMP CDecoder::SetNumberOfThreads(UInt32 numThreads)
-{
-  NumThreads = numThreads;
-  if (NumThreads < 1)
-    NumThreads = 1;
-  if (NumThreads > kNumThreadsMax)
-    NumThreads = kNumThreadsMax;
-  return S_OK;
-}
-
-#endif
-
-HRESULT CDecoder::SetRatioProgress(UInt64 packSize)
-{
-  if (!Progress)
-    return S_OK;
-  packSize -= _inStart;
-  UInt64 unpackSize = m_OutStream.GetProcessedSize();
-  return Progress->SetRatioInfo(&packSize, &unpackSize);
+  _crc.Init();
 }
 
 
-// ---------- NSIS ----------
 
-enum
+NO_INLINE
+Byte * CSpecState::Decode(Byte *data, size_t size) throw()
 {
-  NSIS_STATE_INIT,
-  NSIS_STATE_NEW_BLOCK,
-  NSIS_STATE_DATA,
-  NSIS_STATE_FINISHED,
-  NSIS_STATE_ERROR
-};
-
-STDMETHODIMP CNsisDecoder::SetInStream(ISequentialInStream *inStream) { m_InStream.SetStream(inStream); return S_OK; }
-STDMETHODIMP CNsisDecoder::ReleaseInStream() { m_InStream.ReleaseStream(); return S_OK; }
-
-STDMETHODIMP CNsisDecoder::SetOutStreamSize(const UInt64 * /* outSize */)
-{
-  _nsisState = NSIS_STATE_INIT;
-  return S_OK;
-}
-
-STDMETHODIMP CNsisDecoder::Read(void *data, UInt32 size, UInt32 *processedSize)
-{
-  try {
-
-  *processedSize = 0;
-  if (_nsisState == NSIS_STATE_FINISHED)
-    return S_OK;
-  if (_nsisState == NSIS_STATE_ERROR)
-    return S_FALSE;
   if (size == 0)
-    return S_OK;
+    return data;
 
-  CState &state = m_State;
+  unsigned prevByte = _prevByte;
+  int reps = _reps;
+  CBZip2Crc crc = _crc;
+  const Byte *lim = data + size;
 
-  if (_nsisState == NSIS_STATE_INIT)
+  while (reps > 0)
   {
-    if (!m_InStream.Create(kBufferSize))
-      return E_OUTOFMEMORY;
-    if (!state.Alloc())
-      return E_OUTOFMEMORY;
-    m_InStream.Init();
-    _nsisState = NSIS_STATE_NEW_BLOCK;
-  }
-
-  if (_nsisState == NSIS_STATE_NEW_BLOCK)
-  {
-    Byte b = (Byte)m_InStream.ReadBits(8);
-    if (b == kFinSig0)
-    {
-      _nsisState = NSIS_STATE_FINISHED;
-      return S_OK;
-    }
-    if (b != kBlockSig0)
-    {
-      _nsisState = NSIS_STATE_ERROR;
-      return S_FALSE;
-    }
-    UInt32 origPtr;
-    RINOK(ReadBlock(&m_InStream, state.Counters, 9 * kBlockSizeStep,
-        m_Selectors, m_HuffmanDecoders, &_blockSize, &origPtr, NULL));
-    DecodeBlock1(state.Counters, _blockSize);
-    const UInt32 *tt = state.Counters + 256;
-    _tPos = tt[tt[origPtr] >> 8];
-    _prevByte = (unsigned)(_tPos & 0xFF);
-    _numReps = 0;
-    _repRem = 0;
-    _nsisState = NSIS_STATE_DATA;
+    reps--;
+    *data++ = (Byte)prevByte;
+    crc.UpdateByte(prevByte);
+    if (data == lim)
+      break;
   }
 
   UInt32 tPos = _tPos;
-  unsigned prevByte = _prevByte;
-  unsigned numReps = _numReps;
   UInt32 blockSize = _blockSize;
-  const UInt32 *tt = state.Counters + 256;
+  const UInt32 *tt = _tt;
 
-  while (_repRem)
-  {
-    _repRem--;
-    *(Byte *)data = (Byte)prevByte;
-    data = (Byte *)data + 1;
-    (*processedSize)++;
-    if (--size == 0)
-      return S_OK;
-  }
+  if (data != lim && blockSize)
 
-  if (blockSize == 0)
-  {
-    _nsisState = NSIS_STATE_NEW_BLOCK;
-    return S_OK;
-  }
-
-  do
+  for (;;)
   {
     unsigned b = (unsigned)(tPos & 0xFF);
     tPos = tt[tPos >> 8];
     blockSize--;
-    
-    if (numReps == kRleModeRepSize)
+
+    if (_randToGo >= 0)
     {
-      numReps = 0;
-      while (b)
+      if (_randToGo == 0)
       {
-        b--;
-        *(Byte *)data = (Byte)prevByte;
-        data = (Byte *)data + 1;
-        (*processedSize)++;
-        if (--size == 0)
-          break;
+        b ^= 1;
+        _randToGo = kRandNums[_randIndex];
+        _randIndex++;
+        _randIndex &= 0x1FF;
       }
-      _repRem = b;
+      _randToGo--;
+    }
+
+    if (reps != -(int)kRleModeRepSize)
+    {
+      if (b != prevByte)
+        reps = 0;
+      reps--;
+      prevByte = b;
+      *data++ = (Byte)b;
+      crc.UpdateByte(b);
+      if (data == lim || blockSize == 0)
+        break;
       continue;
     }
-    if (b != prevByte)
-      numReps = 0;
-    numReps++;
-    prevByte = b;
-    *(Byte *)data = (Byte)b;
-    data = (Byte *)data + 1;
-    (*processedSize)++;
-    size--;
+
+    reps = b;
+    while (reps)
+    {
+      reps--;
+      *data++ = (Byte)prevByte;
+      crc.UpdateByte(prevByte);
+      if (data == lim)
+        break;
+    }
+    if (data == lim)
+      break;
+    if (blockSize == 0)
+      break;
   }
-  while (size && blockSize);
+
+  if (blockSize == 1 && reps == -(int)kRleModeRepSize)
+  {
+    unsigned b = (unsigned)(tPos & 0xFF);
+    tPos = tt[tPos >> 8];
+    blockSize--;
+
+    if (_randToGo >= 0)
+    {
+      if (_randToGo == 0)
+      {
+        b ^= 1;
+        _randToGo = kRandNums[_randIndex];
+        _randIndex++;
+        _randIndex &= 0x1FF;
+      }
+      _randToGo--;
+    }
+
+    reps = b;
+  }
+
   _tPos = tPos;
   _prevByte = prevByte;
-  _numReps = numReps;
+  _reps = reps;
+  _crc = crc;
   _blockSize = blockSize;
-  return S_OK;
-
-  }
-  catch(const CInBufferException &e)  { return e.ErrorCode; }
-  catch(...) { return S_FALSE; }
+  
+  return data;
 }
+
+
+HRESULT CDecoder::Flush()
+{
+  if (_writeRes == S_OK)
+  {
+    _writeRes = WriteStream(_outStream, _outBuf, _outPos);
+    _outWritten += _outPos;
+    _outPos = 0;
+  }
+  return _writeRes;
+}
+
+
+NO_INLINE
+HRESULT CDecoder::DecodeBlock(const CBlockProps &props)
+{
+  _calcedBlockCrc = 0;
+  _blockFinished = false;
+
+  CSpecState block;
+
+  block._blockSize = props.blockSize;
+  block._tt = _counters + 256;
+
+  block.Init(props.origPtr, props.randMode);
+
+  for (;;)
+  {
+    Byte *data = _outBuf + _outPos;
+    size_t size = kOutBufSize - _outPos;
+    
+    if (_outSizeDefined)
+    {
+      const UInt64 rem = _outSize - _outPosTotal;
+      if (size >= rem)
+      {
+        size = (size_t)rem;
+        if (size == 0)
+          return FinishMode ? S_FALSE : S_OK;
+      }
+    }
+
+    TICKS_START
+    const size_t processed = block.Decode(data, size) - data;
+    TICKS_UPDATE(2)
+
+    _outPosTotal += processed;
+    _outPos += processed;
+    
+    if (processed >= size)
+    {
+      RINOK(Flush());
+    }
+    
+    if (block.Finished())
+    {
+      _blockFinished = true;
+      _calcedBlockCrc = block._crc.GetDigest();
+      return S_OK;
+    }
+  }
+}
+
+
+CDecoder::CDecoder():
+    _inBuf(NULL),
+    _outBuf(NULL),
+    _counters(NULL),
+    FinishMode(false),
+    _outSizeDefined(false)
+{
+  #ifndef _7ZIP_ST
+  MtMode = false;
+  NeedWaitScout = false;
+  // ScoutRes = S_OK;
+  #endif
+}
+
+
+CDecoder::~CDecoder()
+{
+  PRIN("\n~CDecoder()");
+
+  #ifndef _7ZIP_ST
+  
+  if (Thread.IsCreated())
+  {
+    WaitScout();
+
+    _block.StopScout = true;
+
+    PRIN("\nScoutEvent.Set()");
+    ScoutEvent.Set();
+
+    PRIN("\nThread.Wait()()");
+    Thread.Wait();
+    PRIN("\n after Thread.Wait()()");
+    Thread.Close();
+
+    // if (ScoutRes != S_OK) throw ScoutRes;
+  }
+  
+  #endif
+
+  BigFree(_counters);
+  MidFree(_outBuf);
+  MidFree(_inBuf);
+}
+
+
+HRESULT CDecoder::ReadInput()
+{
+  if (Base._buf != Base._lim || _inputFinished || _inputRes != S_OK)
+    return _inputRes;
+
+  _inProcessed += (Base._buf - _inBuf);
+  Base._buf = _inBuf;
+  Base._lim = _inBuf;
+  UInt32 size = 0;
+  _inputRes = Base.InStream->Read(_inBuf, kInBufSize, &size);
+  _inputFinished = (size == 0);
+  Base._lim = _inBuf + size;
+  return _inputRes;
+}
+
+
+void CDecoder::StartNewStream()
+{
+  Base.state = STATE_STREAM_SIGNATURE;
+  Base.state2 = 0;
+  Base.IsBz = false;
+}
+
+
+HRESULT CDecoder::ReadStreamSignature()
+{
+  for (;;)
+  {
+    RINOK(ReadInput());
+    SRes res = Base.ReadStreamSignature2();
+    if (res != SZ_OK)
+      return S_FALSE;
+    if (Base.state == STATE_BLOCK_SIGNATURE)
+      return S_OK;
+    if (_inputFinished)
+    {
+      Base.NeedMoreInput = true;
+      return S_FALSE;
+    }
+  }
+}
+
+
+HRESULT CDecoder::StartRead()
+{
+  StartNewStream();
+  return ReadStreamSignature();
+}
+
+
+HRESULT CDecoder::ReadBlockSignature()
+{
+  for (;;)
+  {
+    RINOK(ReadInput());
+    
+    SRes res = Base.ReadBlockSignature2();
+    
+    if (Base.state == STATE_STREAM_FINISHED)
+      Base.FinishedPackSize = GetInputProcessedSize();
+    if (res != SZ_OK)
+      return S_FALSE;
+    if (Base.state != STATE_BLOCK_SIGNATURE)
+      return S_OK;
+    if (_inputFinished)
+    {
+      Base.NeedMoreInput = true;
+      return S_FALSE;
+    }
+  }
+}
+
+
+HRESULT CDecoder::ReadBlock()
+{
+  for (;;)
+  {
+    RINOK(ReadInput());
+
+    SRes res = Base.ReadBlock2();
+
+    if (res != SZ_OK)
+      return S_FALSE;
+    if (Base.state == STATE_BLOCK_SIGNATURE)
+      return S_OK;
+    if (_inputFinished)
+    {
+      Base.NeedMoreInput = true;
+      return S_FALSE;
+    }
+  }
+}
+
+
+
+HRESULT CDecoder::DecodeStreams(ICompressProgressInfo *progress)
+{
+  {
+    #ifndef _7ZIP_ST
+    _block.StopScout = false;
+    #endif
+  }
+
+  RINOK(StartRead());
+
+  UInt64 inPrev = 0;
+  UInt64 outPrev = 0;
+
+  {
+    #ifndef _7ZIP_ST
+    CWaitScout_Releaser waitScout_Releaser(this);
+
+    bool useMt = false;
+    #endif
+
+    bool wasFinished = false;
+
+    UInt32 crc = 0;
+    UInt32 nextCrc = 0;
+    HRESULT nextRes = S_OK;
+
+    UInt64 packPos = 0;
+
+    CBlockProps props;
+
+    props.blockSize = 0;
+
+    for (;;)
+    {
+      if (progress)
+      {
+        const UInt64 outCur = GetOutProcessedSize();
+        if (packPos - inPrev >= kProgressStep || outCur - outPrev >= kProgressStep)
+        {
+          RINOK(progress->SetRatioInfo(&packPos, &outCur));
+          inPrev = packPos;
+          outPrev = outCur;
+        }
+      }
+
+      if (props.blockSize == 0)
+        if (wasFinished || nextRes != S_OK)
+          return nextRes;
+
+      if (
+          #ifndef _7ZIP_ST
+          !useMt &&
+          #endif
+          !wasFinished && Base.state == STATE_BLOCK_SIGNATURE)
+      {
+        nextRes = ReadBlockSignature();
+        nextCrc = Base.crc;
+        packPos = GetInputProcessedSize();
+
+        wasFinished = true;
+
+        if (nextRes != S_OK)
+          continue;
+
+        if (Base.state == STATE_STREAM_FINISHED)
+        {
+          if (!Base.DecodeAllStreams)
+          {
+            wasFinished = true;
+            continue;
+          }
+          
+          nextRes = StartRead();
+         
+          if (Base.NeedMoreInput)
+          {
+            if (Base.state2 == 0)
+              Base.NeedMoreInput = false;
+            wasFinished = true;
+            nextRes = S_OK;
+            continue;
+          }
+          
+          if (nextRes != S_OK)
+            continue;
+
+          wasFinished = false;
+          continue;
+        }
+
+        wasFinished = false;
+
+        #ifndef _7ZIP_ST
+        if (MtMode)
+        if (props.blockSize != 0)
+        {
+          // we start multithreading, if next block is big enough.
+          const UInt32 k_Mt_BlockSize_Threshold = (1 << 12);  // (1 << 13)
+          if (props.blockSize > k_Mt_BlockSize_Threshold)
+          {
+            if (!Thread.IsCreated())
+            {
+              PRIN("=== MT_MODE");
+              RINOK(CreateThread());
+            }
+            useMt = true;
+          }
+        }
+        #endif
+      }
+
+      if (props.blockSize == 0)
+      {
+        crc = nextCrc;
+        
+        #ifndef _7ZIP_ST
+        if (useMt)
+        {
+          PRIN("DecoderEvent.Lock()");
+          RINOK(DecoderEvent.Lock());
+          NeedWaitScout = false;
+          PRIN("-- DecoderEvent.Lock()");
+          props = _block.Props;
+          nextCrc = _block.NextCrc;
+          if (_block.Crc_Defined)
+            crc = _block.Crc;
+          packPos = _block.PackPos;
+          wasFinished = _block.WasFinished;
+          RINOK(_block.Res);
+        }
+        else
+        #endif
+        {
+          if (Base.state != STATE_BLOCK_START)
+            return E_FAIL;
+
+          TICKS_START
+          Base.Props.randMode = 1;
+          RINOK(ReadBlock());
+          TICKS_UPDATE(0)
+          
+          props = Base.Props;
+          continue;
+        }
+      }
+
+      if (props.blockSize != 0)
+      {
+        TICKS_START
+        DecodeBlock1(_counters, props.blockSize);
+        TICKS_UPDATE(1)
+      }
+      
+      #ifndef _7ZIP_ST
+      if (useMt && !wasFinished)
+      {
+        /*
+        if (props.blockSize == 0)
+        {
+          // this codes switches back to single-threadMode
+          useMt = false;
+          PRIN("=== ST_MODE");
+          continue;
+          }
+        */
+        
+        PRIN("ScoutEvent.Set()");
+        RINOK(ScoutEvent.Set());
+        NeedWaitScout = true;
+      }
+      #endif
+        
+      if (props.blockSize == 0)
+        continue;
+
+      RINOK(DecodeBlock(props));
+
+      if (!_blockFinished)
+        return nextRes;
+
+      props.blockSize = 0;
+      if (_calcedBlockCrc != crc)
+      {
+        BlockCrcError = true;
+        return S_FALSE;
+      }
+    }
+  }
+}
+
+
+
+
+bool CDecoder::CreateInputBufer()
+{
+  if (!_inBuf)
+  {
+    _inBuf = (Byte *)MidAlloc(kInBufSize);
+    if (!_inBuf)
+      return false;
+  }
+  if (!_counters)
+  {
+    _counters = (UInt32 *)::BigAlloc((256 + kBlockSizeMax) * sizeof(UInt32)
+      #ifdef BZIP2_BYTE_MODE
+        + kBlockSizeMax
+      #endif
+        + 256);
+    if (!_counters)
+      return false;
+    Base.Counters = _counters;
+  }
+  return true;
+}
+
+
+void CDecoder::InitOutSize(const UInt64 *outSize)
+{
+  _outPosTotal = 0;
+  
+  _outSizeDefined = false;
+  _outSize = 0;
+  if (outSize)
+  {
+    _outSize = *outSize;
+    _outSizeDefined = true;
+  }
+  
+  BlockCrcError = false;
+  
+  Base.InitNumStreams2();
+}
+
+
+STDMETHODIMP CDecoder::Code(ISequentialInStream *inStream, ISequentialOutStream *outStream,
+    const UInt64 * /* inSize */, const UInt64 *outSize, ICompressProgressInfo *progress)
+{
+  /*
+  {
+    RINOK(SetInStream(inStream));
+    RINOK(SetOutStreamSize(outSize));
+
+    RINOK(CopyStream(this, outStream, progress));
+    return ReleaseInStream();
+  }
+  */
+
+  InitOutSize(outSize);
+
+  _inputFinished = false;
+  _inputRes = S_OK;
+  _writeRes = S_OK;
+
+  try {
+
+  if (!CreateInputBufer())
+    return E_OUTOFMEMORY;
+
+  if (!_outBuf)
+  {
+    _outBuf = (Byte *)MidAlloc(kOutBufSize);
+    if (!_outBuf)
+      return E_OUTOFMEMORY;
+  }
+
+  Base.InStream = inStream;
+  
+  InitInputBuffer();
+  
+  _outStream = outStream;
+  _outWritten = 0;
+  _outPos = 0;
+
+  HRESULT res = DecodeStreams(progress);
+
+  Flush();
+
+  Base.InStream = NULL;
+  _outStream = NULL;
+
+  /*
+  if (res == S_OK)
+    if (FinishMode && inSize && *inSize != GetInputProcessedSize())
+      res = S_FALSE;
+  */
+
+  if (res != S_OK)
+    return res;
+
+  } catch(...) { return E_FAIL; }
+
+  return _writeRes;
+}
+
+
+STDMETHODIMP CDecoder::SetFinishMode(UInt32 finishMode)
+{
+  FinishMode = (finishMode != 0);
+  return S_OK;
+}
+
+
+STDMETHODIMP CDecoder::GetInStreamProcessedSize(UInt64 *value)
+{
+  *value = GetInputProcessedSize();
+  return S_OK;
+}
+
+
+#ifndef _7ZIP_ST
+
+#define RINOK_THREAD(x) { WRes __result_ = (x); if (__result_ != 0) return __result_; }
+
+static THREAD_FUNC_DECL RunScout2(void *p) { ((CDecoder *)p)->RunScout(); return 0; }
+
+HRESULT CDecoder::CreateThread()
+{
+  RINOK_THREAD(DecoderEvent.CreateIfNotCreated());
+  RINOK_THREAD(ScoutEvent.CreateIfNotCreated());
+  RINOK_THREAD(Thread.Create(RunScout2, this));
+  return S_OK;
+}
+
+void CDecoder::RunScout()
+{
+  for (;;)
+  {
+    {
+      PRIN_MT("ScoutEvent.Lock()");
+      WRes wres = ScoutEvent.Lock();
+      PRIN_MT("-- ScoutEvent.Lock()");
+      if (wres != 0)
+      {
+        // ScoutRes = wres;
+        return;
+      }
+    }
+
+    CBlock &block = _block;
+
+    if (block.StopScout)
+    {
+      // ScoutRes = S_OK;
+      return;
+    }
+
+    block.Res = S_OK;
+    block.WasFinished = false;
+
+    HRESULT res = S_OK;
+
+    try
+    {
+      UInt64 packPos = GetInputProcessedSize();
+
+      block.Props.blockSize = 0;
+      block.Crc_Defined = false;
+      // block.NextCrc_Defined = false;
+      block.NextCrc = 0;
+      
+      for (;;)
+      {
+        if (Base.state == STATE_BLOCK_SIGNATURE)
+        {
+          res = ReadBlockSignature();
+
+          if (res != S_OK)
+            break;
+          
+          if (block.Props.blockSize == 0)
+          {
+            block.Crc = Base.crc;
+            block.Crc_Defined = true;
+          }
+          else
+          {
+            block.NextCrc = Base.crc;
+            // block.NextCrc_Defined = true;
+          }
+
+          continue;
+        }
+
+        if (Base.state == STATE_BLOCK_START)
+        {
+          if (block.Props.blockSize != 0)
+            break;
+
+          Base.Props.randMode = 1;
+
+          res = ReadBlock();
+          
+          PRIN_MT("-- Base.ReadBlock");
+          if (res != S_OK)
+            break;
+          block.Props = Base.Props;
+          continue;
+        }
+
+        if (Base.state == STATE_STREAM_FINISHED)
+        {
+          if (!Base.DecodeAllStreams)
+          {
+            block.WasFinished = true;
+            break;
+          }
+          
+          res = StartRead();
+          
+          if (Base.NeedMoreInput)
+          {
+            if (Base.state2 == 0)
+              Base.NeedMoreInput = false;
+            block.WasFinished = true;
+            res = S_OK;
+            break;
+          }
+          
+          if (res != S_OK)
+            break;
+          
+          if (GetInputProcessedSize() - packPos > 0) // kProgressStep
+            break;
+          continue;
+        }
+        
+        // throw 1;
+        res = E_FAIL;
+        break;
+      }
+    }
+      
+    catch (...) { res = E_FAIL; }
+      
+    if (res != S_OK)
+    {
+      PRIN_MT("error");
+      block.Res = res;
+      block.WasFinished = true;
+    }
+
+    block.PackPos = GetInputProcessedSize();
+    PRIN_MT("DecoderEvent.Set()");
+    WRes wres = DecoderEvent.Set();
+    if (wres != 0)
+    {
+      // ScoutRes = wres;
+      return;
+    }
+  }
+}
+
+
+STDMETHODIMP CDecoder::SetNumberOfThreads(UInt32 numThreads)
+{
+  MtMode = (numThreads > 1);
+
+  #ifndef BZIP2_BYTE_MODE
+  MtMode = false;
+  #endif
+
+  // MtMode = false;
+  return S_OK;
+}
+
+#endif
+
+
+
+#ifndef NO_READ_FROM_CODER
+
+
+STDMETHODIMP CDecoder::SetInStream(ISequentialInStream *inStream)
+{
+  Base.InStreamRef = inStream;
+  Base.InStream = inStream;
+  return S_OK;
+}
+
+
+STDMETHODIMP CDecoder::ReleaseInStream()
+{
+  Base.InStreamRef.Release();
+  Base.InStream = NULL;
+  return S_OK;
+}
+
+
+
+STDMETHODIMP CDecoder::SetOutStreamSize(const UInt64 *outSize)
+{
+  InitOutSize(outSize);
+
+  if (!CreateInputBufer())
+    return E_OUTOFMEMORY;
+
+  InitInputBuffer();
+
+  StartNewStream();
+
+  _blockFinished = true;
+
+  ErrorResult = S_OK;
+
+  _inputFinished = false;
+  _inputRes = S_OK;
+
+  return S_OK;
+}
+
+
+
+STDMETHODIMP CDecoder::Read(void *data, UInt32 size, UInt32 *processedSize)
+{
+  *processedSize = 0;
+
+  try {
+
+  if (ErrorResult != S_OK)
+    return ErrorResult;
+
+  for (;;)
+  {
+    if (Base.state == STATE_STREAM_FINISHED)
+    {
+      if (!Base.DecodeAllStreams)
+        return ErrorResult;
+      StartNewStream();
+      continue;
+    }
+
+    if (Base.state == STATE_STREAM_SIGNATURE)
+    {
+      ErrorResult = ReadStreamSignature();
+
+      if (Base.NeedMoreInput)
+        if (Base.state2 == 0 && Base.NumStreams != 0)
+        {
+          Base.NeedMoreInput = false;
+          ErrorResult = S_OK;
+          return S_OK;
+        }
+      if (ErrorResult != S_OK)
+        return ErrorResult;
+      continue;
+    }
+    
+    if (_blockFinished && Base.state == STATE_BLOCK_SIGNATURE)
+    {
+      ErrorResult = ReadBlockSignature();
+      
+      if (ErrorResult != S_OK)
+        return ErrorResult;
+      
+      continue;
+    }
+
+    if (_outSizeDefined)
+    {
+      const UInt64 rem = _outSize - _outPosTotal;
+      if (size >= rem)
+        size = (UInt32)rem;
+    }
+    if (size == 0)
+      return S_OK;
+    
+    if (_blockFinished)
+    {
+      if (Base.state != STATE_BLOCK_START)
+      {
+        ErrorResult = E_FAIL;
+        return ErrorResult;
+      }
+      
+      Base.Props.randMode = 1;
+      ErrorResult = ReadBlock();
+      
+      if (ErrorResult != S_OK)
+        return ErrorResult;
+      
+      DecodeBlock1(_counters, Base.Props.blockSize);
+      
+      _spec._blockSize = Base.Props.blockSize;
+      _spec._tt = _counters + 256;
+      _spec.Init(Base.Props.origPtr, Base.Props.randMode);
+
+      _blockFinished = false;
+    }
+
+    {
+      Byte *ptr = _spec.Decode((Byte *)data, size);
+      
+      const UInt32 processed = (UInt32)(ptr - (Byte *)data);
+      data = ptr;
+      size -= processed;
+      (*processedSize) += processed;
+      _outPosTotal += processed;
+      
+      if (_spec.Finished())
+      {
+        _blockFinished = true;
+        if (Base.crc != _spec._crc.GetDigest())
+        {
+          BlockCrcError = true;
+          ErrorResult = S_FALSE;
+          return ErrorResult;
+        }
+      }
+    }
+  }
+
+  } catch(...) { ErrorResult = S_FALSE; return S_FALSE; }
+}
+
+
+
+// ---------- NSIS ----------
+
+STDMETHODIMP CNsisDecoder::Read(void *data, UInt32 size, UInt32 *processedSize)
+{
+  *processedSize = 0;
+
+  try {
+
+  if (ErrorResult != S_OK)
+    return ErrorResult;
+    
+  if (Base.state == STATE_STREAM_FINISHED)
+    return S_OK;
+
+  if (Base.state == STATE_STREAM_SIGNATURE)
+  {
+    Base.blockSizeMax = 9 * kBlockSizeStep;
+    Base.state = STATE_BLOCK_SIGNATURE;
+    // Base.state2 = 0;
+  }
+
+  for (;;)
+  {
+    if (_blockFinished && Base.state == STATE_BLOCK_SIGNATURE)
+    {
+      ErrorResult = ReadInput();
+      if (ErrorResult != S_OK)
+        return ErrorResult;
+      
+      int b;
+      Base.ReadByte(b);
+      if (b < 0)
+      {
+        ErrorResult = S_FALSE;
+        return ErrorResult;
+      }
+      
+      if (b == kFinSig0)
+      {
+        /*
+        if (!Base.AreRemainByteBitsEmpty())
+          ErrorResult = S_FALSE;
+        */
+        Base.state = STATE_STREAM_FINISHED;
+        return ErrorResult;
+      }
+      
+      if (b != kBlockSig0)
+      {
+        ErrorResult = S_FALSE;
+        return ErrorResult;
+      }
+      
+      Base.state = STATE_BLOCK_START;
+    }
+
+    if (_outSizeDefined)
+    {
+      const UInt64 rem = _outSize - _outPosTotal;
+      if (size >= rem)
+        size = (UInt32)rem;
+    }
+    if (size == 0)
+      return S_OK;
+    
+    if (_blockFinished)
+    {
+      if (Base.state != STATE_BLOCK_START)
+      {
+        ErrorResult = E_FAIL;
+        return ErrorResult;
+      }
+
+      Base.Props.randMode = 0;
+      ErrorResult = ReadBlock();
+      
+      if (ErrorResult != S_OK)
+        return ErrorResult;
+      
+      DecodeBlock1(_counters, Base.Props.blockSize);
+      
+      _spec._blockSize = Base.Props.blockSize;
+      _spec._tt = _counters + 256;
+      _spec.Init(Base.Props.origPtr, Base.Props.randMode);
+      
+      _blockFinished = false;
+    }
+    
+    {
+      Byte *ptr = _spec.Decode((Byte *)data, size);
+      
+      const UInt32 processed = (UInt32)(ptr - (Byte *)data);
+      data = ptr;
+      size -= processed;
+      (*processedSize) += processed;
+      _outPosTotal += processed;
+      
+      if (_spec.Finished())
+        _blockFinished = true;
+    }
+  }
+
+  } catch(...) { ErrorResult = S_FALSE; return S_FALSE; }
+}
+
+#endif
 
 }}

@@ -5,9 +5,16 @@
 #include "../../Common/RegisterArc.h"
 
 #include "NsisHandler.h"
-static IInArchive *CreateArc() { return new NArchive::NNsis::CHandler; }
 
-static CArcInfo g_ArcInfo =
-  { L"Nsis", L"", 0, 0x9, NSIS_SIGNATURE, NArchive::NNsis::kSignatureSize, false, CreateArc, 0 };
+namespace NArchive {
+namespace NNsis {
 
-REGISTER_ARC(Nsis)
+REGISTER_ARC_I(
+  "Nsis", "nsis", 0, 0x9,
+  kSignature,
+  4,
+  NArcInfoFlags::kFindSignature |
+  NArcInfoFlags::kUseGlobalOffset,
+  NULL)
+
+}}

@@ -10,19 +10,16 @@
 
 #include "../../../C/CpuArch.h"
 
-#include "Common/Buffer.h"
-#include "Common/ComTry.h"
-#include "Common/IntToString.h"
-#include "Common/MyString.h"
+#include "../../Common/ComTry.h"
+#include "../../Common/IntToString.h"
+#include "../../Common/MyBuffer.h"
 
-#include "Windows/PropVariant.h"
+#include "../../Windows/PropVariant.h"
 
-#include "../Common/LimitedStreams.h"
-#include "../Common/ProgressUtils.h"
 #include "../Common/RegisterArc.h"
 #include "../Common/StreamUtils.h"
 
-#include "../Compress/CopyCoder.h"
+#include "HandlerCont.h"
 
 #ifdef SHOW_DEBUG_INFO
 #define PRF(x) x
@@ -56,28 +53,24 @@ struct CChs
 
 #define RINOZ(x) { int __tt = (x); if (__tt != 0) return __tt; }
 
+// Chs in some MBRs contains only low bits of "Cyl number". So we disable check.
+/*
 static int CompareChs(const CChs &c1, const CChs &c2)
 {
   RINOZ(MyCompare(c1.GetCyl(), c2.GetCyl()));
   RINOZ(MyCompare(c1.Head, c2.Head));
   return MyCompare(c1.GetSector(), c2.GetSector());
 }
-
-static void AddUIntToString(UInt32 val, AString &res)
-{
-  char s[16];
-  ConvertUInt32ToString(val, s);
-  res += s;
-}
+*/
 
 void CChs::ToString(NCOM::CPropVariant &prop) const
 {
   AString s;
-  AddUIntToString(GetCyl(), s);
+  s.Add_UInt32(GetCyl());
   s += '-';
-  AddUIntToString(Head, s);
+  s.Add_UInt32(Head);
   s += '-';
-  AddUIntToString(GetSector(), s);
+  s.Add_UInt32(GetSector());
   prop = s;
 }
 
@@ -112,12 +105,11 @@ struct CPartition
       return true;
     if (Status != 0 && Status != 0x80)
       return false;
-    return
-       BeginChs.Check() &&
-       EndChs.Check() &&
-       CompareChs(BeginChs, EndChs) <= 0 &&
-       NumBlocks > 0 &&
-       CheckLbaLimits();
+    return BeginChs.Check()
+       && EndChs.Check()
+       // && CompareChs(BeginChs, EndChs) <= 0
+       && NumBlocks > 0
+       && CheckLbaLimits();
   }
 
   #ifdef SHOW_DEBUG_INFO
@@ -138,7 +130,7 @@ struct CPartType
   const char *Name;
 };
 
-static const char *kFat = "fat";
+#define kFat "fat"
 
 static const CPartType kPartTypes[] =
 {
@@ -157,19 +149,22 @@ static const CPartType kPartTypes[] =
   { 0x1B, kFat, "FAT32-Hidden" },
   { 0x1C, kFat, "FAT32-LBA-Hidden" },
   { 0x1E, kFat, "FAT16-LBA-WIN95-Hidden" },
+  { 0x27, "ntfs", "NTFS-WinRE" },
   { 0x82, 0, "Solaris x86 / Linux swap" },
   { 0x83, 0, "Linux" },
+  { 0x8E, "lvm", "Linux LVM" },
+  { 0xA5, 0, "BSD slice" },
   { 0xBE, 0, "Solaris 8 boot" },
   { 0xBF, 0, "New Solaris x86" },
   { 0xC2, 0, "Linux-Hidden" },
   { 0xC3, 0, "Linux swap-Hidden" },
-  { 0xEE, 0, "EFI-MBR" },
+  { 0xEE, 0, "GPT" },
   { 0xEE, 0, "EFI" }
 };
 
 static int FindPartType(UInt32 type)
 {
-  for (int i = 0; i < sizeof(kPartTypes) / sizeof(kPartTypes[0]); i++)
+  for (unsigned i = 0; i < ARRAY_SIZE(kPartTypes); i++)
     if (kPartTypes[i].Id == type)
       return i;
   return -1;
@@ -183,34 +178,36 @@ struct CItem
   CPartition Part;
 };
 
-class CHandler:
-  public IInArchive,
-  public IInArchiveGetStream,
-  public CMyUnknownImp
+class CHandler: public CHandlerCont
 {
-  CMyComPtr<IInStream> _stream;
   CObjectVector<CItem> _items;
   UInt64 _totalSize;
   CByteBuffer _buffer;
 
-  HRESULT ReadTables(IInStream *stream, UInt32 baseLba, UInt32 lba, int level);
+  virtual int GetItem_ExtractInfo(UInt32 index, UInt64 &pos, UInt64 &size) const
+  {
+    const CItem &item = _items[index];
+    pos = item.Part.GetPos();
+    size = item.Size;
+    return NExtract::NOperationResult::kOK;
+  }
+
+  HRESULT ReadTables(IInStream *stream, UInt32 baseLba, UInt32 lba, unsigned level);
 public:
-  MY_UNKNOWN_IMP2(IInArchive, IInArchiveGetStream)
-  INTERFACE_IInArchive(;)
-  STDMETHOD(GetStream)(UInt32 index, ISequentialInStream **stream);
+  INTERFACE_IInArchive_Cont(;)
 };
 
-HRESULT CHandler::ReadTables(IInStream *stream, UInt32 baseLba, UInt32 lba, int level)
+HRESULT CHandler::ReadTables(IInStream *stream, UInt32 baseLba, UInt32 lba, unsigned level)
 {
   if (level >= 128 || _items.Size() >= 128)
     return S_FALSE;
 
-  const int kNumHeaderParts = 4;
+  const unsigned kNumHeaderParts = 4;
   CPartition parts[kNumHeaderParts];
 
   {
     const UInt32 kSectorSize = 512;
-    _buffer.SetCapacity(kSectorSize);
+    _buffer.Alloc(kSectorSize);
     Byte *buf = _buffer;
     UInt64 newPos = (UInt64)lba << 9;
     if (newPos + 512 > _totalSize)
@@ -221,7 +218,7 @@ HRESULT CHandler::ReadTables(IInStream *stream, UInt32 baseLba, UInt32 lba, int 
     if (buf[0x1FE] != 0x55 || buf[0x1FF] != 0xAA)
       return S_FALSE;
     
-    for (int i = 0; i < kNumHeaderParts; i++)
+    for (unsigned i = 0; i < kNumHeaderParts; i++)
       if (!parts[i].Parse(buf + 0x1BE + 16 * i))
         return S_FALSE;
   }
@@ -232,18 +229,18 @@ HRESULT CHandler::ReadTables(IInStream *stream, UInt32 baseLba, UInt32 lba, int 
   if (limLba == 0)
     return S_FALSE;
 
-  for (int i = 0; i < kNumHeaderParts; i++)
+  for (unsigned i = 0; i < kNumHeaderParts; i++)
   {
     CPartition &part = parts[i];
     
     if (part.IsEmpty())
       continue;
-    PRF(printf("\n   %2d ", (int)level));
+    PRF(printf("\n   %2d ", (unsigned)level));
     #ifdef SHOW_DEBUG_INFO
     part.Print();
     #endif
     
-    int numItems = _items.Size();
+    unsigned numItems = _items.Size();
     UInt32 newLba = lba + part.Lba;
     
     if (part.IsExtended())
@@ -323,6 +320,7 @@ STDMETHODIMP CHandler::Open(IInStream *stream,
 
 STDMETHODIMP CHandler::Close()
 {
+  _totalSize = 0;
   _items.Clear();
   _stream.Release();
   return S_OK;
@@ -335,15 +333,15 @@ enum
   kpidEndChs
 };
 
-STATPROPSTG kProps[] =
+static const CStatProp kProps[] =
 {
   { NULL, kpidPath, VT_BSTR},
   { NULL, kpidSize, VT_UI8},
   { NULL, kpidFileSystem, VT_BSTR},
   { NULL, kpidOffset, VT_UI8},
-  { L"Primary", kpidPrimary, VT_BOOL},
-  { L"Begin CHS", kpidBegChs, VT_BSTR},
-  { L"End CHS", kpidEndChs, VT_BSTR}
+  { "Primary", kpidPrimary, VT_BOOL},
+  { "Begin CHS", kpidBegChs, VT_BSTR},
+  { "End CHS", kpidEndChs, VT_BSTR}
 };
 
 IMP_IInArchive_Props_WITH_NAME
@@ -352,12 +350,12 @@ IMP_IInArchive_ArcProps_NO_Table
 STDMETHODIMP CHandler::GetArchiveProperty(PROPID propID, PROPVARIANT *value)
 {
   NCOM::CPropVariant prop;
-  switch(propID)
+  switch (propID)
   {
     case kpidMainSubfile:
     {
       int mainIndex = -1;
-      for (int i = 0; i < _items.Size(); i++)
+      FOR_VECTOR (i, _items)
         if (_items[i].IsReal)
         {
           if (mainIndex >= 0)
@@ -371,6 +369,7 @@ STDMETHODIMP CHandler::GetArchiveProperty(PROPID propID, PROPVARIANT *value)
         prop = (UInt32)mainIndex;
       break;
     }
+    case kpidPhySize: prop = _totalSize; break;
   }
   prop.Detach(value);
   return S_OK;
@@ -389,19 +388,21 @@ STDMETHODIMP CHandler::GetProperty(UInt32 index, PROPID propID, PROPVARIANT *val
 
   const CItem &item = _items[index];
   const CPartition &part = item.Part;
-  switch(propID)
+  switch (propID)
   {
     case kpidPath:
     {
       AString s;
-      AddUIntToString(index, s);
+      s.Add_UInt32(index);
       if (item.IsReal)
       {
-        int typeIndex = FindPartType(part.Type);
         s += '.';
-        const char *ext = "img";
-        if (typeIndex >= 0 && kPartTypes[typeIndex].Ext != 0)
-          ext = kPartTypes[typeIndex].Ext;
+        const char *ext = NULL;
+        int typeIndex = FindPartType(part.Type);
+        if (typeIndex >= 0)
+          ext = kPartTypes[(unsigned)typeIndex].Ext;
+        if (!ext)
+          ext = "img";
         s += ext;
       }
       prop = s;
@@ -414,12 +415,12 @@ STDMETHODIMP CHandler::GetProperty(UInt32 index, PROPID propID, PROPVARIANT *val
         ConvertUInt32ToString(part.Type, s);
         const char *res = s;
         int typeIndex = FindPartType(part.Type);
-        if (typeIndex >= 0 && kPartTypes[typeIndex].Name)
-          res = kPartTypes[typeIndex].Name;
+        if (typeIndex >= 0 && kPartTypes[(unsigned)typeIndex].Name)
+          res = kPartTypes[(unsigned)typeIndex].Name;
         prop = res;
       }
       break;
-    case kpidSize: prop = item.Size; break;;
+    case kpidSize:
     case kpidPackSize: prop = item.Size; break;
     case kpidOffset: prop = part.GetPos(); break;
     case kpidPrimary: if (item.IsReal) prop = item.IsPrim; break;
@@ -431,77 +432,14 @@ STDMETHODIMP CHandler::GetProperty(UInt32 index, PROPID propID, PROPVARIANT *val
   COM_TRY_END
 }
 
-STDMETHODIMP CHandler::Extract(const UInt32 *indices, UInt32 numItems,
-    Int32 testMode, IArchiveExtractCallback *extractCallback)
-{
-  COM_TRY_BEGIN
-  bool allFilesMode = (numItems == (UInt32)-1);
-  if (allFilesMode)
-    numItems = _items.Size();
-  if (numItems == 0)
-    return S_OK;
-  UInt64 totalSize = 0;
-  UInt32 i;
-  for (i = 0; i < numItems; i++)
-    totalSize += _items[allFilesMode ? i : indices[i]].Size;
-  extractCallback->SetTotal(totalSize);
 
-  totalSize = 0;
-  
-  NCompress::CCopyCoder *copyCoderSpec = new NCompress::CCopyCoder();
-  CMyComPtr<ICompressCoder> copyCoder = copyCoderSpec;
+  // 3, { 1, 1, 0 },
+  // 2, { 0x55, 0x1FF },
 
-  CLocalProgress *lps = new CLocalProgress;
-  CMyComPtr<ICompressProgressInfo> progress = lps;
-  lps->Init(extractCallback, false);
-
-  CLimitedSequentialInStream *streamSpec = new CLimitedSequentialInStream;
-  CMyComPtr<ISequentialInStream> inStream(streamSpec);
-  streamSpec->SetStream(_stream);
-
-  for (i = 0; i < numItems; i++)
-  {
-    lps->InSize = totalSize;
-    lps->OutSize = totalSize;
-    RINOK(lps->SetCur());
-    CMyComPtr<ISequentialOutStream> outStream;
-    Int32 askMode = testMode ?
-        NExtract::NAskMode::kTest :
-        NExtract::NAskMode::kExtract;
-    Int32 index = allFilesMode ? i : indices[i];
-    const CItem &item = _items[index];
-    const CPartition &part = item.Part;
-    RINOK(extractCallback->GetStream(index, &outStream, askMode));
-    totalSize += item.Size;
-    if (!testMode && !outStream)
-      continue;
-    RINOK(extractCallback->PrepareOperation(askMode));
-
-    RINOK(_stream->Seek(part.GetPos(), STREAM_SEEK_SET, NULL));
-    streamSpec->Init(item.Size);
-    RINOK(copyCoder->Code(inStream, outStream, NULL, NULL, progress));
-    outStream.Release();
-    RINOK(extractCallback->SetOperationResult(copyCoderSpec->TotalSize == item.Size ?
-        NExtract::NOperationResult::kOK:
-        NExtract::NOperationResult::kDataError));
-  }
-  return S_OK;
-  COM_TRY_END
-}
-
-STDMETHODIMP CHandler::GetStream(UInt32 index, ISequentialInStream **stream)
-{
-  COM_TRY_BEGIN
-  const CItem &item = _items[index];
-  return CreateLimitedInStream(_stream, item.Part.GetPos(), item.Size, stream);
-  COM_TRY_END
-}
-
-static IInArchive *CreateArc() { return new CHandler; }
-
-static CArcInfo g_ArcInfo =
-  { L"MBR", L"mbr", 0, 0xDB, { 1, 1, 0 }, 3, false, CreateArc, 0 };
-
-REGISTER_ARC(Mbr)
+REGISTER_ARC_I_NO_SIG(
+  "MBR", "mbr", 0, 0xDB,
+  0,
+  NArcInfoFlags::kPureStartOpen,
+  NULL)
 
 }}

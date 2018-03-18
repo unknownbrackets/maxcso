@@ -3,155 +3,242 @@
 #ifndef __LZX_DECODER_H
 #define __LZX_DECODER_H
 
-#include "../ICoder.h"
+#include "../../../C/CpuArch.h"
 
-#include "../Common/InBuffer.h"
+#include "../../Common/MyCom.h"
 
 #include "HuffmanDecoder.h"
-#include "LzOutWindow.h"
 #include "Lzx.h"
-#include "Lzx86Converter.h"
 
 namespace NCompress {
 namespace NLzx {
 
-namespace NBitStream {
-
-const unsigned kNumBigValueBits = 8 * 4;
-const unsigned kNumValueBits = 17;
-const UInt32 kBitDecoderValueMask = (1 << kNumValueBits) - 1;
-
-class CDecoder
+class CBitDecoder
 {
-  CInBuffer m_Stream;
-  UInt32 m_Value;
-  unsigned m_BitPos;
+  unsigned _bitPos;
+  UInt32 _value;
+  const Byte *_buf;
+  const Byte *_bufLim;
+  UInt32 _extraSize;
 public:
-  CDecoder() {}
-  bool Create(UInt32 bufferSize) { return m_Stream.Create(bufferSize); }
 
-  void SetStream(ISequentialInStream *s) { m_Stream.SetStream(s); }
-  void ReleaseStream() { m_Stream.ReleaseStream(); }
-
-  void Init()
+  void Init(const Byte *data, size_t size)
   {
-    m_Stream.Init();
-    m_BitPos = kNumBigValueBits;
+    _buf = data;
+    _bufLim = data + size - 1;
+    _bitPos = 0;
+    _extraSize = 0;
   }
 
-  UInt64 GetProcessedSize() const { return m_Stream.GetProcessedSize() - (kNumBigValueBits - m_BitPos) / 8; }
-  
-  unsigned GetBitPosition() const { return m_BitPos & 0xF; }
+  size_t GetRem() const { return _bufLim + 1 - _buf; }
+  bool WasExtraReadError_Fast() const { return _extraSize > 4; }
 
-  void Normalize()
+  bool WasFinishedOK() const
   {
-    for (; m_BitPos >= 16; m_BitPos -= 16)
+    if (_buf != _bufLim + 1)
+      return false;
+    if ((_bitPos >> 4) * 2 != _extraSize)
+      return false;
+    unsigned numBits = _bitPos & 15;
+    return (((_value >> (_bitPos - numBits)) & (((UInt32)1 << numBits) - 1)) == 0);
+  }
+  
+  void NormalizeSmall()
+  {
+    if (_bitPos <= 16)
     {
-      Byte b0 = m_Stream.ReadByte();
-      Byte b1 = m_Stream.ReadByte();
-      m_Value = (m_Value << 8) | b1;
-      m_Value = (m_Value << 8) | b0;
+      UInt32 val;
+      if (_buf >= _bufLim)
+      {
+        val = 0xFFFF;
+        _extraSize += 2;
+      }
+      else
+      {
+        val = GetUi16(_buf);
+        _buf += 2;
+      }
+      _value = (_value << 16) | val;
+      _bitPos += 16;
+    }
+  }
+
+  void NormalizeBig()
+  {
+    if (_bitPos <= 16)
+    {
+      {
+        UInt32 val;
+        if (_buf >= _bufLim)
+        {
+          val = 0xFFFF;
+          _extraSize += 2;
+        }
+        else
+        {
+          val = GetUi16(_buf);
+          _buf += 2;
+        }
+        _value = (_value << 16) | val;
+        _bitPos += 16;
+      }
+      if (_bitPos <= 16)
+      {
+        UInt32 val;
+        if (_buf >= _bufLim)
+        {
+          val = 0xFFFF;
+          _extraSize += 2;
+        }
+        else
+        {
+          val = GetUi16(_buf);
+          _buf += 2;
+        }
+        _value = (_value << 16) | val;
+        _bitPos += 16;
+      }
     }
   }
 
   UInt32 GetValue(unsigned numBits) const
   {
-    return ((m_Value >> ((32 - kNumValueBits) - m_BitPos)) & kBitDecoderValueMask) >> (kNumValueBits - numBits);
+    return (_value >> (_bitPos - numBits)) & (((UInt32)1 << numBits) - 1);
   }
   
   void MovePos(unsigned numBits)
   {
-    m_BitPos += numBits;
-    Normalize();
+    _bitPos -= numBits;
+    NormalizeSmall();
   }
 
-  UInt32 ReadBits(unsigned numBits)
+  UInt32 ReadBitsSmall(unsigned numBits)
   {
-    UInt32 res = GetValue(numBits);
-    MovePos(numBits);
-    return res;
+    _bitPos -= numBits;
+    UInt32 val = (_value >> _bitPos) & (((UInt32)1 << numBits) - 1);
+    NormalizeSmall();
+    return val;
   }
 
   UInt32 ReadBitsBig(unsigned numBits)
   {
-    unsigned numBits0 = numBits / 2;
-    unsigned numBits1 = numBits - numBits0;
-    UInt32 res = ReadBits(numBits0) << numBits1;
-    return res + ReadBits(numBits1);
+    _bitPos -= numBits;
+    UInt32 val = (_value >> _bitPos) & (((UInt32)1 << numBits) - 1);
+    NormalizeBig();
+    return val;
   }
 
-  bool ReadUInt32(UInt32 &v)
+  bool PrepareUncompressed()
   {
-    if (m_BitPos != 0)
+    if (_extraSize != 0)
       return false;
-    v = ((m_Value >> 16) & 0xFFFF) | ((m_Value << 16) & 0xFFFF0000);
-    m_BitPos = kNumBigValueBits;
+    unsigned numBits = _bitPos - 16;
+    if (((_value >> 16) & (((UInt32)1 << numBits) - 1)) != 0)
+      return false;
+    _buf -= 2;
+    _bitPos = 0;
     return true;
   }
 
-  Byte DirectReadByte() { return m_Stream.ReadByte(); }
+  UInt32 ReadUInt32()
+  {
+    UInt32 v = GetUi32(_buf);
+    _buf += 4;
+    return v;
+  }
 
+  void CopyTo(Byte *dest, size_t size)
+  {
+    memcpy(dest, _buf, size);
+    _buf += size;
+  }
+
+  bool IsOneDirectByteLeft() const { return _buf == _bufLim && _extraSize == 0; }
+
+  Byte DirectReadByte()
+  {
+    if (_buf > _bufLim)
+    {
+      _extraSize++;
+      return 0xFF;
+    }
+    return *_buf++;
+  }
 };
-}
 
-class CDecoder :
-  public ICompressCoder,
+
+class CDecoder:
+  public IUnknown,
   public CMyUnknownImp
 {
-  NBitStream::CDecoder m_InBitStream;
-  CLzOutWindow m_OutWindowStream;
+  CBitDecoder _bitStream;
+  Byte *_win;
+  UInt32 _pos;
+  UInt32 _winSize;
 
-  UInt32 m_RepDistances[kNumRepDistances];
-  UInt32 m_NumPosLenSlots;
-
-  bool m_IsUncompressedBlock;
-  bool m_AlignIsUsed;
-
-  NCompress::NHuffman::CDecoder<kNumHuffmanBits, kMainTableSize> m_MainDecoder;
-  NCompress::NHuffman::CDecoder<kNumHuffmanBits, kNumLenSymbols> m_LenDecoder;
-  NCompress::NHuffman::CDecoder<kNumHuffmanBits, kAlignTableSize> m_AlignDecoder;
-  NCompress::NHuffman::CDecoder<kNumHuffmanBits, kLevelTableSize> m_LevelDecoder;
-
-  Byte m_LastMainLevels[kMainTableSize];
-  Byte m_LastLenLevels[kNumLenSymbols];
-
-  Cx86ConvertOutStream *m_x86ConvertOutStreamSpec;
-  CMyComPtr<ISequentialOutStream> m_x86ConvertOutStream;
-
-  UInt32 m_UnCompressedBlockSize;
-
-  bool _keepHistory;
-  int _remainLen;
+  bool _overDict;
+  bool _isUncompressedBlock;
   bool _skipByte;
+  unsigned _numAlignBits;
 
+  UInt32 _reps[kNumReps];
+  UInt32 _numPosLenSlots;
+  UInt32 _unpackBlockSize;
+
+public:
+  bool KeepHistoryForNext;
+  bool NeedAlloc;
+private:
+  bool _keepHistory;
   bool _wimMode;
+  unsigned _numDictBits;
+  UInt32 _writePos;
+
+  Byte *_x86_buf;
+  UInt32 _x86_translationSize;
+  UInt32 _x86_processedSize;
+
+  Byte *_unpackedData;
+  
+  NHuffman::CDecoder<kNumHuffmanBits, kMainTableSize> _mainDecoder;
+  NHuffman::CDecoder<kNumHuffmanBits, kNumLenSymbols> _lenDecoder;
+  NHuffman::CDecoder7b<kAlignTableSize> _alignDecoder;
+  NHuffman::CDecoder<kNumHuffmanBits, kLevelTableSize, 7> _levelDecoder;
+
+  Byte _mainLevels[kMainTableSize];
+  Byte _lenLevels[kNumLenSymbols];
+
+  HRESULT Flush();
 
   UInt32 ReadBits(unsigned numBits);
-  bool ReadTable(Byte *lastLevels, Byte *newLevels, UInt32 numSymbols);
+  bool ReadTable(Byte *levels, unsigned numSymbols);
   bool ReadTables();
-  void ClearPrevLevels();
 
   HRESULT CodeSpec(UInt32 size);
-
-  HRESULT CodeReal(ISequentialInStream *inStream, ISequentialOutStream *outStream,
-      const UInt64 *inSize, const UInt64 *outSize, ICompressProgressInfo *progress);
+  HRESULT SetParams2(unsigned numDictBits);
 public:
   CDecoder(bool wimMode = false);
+  ~CDecoder();
 
   MY_UNKNOWN_IMP
 
-  void ReleaseStreams();
-  STDMETHOD(Flush)();
+  HRESULT SetExternalWindow(Byte *win, unsigned numDictBits)
+  {
+    NeedAlloc = false;
+    _win = win;
+    _winSize = (UInt32)1 << numDictBits;
+    return SetParams2(numDictBits);
+  }
 
-  STDMETHOD(Code)(ISequentialInStream *inStream, ISequentialOutStream *outStream,
-      const UInt64 *inSize, const UInt64 *outSize, ICompressProgressInfo *progress);
+  void SetKeepHistory(bool keepHistory) { _keepHistory = keepHistory; }
 
-  STDMETHOD(SetInStream)(ISequentialInStream *inStream);
-  STDMETHOD(ReleaseInStream)();
-  STDMETHOD(SetOutStreamSize)(const UInt64 *outSize);
+  HRESULT SetParams_and_Alloc(unsigned numDictBits);
 
-  HRESULT SetParams(unsigned numDictBits);
-  void SetKeepHistory(bool keepHistory) {  _keepHistory = keepHistory; }
+  HRESULT Code(const Byte *inData, size_t inSize, UInt32 outSize);
+  
+  bool WasBlockFinished() const { return _unpackBlockSize == 0; }
+  const Byte *GetUnpackData() const { return _unpackedData; }
+  const UInt32 GetUnpackSize() const { return _pos - _writePos; }
 };
 
 }}

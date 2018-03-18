@@ -3,14 +3,15 @@
 #include "StdAfx.h"
 
 #include <Windowsx.h>
+// #include <stdio.h>
 
-#include "Common/Defs.h"
-#include "Common/IntToString.h"
-#include "Common/StringConvert.h"
+#include "../../../Common/IntToString.h"
+#include "../../../Common/StringConvert.h"
 
-#include "Windows/Error.h"
-#include "Windows/PropVariant.h"
-#include "Windows/Thread.h"
+#include "../../../Windows/FileName.h"
+#include "../../../Windows/ErrorMsg.h"
+#include "../../../Windows/PropVariant.h"
+#include "../../../Windows/Thread.h"
 
 #include "../../PropID.h"
 
@@ -29,6 +30,7 @@
 #include "Panel.h"
 #include "RootFolder.h"
 
+#include "PropertyNameRes.h"
 
 using namespace NWindows;
 using namespace NControl;
@@ -43,7 +45,6 @@ static const UINT kTimerElapse = 1000;
 static DWORD kStyles[4] = { LVS_ICON, LVS_SMALLICON, LVS_LIST, LVS_REPORT };
 
 // static const int kCreateFolderID = 101;
-// static const UINT kFileChangeNotifyMessage = WM_APP;
 
 extern HINSTANCE g_hInstance;
 extern DWORD g_ComCtl32Version;
@@ -67,18 +68,20 @@ HWND CPanel::GetParent()
   return (h == 0) ? _mainWindow : h;
 }
 
-static LPCWSTR kClassName = L"7-Zip::Panel";
+#define kClassName L"7-Zip::Panel"
 
 
 HRESULT CPanel::Create(HWND mainWindow, HWND parentWindow, UINT id,
     const UString &currentFolderPrefix,
     const UString &arcFormat,
     CPanelCallback *panelCallback, CAppState *appState,
+    bool needOpenArc,
     bool &archiveIsOpened, bool &encrypted)
 {
   _mainWindow = mainWindow;
   _processTimer = true;
   _processNotify = true;
+  _processStatusBar = true;
 
   _panelCallback = panelCallback;
   _appState = appState;
@@ -91,20 +94,29 @@ HRESULT CPanel::Create(HWND mainWindow, HWND parentWindow, UINT id,
 
   if (!currentFolderPrefix.IsEmpty())
     if (currentFolderPrefix[0] == L'.')
-      if (!NFile::NDirectory::MyGetFullPathName(currentFolderPrefix, cfp))
-        cfp = currentFolderPrefix;
+    {
+      FString cfpF;
+      if (NFile::NDir::MyGetFullPathName(us2fs(currentFolderPrefix), cfpF))
+        cfp = fs2us(cfpF);
+    }
+
   RINOK(BindToPath(cfp, arcFormat, archiveIsOpened, encrypted));
+
+  if (needOpenArc && !archiveIsOpened)
+    return S_OK;
 
   if (!CreateEx(0, kClassName, 0, WS_CHILD | WS_VISIBLE,
       0, 0, _xSize, 260,
       parentWindow, (HMENU)(UINT_PTR)id, g_hInstance))
     return E_FAIL;
+  PanelCreated = true;
+
   return S_OK;
 }
 
 LRESULT CPanel::OnMessage(UINT message, WPARAM wParam, LPARAM lParam)
 {
-  switch(message)
+  switch (message)
   {
     case kShiftSelectMessage:
       OnShiftSelectMessage();
@@ -117,12 +129,15 @@ LRESULT CPanel::OnMessage(UINT message, WPARAM wParam, LPARAM lParam)
       return 0;
     case kOpenItemChanged:
       return OnOpenItemChanged(lParam);
-    case kRefreshStatusBar:
-      OnRefreshStatusBar();
+    case kRefresh_StatusBar:
+      if (_processStatusBar)
+        Refresh_StatusBar();
       return 0;
-    case kRefreshHeaderComboBox:
+    #ifdef UNDER_CE
+    case kRefresh_HeaderComboBox:
       LoadFullPathAndShow();
       return 0;
+    #endif
     case WM_TIMER:
       OnTimer();
       return 0;
@@ -137,15 +152,6 @@ LRESULT CPanel::OnMessage(UINT message, WPARAM wParam, LPARAM lParam)
     */
   }
   return CWindow2::OnMessage(message, wParam, lParam);
-}
-
-static LRESULT APIENTRY ListViewSubclassProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
-{
-  CWindow tempDialog(hwnd);
-  CMyListView *w = (CMyListView *)(tempDialog.GetUserDataLongPtr());
-  if (w == NULL)
-    return 0;
-  return w->OnMessage(message, wParam, lParam);
 }
 
 LRESULT CMyListView::OnMessage(UINT message, WPARAM wParam, LPARAM lParam)
@@ -182,12 +188,10 @@ LRESULT CMyListView::OnMessage(UINT message, WPARAM wParam, LPARAM lParam)
   */
   else if (message == WM_KEYDOWN)
   {
-    bool alt = (::GetKeyState(VK_MENU) & 0x8000) != 0;
-    bool ctrl = (::GetKeyState(VK_CONTROL) & 0x8000) != 0;
-    // bool leftCtrl = (::GetKeyState(VK_LCONTROL) & 0x8000) != 0;
-    // bool RightCtrl = (::GetKeyState(VK_RCONTROL) & 0x8000) != 0;
-    bool shift = (::GetKeyState(VK_SHIFT) & 0x8000) != 0;
-    switch(wParam)
+    bool alt = IsKeyDown(VK_MENU);
+    bool ctrl = IsKeyDown(VK_CONTROL);
+    bool shift = IsKeyDown(VK_SHIFT);
+    switch (wParam)
     {
       /*
       case VK_RETURN:
@@ -233,12 +237,7 @@ LRESULT CMyListView::OnMessage(UINT message, WPARAM wParam, LPARAM lParam)
     _panel->_lastFocusedIsList = true;
     _panel->_panelCallback->PanelWasFocused();
   }
-  #ifndef _UNICODE
-  if (g_IsNT)
-    return CallWindowProcW(_origWindowProc, *this, message, wParam, lParam);
-  else
-  #endif
-    return CallWindowProc(_origWindowProc, *this, message, wParam, lParam);
+  return CListView2::OnMessage(message, wParam, lParam);
 }
 
 /*
@@ -256,6 +255,9 @@ LRESULT CMyComboBox::OnMessage(UINT message, WPARAM wParam, LPARAM lParam)
   return CallWindowProc(_origWindowProc, *this, message, wParam, lParam);
 }
 */
+
+#ifndef UNDER_CE
+
 static LRESULT APIENTRY ComboBoxEditSubclassProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
   CWindow tempDialog(hwnd);
@@ -264,6 +266,8 @@ static LRESULT APIENTRY ComboBoxEditSubclassProc(HWND hwnd, UINT message, WPARAM
     return 0;
   return w->OnMessage(message, wParam, lParam);
 }
+
+#endif
 
 LRESULT CMyComboBoxEdit::OnMessage(UINT message, WPARAM wParam, LPARAM lParam)
 {
@@ -279,9 +283,9 @@ LRESULT CMyComboBoxEdit::OnMessage(UINT message, WPARAM wParam, LPARAM lParam)
           // check ALT
           if ((lParam & (1<<29)) == 0)
             break;
-          bool alt = (::GetKeyState(VK_MENU) & 0x8000) != 0;
-          bool ctrl = (::GetKeyState(VK_CONTROL) & 0x8000) != 0;
-          bool shift = (::GetKeyState(VK_SHIFT) & 0x8000) != 0;
+          bool alt = IsKeyDown(VK_MENU);
+          bool ctrl = IsKeyDown(VK_CONTROL);
+          bool shift = IsKeyDown(VK_SHIFT);
           if (alt && !ctrl && !shift)
           {
             _panel->_panelCallback->SetFocusToPath(wParam == VK_F1 ? 0 : 1);
@@ -300,9 +304,9 @@ LRESULT CMyComboBoxEdit::OnMessage(UINT message, WPARAM wParam, LPARAM lParam)
           return 0;
         case VK_F9:
         {
-          bool alt = (::GetKeyState(VK_MENU) & 0x8000) != 0;
-          bool ctrl = (::GetKeyState(VK_CONTROL) & 0x8000) != 0;
-          bool shift = (::GetKeyState(VK_SHIFT) & 0x8000) != 0;
+          bool alt = IsKeyDown(VK_MENU);
+          bool ctrl = IsKeyDown(VK_CONTROL);
+          bool shift = IsKeyDown(VK_SHIFT);
           if (!alt && !ctrl && !shift)
           {
             g_App.SwitchOnOffOnePanel();;
@@ -343,7 +347,7 @@ bool CPanel::OnCreate(CREATESTRUCT * /* createStruct */)
   style |= WS_CLIPCHILDREN;
   style |= WS_CLIPSIBLINGS;
 
-  const UInt32 kNumListModes = sizeof(kStyles) / sizeof(kStyles[0]);
+  const UInt32 kNumListModes = ARRAY_SIZE(kStyles);
   if (_ListViewMode >= kNumListModes)
     _ListViewMode = kNumListModes - 1;
 
@@ -362,24 +366,12 @@ bool CPanel::OnCreate(CREATESTRUCT * /* createStruct */)
   exStyle = WS_EX_CLIENTEDGE;
 
   if (!_listView.CreateEx(exStyle, style, 0, 0, 116, 260,
-      HWND(*this), (HMENU)(UINT_PTR)(_baseID + 1), g_hInstance, NULL))
+      *this, (HMENU)(UINT_PTR)(_baseID + 1), g_hInstance, NULL))
     return false;
 
-  #ifndef UNDER_CE
-  _listView.SetUnicodeFormat(true);
-  #endif
-
-  _listView.SetUserDataLongPtr(LONG_PTR(&_listView));
+  _listView.SetUnicodeFormat();
   _listView._panel = this;
-
-   #ifndef _UNICODE
-   if(g_IsNT)
-     _listView._origWindowProc =
-      (WNDPROC)_listView.SetLongPtrW(GWLP_WNDPROC, LONG_PTR(ListViewSubclassProc));
-   else
-   #endif
-     _listView._origWindowProc =
-      (WNDPROC)_listView.SetLongPtr(GWLP_WNDPROC, LONG_PTR(ListViewSubclassProc));
+  _listView.SetWindowProc();
 
   _listView.SetImageList(GetSysImageList(true), LVSIL_SMALL);
   _listView.SetImageList(GetSysImageList(false), LVSIL_NORMAL);
@@ -417,16 +409,18 @@ bool CPanel::OnCreate(CREATESTRUCT * /* createStruct */)
     icex.dwICC  = ICC_COOL_CLASSES | ICC_BAR_CLASSES;
     InitCommonControlsEx(&icex);
     
+    // if there is no CCS_NOPARENTALIGN, there is space of some pixels after rebar (Incorrect GetWindowRect ?)
+
     _headerReBar.Attach(::CreateWindowEx(WS_EX_TOOLWINDOW,
       REBARCLASSNAME,
       NULL, WS_VISIBLE | WS_BORDER | WS_CHILD |
       WS_CLIPCHILDREN | WS_CLIPSIBLINGS
       | CCS_NODIVIDER
-      // | CCS_NOPARENTALIGN
+      | CCS_NOPARENTALIGN
       | CCS_TOP
       | RBS_VARHEIGHT
       | RBS_BANDBORDERS
-      ,0,0,0,0, HWND(*this), NULL, g_hInstance, NULL));
+      ,0,0,0,0, *this, NULL, g_hInstance, NULL));
   }
 
   DWORD toolbarStyle =  WS_CHILD | WS_VISIBLE ;
@@ -447,7 +441,7 @@ bool CPanel::OnCreate(CREATESTRUCT * /* createStruct */)
       _baseID + 2, 11,
       (HINSTANCE)HINST_COMMCTRL,
       IDB_VIEW_SMALL_COLOR,
-      (LPCTBBUTTON)&tbb, sizeof(tbb) / sizeof(tbb[0]),
+      (LPCTBBUTTON)&tbb, ARRAY_SIZE(tbb),
       0, 0, 0, 0, sizeof (TBBUTTON)));
 
   #ifndef UNDER_CE
@@ -466,7 +460,7 @@ bool CPanel::OnCreate(CREATESTRUCT * /* createStruct */)
       , NULL,
     WS_BORDER | WS_VISIBLE |WS_CHILD | CBS_DROPDOWN | CBS_AUTOHSCROLL,
       0, 0, 100, 520,
-      ((_headerReBar == 0) ? HWND(*this) : _headerToolBar),
+      ((_headerReBar == 0) ? (HWND)*this : _headerToolBar),
       (HMENU)(UINT_PTR)(_comboBoxID),
       g_hInstance, NULL);
   #ifndef UNDER_CE
@@ -490,7 +484,7 @@ bool CPanel::OnCreate(CREATESTRUCT * /* createStruct */)
   _comboBoxEdit.SetUserDataLongPtr(LONG_PTR(&_comboBoxEdit));
   _comboBoxEdit._panel = this;
    #ifndef _UNICODE
-   if(g_IsNT)
+   if (g_IsNT)
      _comboBoxEdit._origWindowProc =
       (WNDPROC)_comboBoxEdit.SetLongPtrW(GWLP_WNDPROC, LONG_PTR(ComboBoxEditSubclassProc));
    else
@@ -538,21 +532,20 @@ bool CPanel::OnCreate(CREATESTRUCT * /* createStruct */)
   _statusBar.Create(WS_CHILD | WS_VISIBLE, L"Status", (*this), _statusBarID);
   // _statusBar2.Create(WS_CHILD | WS_VISIBLE, L"Status", (*this), _statusBarID + 1);
 
-  int sizes[] = {150, 250, 350, -1};
+  const int sizes[] = {220, 320, 420, -1};
   _statusBar.SetParts(4, sizes);
   // _statusBar2.SetParts(5, sizes);
 
   /*
   RECT rect;
   GetClientRect(&rect);
-  OnSize(0, rect.right - rect.left, rect.top - rect.bottom);
+  OnSize(0, RECT_SIZE_X(rect), RECT_SIZE_Y(rect));
   */
 
   SetTimer(kTimerID, kTimerElapse);
 
   // InitListCtrl();
   RefreshListCtrl();
-  RefreshStatusBar();
   
   return true;
 }
@@ -576,13 +569,13 @@ void CPanel::ChangeWindowSize(int xSize, int ySize)
   else
     _headerToolBar.GetWindowRect(&rect);
 
-  kHeaderSize = rect.bottom - rect.top;
+  kHeaderSize = RECT_SIZE_Y(rect);
 
   _statusBar.GetWindowRect(&rect);
-  kStatusBarSize = rect.bottom - rect.top;
+  kStatusBarSize = RECT_SIZE_Y(rect);
   
   // _statusBar2.GetWindowRect(&rect);
-  // kStatusBar2Size = rect.bottom - rect.top;
+  // kStatusBar2Size = RECT_SIZE_Y(rect);
  
   int yListViewSize = MyMax(ySize - kHeaderSize - kStatusBarSize, 0);
   const int kStartXPos = 32;
@@ -614,28 +607,64 @@ bool CPanel::OnSize(WPARAM /* wParam */, int xSize, int ySize)
 
 bool CPanel::OnNotifyReBar(LPNMHDR header, LRESULT & /* result */)
 {
-  switch(header->code)
+  switch (header->code)
   {
     case RBN_HEIGHTCHANGE:
     {
       RECT rect;
       GetWindowRect(&rect);
-      ChangeWindowSize(rect.right - rect.left, rect.bottom - rect.top);
+      ChangeWindowSize(RECT_SIZE_X(rect), RECT_SIZE_Y(rect));
       return false;
     }
   }
   return false;
 }
 
+/*
+UInt32 g_OnNotify = 0;
+UInt32 g_LVIF_TEXT = 0;
+UInt32 g_Time = 0;
+
+void Print_OnNotify(const char *name)
+{
+  char s[256];
+  DWORD tim = GetTickCount();
+  sprintf(s,
+      "Time = %7u ms, Notify = %9u, TEXT = %9u, %s",
+      tim - g_Time,
+      g_OnNotify,
+      g_LVIF_TEXT,
+      name);
+  g_Time = tim;
+  OutputDebugStringA(s);
+  g_OnNotify = 0;
+  g_LVIF_TEXT = 0;
+}
+*/
+
 bool CPanel::OnNotify(UINT /* controlID */, LPNMHDR header, LRESULT &result)
 {
+  /*
+  g_OnNotify++;
+
+  if (header->hwndFrom == _listView)
+  {
+    if (header->code == LVN_GETDISPINFOW)
+    {
+      LV_DISPINFOW *dispInfo = (LV_DISPINFOW *)header;
+        if ((dispInfo->item.mask & LVIF_TEXT))
+          g_LVIF_TEXT++;
+    }
+  }
+  */
+
   if (!_processNotify)
     return false;
+
   if (header->hwndFrom == _headerComboBox)
     return OnNotifyComboBox(header, result);
   else if (header->hwndFrom == _headerReBar)
     return OnNotifyReBar(header, result);
-  // if (header->hwndFrom == _listView)
   else if (header->hwndFrom == _listView)
     return OnNotifyList(header, result);
   else if (::GetParent(header->hwndFrom) == _listView &&
@@ -668,30 +697,57 @@ bool CPanel::OnCommand(int code, int itemID, LPARAM lParam, LRESULT &result)
   return CWindow2::OnCommand(code, itemID, lParam, result);
 }
 
-void CPanel::MessageBoxInfo(LPCWSTR message, LPCWSTR caption)
-  { ::MessageBoxW(HWND(*this), message, caption, MB_OK); }
-void CPanel::MessageBox(LPCWSTR message, LPCWSTR caption)
-  { ::MessageBoxW(HWND(*this), message, caption, MB_OK | MB_ICONSTOP); }
-void CPanel::MessageBox(LPCWSTR message)
-  { MessageBox(message, L"7-Zip"); }
-void CPanel::MessageBoxMyError(LPCWSTR message)
-  { MessageBox(message, L"Error"); }
 
 
-void CPanel::MessageBoxError(HRESULT errorCode, LPCWSTR caption)
+/*
+void CPanel::MessageBox_Info(LPCWSTR message, LPCWSTR caption) const
+  { ::MessageBoxW((HWND)*this, message, caption, MB_OK); }
+void CPanel::MessageBox_Warning(LPCWSTR message) const
+  { ::MessageBoxW((HWND)*this, message, L"7-Zip", MB_OK | MB_ICONWARNING); }
+*/
+
+void CPanel::MessageBox_Error_Caption(LPCWSTR message, LPCWSTR caption) const
+  { ::MessageBoxW((HWND)*this, message, caption, MB_OK | MB_ICONSTOP); }
+
+void CPanel::MessageBox_Error(LPCWSTR message) const
+  { MessageBox_Error_Caption(message, L"7-Zip"); }
+
+static UString ErrorHResult_To_Message(HRESULT errorCode)
 {
-  MessageBox(HResultToMessage(errorCode), caption);
+  if (errorCode == 0)
+    errorCode = E_FAIL;
+  return HResultToMessage(errorCode);
 }
 
-void CPanel::MessageBoxError(HRESULT errorCode)
-  { MessageBoxError(errorCode, L"7-Zip"); }
-void CPanel::MessageBoxLastError(LPCWSTR caption)
-  { MessageBoxError(::GetLastError(), caption); }
-void CPanel::MessageBoxLastError()
-  { MessageBoxLastError(L"Error"); }
+void CPanel::MessageBox_Error_HRESULT_Caption(HRESULT errorCode, LPCWSTR caption) const
+{
+  MessageBox_Error_Caption(ErrorHResult_To_Message(errorCode), caption);
+}
 
-void CPanel::MessageBoxErrorLang(UINT resourceID, UInt32 langID)
-  { MessageBox(LangString(resourceID, langID)); }
+void CPanel::MessageBox_Error_HRESULT(HRESULT errorCode) const
+  { MessageBox_Error_HRESULT_Caption(errorCode, L"7-Zip"); }
+
+void CPanel::MessageBox_Error_2Lines_Message_HRESULT(LPCWSTR message, HRESULT errorCode) const
+{
+  UString m = message;
+  m.Add_LF();
+  m += ErrorHResult_To_Message(errorCode);
+  MessageBox_Error(m);
+}
+
+void CPanel::MessageBox_LastError(LPCWSTR caption) const
+  { MessageBox_Error_HRESULT_Caption(::GetLastError(), caption); }
+
+void CPanel::MessageBox_LastError() const
+  { MessageBox_LastError(L"7-Zip"); }
+
+void CPanel::MessageBox_Error_LangID(UINT resourceID) const
+  { MessageBox_Error(LangString(resourceID)); }
+
+void CPanel::MessageBox_Error_UnsupportOperation() const
+  { MessageBox_Error_LangID(IDS_OPERATION_IS_NOT_SUPPORTED); }
+
+
 
 
 void CPanel::SetFocusToList()
@@ -710,30 +766,32 @@ void CPanel::SetFocusToLastRememberedItem()
 
 UString CPanel::GetFolderTypeID() const
 {
-  NCOM::CPropVariant prop;
-  if (_folder->GetFolderProperty(kpidType, &prop) == S_OK)
-    if (prop.vt == VT_BSTR)
-      return (const wchar_t *)prop.bstrVal;
-  return L"";
+  {
+    NCOM::CPropVariant prop;
+    if (_folder->GetFolderProperty(kpidType, &prop) == S_OK)
+      if (prop.vt == VT_BSTR)
+        return (const wchar_t *)prop.bstrVal;
+  }
+  return UString();
 }
 
-bool CPanel::IsFolderTypeEqTo(const wchar_t *s) const
+bool CPanel::IsFolderTypeEqTo(const char *s) const
 {
-  return GetFolderTypeID() == s;
+  return StringsAreEqual_Ascii(GetFolderTypeID(), s);
 }
 
-bool CPanel::IsRootFolder() const { return IsFolderTypeEqTo(L"RootFolder"); }
-bool CPanel::IsFSFolder() const { return IsFolderTypeEqTo(L"FSFolder"); }
-bool CPanel::IsFSDrivesFolder() const { return IsFolderTypeEqTo(L"FSDrives"); }
+bool CPanel::IsRootFolder() const { return IsFolderTypeEqTo("RootFolder"); }
+bool CPanel::IsFSFolder() const { return IsFolderTypeEqTo("FSFolder"); }
+bool CPanel::IsFSDrivesFolder() const { return IsFolderTypeEqTo("FSDrives"); }
+bool CPanel::IsAltStreamsFolder() const { return IsFolderTypeEqTo("AltStreamsFolder"); }
 bool CPanel::IsArcFolder() const
 {
-  UString s = GetFolderTypeID();
-  return s.Left(5) == L"7-Zip";
+  return GetFolderTypeID().IsPrefixedBy_Ascii_NoCase("7-Zip");
 }
 
 UString CPanel::GetFsPath() const
 {
-  if (IsFSDrivesFolder() && !IsDeviceDrivesPrefix())
+  if (IsFSDrivesFolder() && !IsDeviceDrivesPrefix() && !IsSuperDrivesPrefix())
     return UString();
   return _currentFolderPrefix;
 }
@@ -743,28 +801,8 @@ UString CPanel::GetDriveOrNetworkPrefix() const
   if (!IsFSFolder())
     return UString();
   UString drive = GetFsPath();
-  if (drive.Length() < 3)
-    return UString();
-  if (drive[0] == L'\\' && drive[1] == L'\\')
-  {
-    // if network
-    int pos = drive.Find(L'\\', 2);
-    if (pos < 0)
-      return UString();
-    pos = drive.Find(L'\\', pos + 1);
-    if (pos < 0)
-      return UString();
-    return drive.Left(pos + 1);
-  }
-  if (drive[1] != L':' || drive[2] != L'\\')
-    return UString();
-  return drive.Left(3);
-}
-
-bool CPanel::DoesItSupportOperations() const
-{
-  CMyComPtr<IFolderOperations> folderOperations;
-  return _folder.QueryInterface(IID_IFolderOperations, &folderOperations) == S_OK;
+  drive.DeleteFrom(NFile::NName::GetRootPrefixSize(drive));
+  return drive;
 }
 
 void CPanel::SetListViewMode(UInt32 index)
@@ -774,9 +812,20 @@ void CPanel::SetListViewMode(UInt32 index)
   _ListViewMode = index;
   DWORD oldStyle = (DWORD)_listView.GetStyle();
   DWORD newStyle = kStyles[index];
+
+  // DWORD tickCount1 = GetTickCount();
   if ((oldStyle & LVS_TYPEMASK) != newStyle)
     _listView.SetStyle((oldStyle & ~LVS_TYPEMASK) | newStyle);
   // RefreshListCtrlSaveFocused();
+  /*
+  DWORD tickCount2 = GetTickCount();
+  char s[256];
+  sprintf(s, "SetStyle = %5d",
+      tickCount2 - tickCount1
+      );
+  OutputDebugStringA(s);
+  */
+
 }
 
 void CPanel::ChangeFlatMode()
@@ -786,78 +835,96 @@ void CPanel::ChangeFlatMode()
     _flatModeForArc = _flatMode;
   else
     _flatModeForDisk = _flatMode;
-  RefreshListCtrlSaveFocused();
+  RefreshListCtrl_SaveFocused();
 }
 
-
-void CPanel::RefreshStatusBar()
+/*
+void CPanel::Change_ShowNtfsStrems_Mode()
 {
-  PostMessage(kRefreshStatusBar);
+  _showNtfsStrems_Mode = !_showNtfsStrems_Mode;
+  if (_parentFolders.Size() > 0)
+    _showNtfsStrems_ModeForArc = _showNtfsStrems_Mode;
+  else
+    _showNtfsStrems_ModeForDisk = _showNtfsStrems_Mode;
+  RefreshListCtrlSaveFocused();
+}
+*/
+
+void CPanel::Post_Refresh_StatusBar()
+{
+  if (_processStatusBar)
+    PostMsg(kRefresh_StatusBar);
 }
 
 void CPanel::AddToArchive()
 {
   CRecordVector<UInt32> indices;
   GetOperatedItemIndices(indices);
-  if (!IsFsOrDrivesFolder())
+  if (!Is_IO_FS_Folder())
   {
-    MessageBoxErrorLang(IDS_OPERATION_IS_NOT_SUPPORTED, 0x03020208);
+    MessageBox_Error_UnsupportOperation();
     return;
   }
   if (indices.Size() == 0)
   {
-    MessageBoxErrorLang(IDS_SELECT_FILES, 0x03020A03);
+    MessageBox_Error_LangID(IDS_SELECT_FILES);
     return;
   }
   UStringVector names;
 
-  UString curPrefix = _currentFolderPrefix;
-  UString destCurDirPrefix = _currentFolderPrefix;
+  const UString curPrefix = GetFsPath();
+  UString destCurDirPrefix = curPrefix;
   if (IsFSDrivesFolder())
-  {
     destCurDirPrefix = ROOT_FS_FOLDER;
-    if (!IsDeviceDrivesPrefix())
-      curPrefix.Empty();
-  }
 
-  for (int i = 0; i < indices.Size(); i++)
-    names.Add(curPrefix + GetItemRelPath(indices[i]));
-  const UString archiveName = CreateArchiveName(names.Front(), (names.Size() > 1), false);
-  HRESULT res = CompressFiles(destCurDirPrefix, archiveName, L"", names, false, true, false);
+  FOR_VECTOR (i, indices)
+    names.Add(curPrefix + GetItemRelPath2(indices[i]));
+  bool fromPrev = (names.Size() > 1);
+  const UString arcName = CreateArchiveName(names.Front(), fromPrev, false);
+  HRESULT res = CompressFiles(destCurDirPrefix, arcName, L"",
+      true, // addExtension
+      names, false, true, false);
   if (res != S_OK)
   {
-    if (destCurDirPrefix.Length() >= MAX_PATH)
-      MessageBoxErrorLang(IDS_MESSAGE_UNSUPPORTED_OPERATION_FOR_LONG_PATH_FOLDER, 0x03020A01);
+    if (destCurDirPrefix.Len() >= MAX_PATH)
+      MessageBox_Error_LangID(IDS_MESSAGE_UNSUPPORTED_OPERATION_FOR_LONG_PATH_FOLDER);
   }
   // KillSelection();
 }
 
-static UString GetSubFolderNameForExtract(const UString &archiveName)
+// function from ContextMenu.cpp
+UString GetSubFolderNameForExtract(const UString &arcPath);
+
+static UString GetSubFolderNameForExtract2(const UString &arcPath)
 {
-  int slashPos = archiveName.ReverseFind(WCHAR_PATH_SEPARATOR);
-  int dotPos = archiveName.ReverseFind(L'.');
-  if (dotPos < 0 || slashPos > dotPos)
-    return archiveName + UString(L"~");
-  UString res = archiveName.Left(dotPos);
-  res.TrimRight();
-  return res;
+  int slashPos = arcPath.ReverseFind_PathSepar();
+  UString s;
+  UString name = arcPath;
+  if (slashPos >= 0)
+  {
+    s = arcPath.Left(slashPos + 1);
+    name = arcPath.Ptr(slashPos + 1);
+  }
+  s += GetSubFolderNameForExtract(name);
+  return s;
 }
 
-void CPanel::GetFilePaths(const CRecordVector<UInt32> &indices, UStringVector &paths)
+void CPanel::GetFilePaths(const CRecordVector<UInt32> &indices, UStringVector &paths, bool allowFolders)
 {
-  for (int i = 0; i < indices.Size(); i++)
+  const UString prefix = GetFsPath();
+  FOR_VECTOR (i, indices)
   {
     int index = indices[i];
-    if (IsItemFolder(index))
+    if (!allowFolders && IsItem_Folder(index))
     {
       paths.Clear();
       break;
     }
-    paths.Add(GetItemFullPath(index));
+    paths.Add(prefix + GetItemRelPath2(index));
   }
   if (paths.Size() == 0)
   {
-    MessageBoxErrorLang(IDS_SELECT_FILES, 0x03020A03);
+    MessageBox_Error_LangID(IDS_SELECT_FILES);
     return;
   }
 }
@@ -875,23 +942,31 @@ void CPanel::ExtractArchives()
   GetFilePaths(indices, paths);
   if (paths.IsEmpty())
     return;
-  UString folderName;
+  
+  UString outFolder = GetFsPath();
   if (indices.Size() == 1)
-    folderName = GetSubFolderNameForExtract(GetItemRelPath(indices[0]));
+    outFolder += GetSubFolderNameForExtract2(GetItemRelPath(indices[0]));
   else
-    folderName = L"*";
-  ::ExtractArchives(paths, _currentFolderPrefix + folderName + UString(WCHAR_PATH_SEPARATOR), true);
+    outFolder += '*';
+  outFolder.Add_PathSepar();
+  
+  ::ExtractArchives(paths, outFolder
+      , true // showDialog
+      , false // elimDup
+      );
 }
 
-static void AddValuePair(UINT resourceID, UInt32 langID, UInt64 value, UString &s)
+/*
+static void AddValuePair(UINT resourceID, UInt64 value, UString &s)
 {
-  wchar_t sz[32];
-  s += LangString(resourceID, langID);
-  s += L' ';
+  AddLangString(s, resourceID);
+  char sz[32];
+  s += ": ";
   ConvertUInt64ToString(value, sz);
   s += sz;
-  s += L'\n';
+  s.Add_LF();
 }
+*/
 
 class CThreadTest: public CProgressThreadVirt
 {
@@ -903,38 +978,47 @@ public:
   CMyComPtr<IArchiveFolder> ArchiveFolder;
 };
 
+// actually now we don't need CThreadTest, since now we call CopyTo for "test command
+
+/*
 HRESULT CThreadTest::ProcessVirt()
 {
   RINOK(ArchiveFolder->Extract(&Indices[0], Indices.Size(),
-      NExtract::NPathMode::kFullPathnames, NExtract::NOverwriteMode::kAskBefore,
-      NULL, BoolToInt(true), ExtractCallback));
+      true, // includeAltStreams
+      false, // replaceAltStreamColon
+      NExtract::NPathMode::kFullPathnames,
+      NExtract::NOverwriteMode::kAskBefore,
+      NULL, // path
+      BoolToInt(true), // testMode
+      ExtractCallback));
   if (ExtractCallbackSpec->IsOK())
   {
     UString s;
-    AddValuePair(IDS_FOLDERS_COLON, 0x02000321, ExtractCallbackSpec->NumFolders, s);
-    AddValuePair(IDS_FILES_COLON, 0x02000320, ExtractCallbackSpec->NumFiles, s);
-    // AddSizePair(IDS_SIZE_COLON, 0x02000322, Stat.UnpackSize, s);
-    // AddSizePair(IDS_COMPRESSED_COLON, 0x02000323, Stat.PackSize, s);
-    s += L'\n';
-    s += LangString(IDS_MESSAGE_NO_ERRORS, 0x02000608);
-    OkMessage = s;
+    AddValuePair(IDS_PROP_FOLDERS, ExtractCallbackSpec->NumFolders, s);
+    AddValuePair(IDS_PROP_FILES, ExtractCallbackSpec->NumFiles, s);
+    // AddValuePair(IDS_PROP_SIZE, ExtractCallbackSpec->UnpackSize, s);
+    // AddSizePair(IDS_COMPRESSED_COLON, Stat.PackSize, s);
+    s.Add_LF();
+    AddLangString(s, IDS_MESSAGE_NO_ERRORS);
+    FinalMessage.OkMessage.Message = s;
   }
   return S_OK;
 }
+*/
 
 /*
-static void AddSizePair(UINT resourceID, UInt32 langID, UInt64 value, UString &s)
+static void AddSizePair(UInt32 langID, UInt64 value, UString &s)
 {
-  wchar_t sz[32];
-  s += LangString(resourceID, langID);
-  s += L" ";
+  char sz[32];
+  AddLangString(s, langID);
+  s += L' ';
   ConvertUInt64ToString(value, sz);
   s += sz;
   ConvertUInt64ToString(value >> 20, sz);
-  s += L" (";
+  s += " (";
   s += sz;
-  s += L" MB)";
-  s += L'\n';
+  s += " MB)";
+  s.Add_LF();
 }
 */
 
@@ -946,6 +1030,21 @@ void CPanel::TestArchives()
   _folder.QueryInterface(IID_IArchiveFolder, &archiveFolder);
   if (archiveFolder)
   {
+    CCopyToOptions options;
+    options.streamMode = true;
+    options.showErrorMessages = true;
+    options.testMode = true;
+
+    UStringVector messages;
+    HRESULT res = CopyTo(options, indices, &messages);
+    if (res != S_OK)
+    {
+      if (res != E_ABORT)
+        MessageBox_Error_HRESULT(res);
+    }
+    return;
+
+    /*
     {
     CThreadTest extracter;
 
@@ -953,19 +1052,24 @@ void CPanel::TestArchives()
     extracter.ExtractCallbackSpec = new CExtractCallbackImp;
     extracter.ExtractCallback = extracter.ExtractCallbackSpec;
     extracter.ExtractCallbackSpec->ProgressDialog = &extracter.ProgressDialog;
+    if (!_parentFolders.IsEmpty())
+    {
+      const CFolderLink &fl = _parentFolders.Back();
+      extracter.ExtractCallbackSpec->PasswordIsDefined = fl.UsePassword;
+      extracter.ExtractCallbackSpec->Password = fl.Password;
+    }
 
     if (indices.IsEmpty())
       return;
 
     extracter.Indices = indices;
     
-    UString title = LangString(IDS_PROGRESS_TESTING, 0x02000F90);
-    UString progressWindowTitle = LangString(IDS_APP_TITLE, 0x03000000);
+    UString title = LangString(IDS_PROGRESS_TESTING);
     
     extracter.ProgressDialog.CompressingMode = false;
     extracter.ProgressDialog.MainWindow = GetParent();
-    extracter.ProgressDialog.MainTitle = progressWindowTitle;
-    extracter.ProgressDialog.MainAddTitle = title + L" ";
+    extracter.ProgressDialog.MainTitle = "7-Zip"; // LangString(IDS_APP_TITLE);
+    extracter.ProgressDialog.MainAddTitle = title + L' ';
     
     extracter.ExtractCallbackSpec->OverwriteMode = NExtract::NOverwriteMode::kAskBefore;
     extracter.ExtractCallbackSpec->Init();
@@ -976,15 +1080,16 @@ void CPanel::TestArchives()
     }
     RefreshTitleAlways();
     return;
+    */
   }
 
   if (!IsFSFolder())
   {
-    MessageBoxErrorLang(IDS_OPERATION_IS_NOT_SUPPORTED, 0x03020208);
+    MessageBox_Error_UnsupportOperation();
     return;
   }
   UStringVector paths;
-  GetFilePaths(indices, paths);
+  GetFilePaths(indices, paths, true);
   if (paths.IsEmpty())
     return;
   ::TestArchives(paths);

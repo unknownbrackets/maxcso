@@ -44,7 +44,7 @@ RSC=rc.exe
 # PROP Ignore_Export_Lib 0
 # PROP Target_Dir ""
 # ADD BASE CPP /nologo /W3 /GX /O2 /D "WIN32" /D "NDEBUG" /D "_WINDOWS" /D "_MBCS" /YX /FD /c
-# ADD CPP /nologo /Gz /MD /W3 /GX /O1 /I "..\..\..\\" /D "NDEBUG" /D "_SFXWIN32" /D "_WINDOWS" /D "_MBCS" /D "EXTRACT_ONLY" /D "NO_REGISTRY" /D "NO_READ_FROM_CODER" /D "_SFX" /Yu"StdAfx.h" /FD /c
+# ADD CPP /nologo /Gz /MD /W4 /WX /GX /O1 /D "NDEBUG" /D "_SFXWIN32" /D "_WINDOWS" /D "_MBCS" /D "EXTRACT_ONLY" /D "NO_REGISTRY" /D "NO_READ_FROM_CODER" /D "_SFX" /Yu"StdAfx.h" /FD /c
 # ADD BASE MTL /nologo /D "NDEBUG" /mktyplib203 /win32
 # ADD MTL /nologo /D "NDEBUG" /mktyplib203 /win32
 # ADD BASE RSC /l 0x419 /d "NDEBUG"
@@ -71,7 +71,7 @@ LINK32=link.exe
 # PROP Ignore_Export_Lib 0
 # PROP Target_Dir ""
 # ADD BASE CPP /nologo /W3 /Gm /GX /ZI /Od /D "WIN32" /D "_DEBUG" /D "_WINDOWS" /D "_MBCS" /YX /FD /GZ /c
-# ADD CPP /nologo /Gz /MTd /W3 /Gm /GX /ZI /Od /I "..\..\..\\" /D "_DEBUG" /D "_SFXWIN32" /D "_WINDOWS" /D "_MBCS" /D "EXTRACT_ONLY" /D "NO_REGISTRY" /D "NO_READ_FROM_CODER" /D "_SFX" /Yu"StdAfx.h" /FD /GZ /c
+# ADD CPP /nologo /Gz /MTd /W4 /WX /Gm /GX /ZI /Od /D "_DEBUG" /D "_SFXWIN32" /D "_WINDOWS" /D "_MBCS" /D "EXTRACT_ONLY" /D "NO_REGISTRY" /D "NO_READ_FROM_CODER" /D "_SFX" /Yu"StdAfx.h" /FD /GZ /c
 # ADD BASE MTL /nologo /D "_DEBUG" /mktyplib203 /win32
 # ADD MTL /nologo /D "_DEBUG" /mktyplib203 /win32
 # ADD BASE RSC /l 0x419 /d "_DEBUG"
@@ -81,7 +81,7 @@ BSC32=bscmake.exe
 # ADD BSC32 /nologo
 LINK32=link.exe
 # ADD BASE LINK32 kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /nologo /subsystem:windows /debug /machine:I386 /pdbtype:sept
-# ADD LINK32 kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /nologo /subsystem:windows /debug /machine:I386 /out:"C:\Util\7z.sfx" /pdbtype:sept
+# ADD LINK32 kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /nologo /subsystem:windows /debug /machine:I386 /out:"C:\Util\7zsfx.exe" /pdbtype:sept
 
 !ELSEIF  "$(CFG)" == "SFXWin - Win32 ReleaseD"
 
@@ -98,7 +98,7 @@ LINK32=link.exe
 # PROP Ignore_Export_Lib 0
 # PROP Target_Dir ""
 # ADD BASE CPP /nologo /Gz /MT /W3 /GX /O1 /I "..\..\..\\" /D "NDEBUG" /D "WIN32" /D "_WINDOWS" /D "_MBCS" /D "EXTRACT_ONLY" /D "EXCLUDE_COM" /D "NO_REGISTRY" /D "_SFX" /Yu"StdAfx.h" /FD /c
-# ADD CPP /nologo /Gz /MD /W3 /GX /O1 /I "..\..\..\\" /D "NDEBUG" /D "_SFXWIN32" /D "_WINDOWS" /D "_MBCS" /D "EXTRACT_ONLY" /D "NO_REGISTRY" /D "NO_READ_FROM_CODER" /D "_SFX" /Yu"StdAfx.h" /FD /c
+# ADD CPP /nologo /Gz /MD /W4 /WX /GX /O1 /D "NDEBUG" /D "_SFXWIN32" /D "_WINDOWS" /D "_MBCS" /D "EXTRACT_ONLY" /D "NO_REGISTRY" /D "NO_READ_FROM_CODER" /D "_SFX" /Yu"StdAfx.h" /FD /c
 # ADD BASE MTL /nologo /D "NDEBUG" /mktyplib203 /win32
 # ADD MTL /nologo /D "NDEBUG" /mktyplib203 /win32
 # ADD BASE RSC /l 0x419 /d "NDEBUG"
@@ -149,23 +149,11 @@ SOURCE=..\..\Archive\7z\7zExtract.cpp
 # End Source File
 # Begin Source File
 
-SOURCE=..\..\Archive\7z\7zFolderOutStream.cpp
-# End Source File
-# Begin Source File
-
-SOURCE=..\..\Archive\7z\7zFolderOutStream.h
-# End Source File
-# Begin Source File
-
 SOURCE=..\..\Archive\7z\7zHandler.cpp
 # End Source File
 # Begin Source File
 
 SOURCE=..\..\Archive\7z\7zHandler.h
-# End Source File
-# Begin Source File
-
-SOURCE=..\..\Archive\7z\7zHeader.cpp
 # End Source File
 # Begin Source File
 
@@ -183,6 +171,10 @@ SOURCE=..\..\Archive\7z\7zIn.h
 
 SOURCE=..\..\Archive\7z\7zRegister.cpp
 # End Source File
+# Begin Source File
+
+SOURCE=..\..\Archive\SplitHandler.cpp
+# End Source File
 # End Group
 # Begin Group "Archive Common"
 
@@ -197,27 +189,19 @@ SOURCE=..\..\Archive\Common\CoderMixer2.h
 # End Source File
 # Begin Source File
 
-SOURCE=..\..\Archive\Common\CoderMixer2MT.cpp
-# End Source File
-# Begin Source File
-
-SOURCE=..\..\Archive\Common\CoderMixer2MT.h
-# End Source File
-# Begin Source File
-
-SOURCE=..\..\Archive\Common\CrossThreadProgress.cpp
-# End Source File
-# Begin Source File
-
-SOURCE=..\..\Archive\Common\CrossThreadProgress.h
-# End Source File
-# Begin Source File
-
 SOURCE=..\..\Archive\Common\ItemNameUtils.cpp
 # End Source File
 # Begin Source File
 
 SOURCE=..\..\Archive\Common\ItemNameUtils.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\Archive\Common\MultiStream.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\Archive\Common\MultiStream.h
 # End Source File
 # Begin Source File
 
@@ -249,7 +233,15 @@ SOURCE=..\..\Compress\BcjRegister.cpp
 # End Source File
 # Begin Source File
 
-SOURCE=..\..\Compress\BranchCoder.cpp
+SOURCE=..\..\Compress\BranchMisc.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\Compress\BranchMisc.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\Compress\BranchRegister.cpp
 # End Source File
 # Begin Source File
 
@@ -258,6 +250,10 @@ SOURCE=..\..\Compress\CopyCoder.cpp
 # Begin Source File
 
 SOURCE=..\..\Compress\CopyRegister.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\Compress\DeltaFilter.cpp
 # End Source File
 # Begin Source File
 
@@ -313,11 +309,19 @@ SOURCE=..\..\Crypto\MyAes.h
 # PROP Default_Filter ""
 # Begin Source File
 
-SOURCE=..\..\UI\FileManager\MessagesDialog.cpp
+SOURCE=..\..\UI\FileManager\BrowseDialog.cpp
 # End Source File
 # Begin Source File
 
-SOURCE=..\..\UI\FileManager\MessagesDialog.h
+SOURCE=..\..\UI\FileManager\BrowseDialog.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\UI\FileManager\ComboDialog.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\UI\FileManager\ComboDialog.h
 # End Source File
 # Begin Source File
 
@@ -429,6 +433,10 @@ SOURCE=..\..\Common\ProgressUtils.h
 # End Source File
 # Begin Source File
 
+SOURCE=..\..\Common\PropId.cpp
+# End Source File
+# Begin Source File
+
 SOURCE=..\..\Common\StreamBinder.cpp
 # End Source File
 # Begin Source File
@@ -479,6 +487,22 @@ SOURCE=..\..\UI\FileManager\FormatUtils.cpp
 
 SOURCE=..\..\UI\FileManager\FormatUtils.h
 # End Source File
+# Begin Source File
+
+SOURCE=..\..\UI\FileManager\PropertyName.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\UI\FileManager\PropertyName.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\UI\FileManager\SysIconUtils.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\UI\FileManager\SysIconUtils.h
+# End Source File
 # End Group
 # Begin Group "Windows"
 
@@ -486,6 +510,14 @@ SOURCE=..\..\UI\FileManager\FormatUtils.h
 # Begin Group "Control"
 
 # PROP Default_Filter ""
+# Begin Source File
+
+SOURCE=..\..\..\Windows\Control\ComboBox.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\Windows\Control\ComboBox.h
+# End Source File
 # Begin Source File
 
 SOURCE=..\..\..\Windows\Control\Dialog.cpp
@@ -505,6 +537,14 @@ SOURCE=..\..\..\Windows\Control\ListView.h
 # End Group
 # Begin Source File
 
+SOURCE=..\..\..\Windows\CommonDialog.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\Windows\CommonDialog.h
+# End Source File
+# Begin Source File
+
 SOURCE=..\..\..\Windows\DLL.cpp
 # End Source File
 # Begin Source File
@@ -513,11 +553,11 @@ SOURCE=..\..\..\Windows\DLL.h
 # End Source File
 # Begin Source File
 
-SOURCE=..\..\..\Windows\Error.cpp
+SOURCE=..\..\..\Windows\ErrorMsg.cpp
 # End Source File
 # Begin Source File
 
-SOURCE=..\..\..\Windows\Error.h
+SOURCE=..\..\..\Windows\ErrorMsg.h
 # End Source File
 # Begin Source File
 
@@ -561,11 +601,11 @@ SOURCE=..\..\..\Windows\PropVariant.h
 # End Source File
 # Begin Source File
 
-SOURCE=..\..\..\Windows\PropVariantConversions.cpp
+SOURCE=..\..\..\Windows\PropVariantConv.cpp
 # End Source File
 # Begin Source File
 
-SOURCE=..\..\..\Windows\PropVariantConversions.h
+SOURCE=..\..\..\Windows\PropVariantConv.h
 # End Source File
 # Begin Source File
 
@@ -806,6 +846,20 @@ SOURCE=..\..\..\..\C\Alloc.h
 # End Source File
 # Begin Source File
 
+SOURCE=..\..\..\..\C\Bcj2.c
+# SUBTRACT CPP /YX /Yc /Yu
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\..\C\Bcj2.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\..\C\Bra.c
+# SUBTRACT CPP /YX /Yc /Yu
+# End Source File
+# Begin Source File
+
 SOURCE=..\..\..\..\C\Bra.h
 # End Source File
 # Begin Source File
@@ -815,8 +869,31 @@ SOURCE=..\..\..\..\C\Bra86.c
 # End Source File
 # Begin Source File
 
+SOURCE=..\..\..\..\C\BraIA64.c
+# SUBTRACT CPP /YX /Yc /Yu
+# End Source File
+# Begin Source File
+
 SOURCE=..\..\..\..\C\CpuArch.c
 # SUBTRACT CPP /YX /Yc /Yu
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\..\C\Delta.c
+# SUBTRACT CPP /YX /Yc /Yu
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\..\C\Delta.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\..\C\DllSecur.c
+# SUBTRACT CPP /YX /Yc /Yu
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\..\C\DllSecur.h
 # End Source File
 # Begin Source File
 
@@ -875,11 +952,11 @@ SOURCE=.\7z1.ico
 # End Source File
 # Begin Source File
 
-SOURCE=.\Main.cpp
+SOURCE=.\resource.rc
 # End Source File
 # Begin Source File
 
-SOURCE=.\resource.rc
+SOURCE=.\SfxWin.cpp
 # End Source File
 # End Target
 # End Project

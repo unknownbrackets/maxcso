@@ -3,7 +3,7 @@
 #ifndef __WINDOWS_COM_H
 #define __WINDOWS_COM_H
 
-#include "Common/MyString.h"
+#include "../Common/MyString.h"
 
 namespace NWindows {
 namespace NCOM {
@@ -22,7 +22,7 @@ public:
     CoInitialize(NULL);
     #endif
   };
-  ~CComInitializer() { CoUninitialize(); };
+  ~CComInitializer() { CoUninitialize(); }
 };
 
 class CStgMedium
@@ -45,6 +45,7 @@ public:
 
 #endif
 
+/*
 //////////////////////////////////
 // GUID <--> String Conversions
 UString GUIDToStringW(REFGUID guid);
@@ -62,8 +63,8 @@ HRESULT StringToGUIDA(const char *string, GUID &classID);
 #else
   #define StringToGUID StringToGUIDA
 #endif
+*/
 
-  
 }}
 
 #endif

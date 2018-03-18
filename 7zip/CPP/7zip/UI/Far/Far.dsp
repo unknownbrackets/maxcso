@@ -43,7 +43,7 @@ RSC=rc.exe
 # PROP Ignore_Export_Lib 1
 # PROP Target_Dir ""
 # ADD BASE CPP /nologo /MT /W3 /GX /O2 /D "WIN32" /D "NDEBUG" /D "_WINDOWS" /D "_MBCS" /D "_USRDLL" /D "FAR_EXPORTS" /YX /FD /c
-# ADD CPP /nologo /Gz /MD /W3 /GX /O1 /I "..\..\..\\" /D "NDEBUG" /D "WIN32" /D "_WINDOWS" /D "_MBCS" /D "_USRDLL" /D "FAR_EXPORTS" /D "EXTERNAL_CODECS" /Yu"StdAfx.h" /FD /c
+# ADD CPP /nologo /Gz /MD /W4 /WX /GX /O1 /D "NDEBUG" /D "WIN32" /D "_WINDOWS" /D "_MBCS" /D "_USRDLL" /D "FAR_EXPORTS" /D "EXTERNAL_CODECS" /D "NEW_FOLDER_INTERFACE" /Yu"StdAfx.h" /FD /c
 # ADD BASE MTL /nologo /D "NDEBUG" /mktyplib203 /win32
 # ADD MTL /nologo /D "NDEBUG" /mktyplib203 /win32
 # ADD BASE RSC /l 0x419 /d "NDEBUG"
@@ -70,7 +70,7 @@ LINK32=link.exe
 # PROP Ignore_Export_Lib 1
 # PROP Target_Dir ""
 # ADD BASE CPP /nologo /MTd /W3 /Gm /GX /ZI /Od /D "WIN32" /D "_DEBUG" /D "_WINDOWS" /D "_MBCS" /D "_USRDLL" /D "FAR_EXPORTS" /YX /FD /GZ /c
-# ADD CPP /nologo /Gz /MTd /W3 /Gm /GX /ZI /Od /I "..\..\..\\" /D "_DEBUG" /D "WIN32" /D "_WINDOWS" /D "_MBCS" /D "_USRDLL" /D "FAR_EXPORTS" /D "EXTERNAL_CODECS" /Yu"StdAfx.h" /FD /GZ /c
+# ADD CPP /nologo /Gz /MTd /W4 /WX /Gm /GX /ZI /Od /D "_DEBUG" /D "WIN32" /D "_WINDOWS" /D "_MBCS" /D "_USRDLL" /D "FAR_EXPORTS" /D "EXTERNAL_CODECS" /D "NEW_FOLDER_INTERFACE" /Yu"StdAfx.h" /FD /GZ /c
 # ADD BASE MTL /nologo /D "_DEBUG" /mktyplib203 /win32
 # ADD MTL /nologo /D "_DEBUG" /mktyplib203 /win32
 # ADD BASE RSC /l 0x419 /d "_DEBUG"
@@ -158,6 +158,22 @@ SOURCE=..\..\..\Common\StringConvert.h
 # End Source File
 # Begin Source File
 
+SOURCE=..\..\..\Common\StringToInt.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\Common\StringToInt.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\Common\UTFConvert.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\Common\UTFConvert.h
+# End Source File
+# Begin Source File
+
 SOURCE=..\..\..\Common\Wildcard.cpp
 # End Source File
 # Begin Source File
@@ -178,7 +194,7 @@ SOURCE=.\ExtractEngine.h
 # End Source File
 # Begin Source File
 
-SOURCE=.\Main.cpp
+SOURCE=.\Far.cpp
 # End Source File
 # Begin Source File
 
@@ -186,11 +202,11 @@ SOURCE=.\Messages.h
 # End Source File
 # Begin Source File
 
-SOURCE=.\OverwriteDialog.cpp
+SOURCE=.\OverwriteDialogFar.cpp
 # End Source File
 # Begin Source File
 
-SOURCE=.\OverwriteDialog.h
+SOURCE=.\OverwriteDialogFar.h
 # End Source File
 # Begin Source File
 
@@ -218,11 +234,11 @@ SOURCE=.\resource.h
 # End Source File
 # Begin Source File
 
-SOURCE=.\UpdateCallback100.cpp
+SOURCE=.\UpdateCallbackFar.cpp
 # End Source File
 # Begin Source File
 
-SOURCE=.\UpdateCallback100.h
+SOURCE=.\UpdateCallbackFar.h
 # End Source File
 # End Group
 # Begin Group "Far"
@@ -266,11 +282,11 @@ SOURCE=..\..\..\Windows\DLL.h
 # End Source File
 # Begin Source File
 
-SOURCE=..\..\..\Windows\Error.cpp
+SOURCE=..\..\..\Windows\ErrorMsg.cpp
 # End Source File
 # Begin Source File
 
-SOURCE=..\..\..\Windows\Error.h
+SOURCE=..\..\..\Windows\ErrorMsg.h
 # End Source File
 # Begin Source File
 
@@ -298,6 +314,10 @@ SOURCE=..\..\..\Windows\FileIO.h
 # End Source File
 # Begin Source File
 
+SOURCE=..\..\..\Windows\FileLink.cpp
+# End Source File
+# Begin Source File
+
 SOURCE=..\..\..\Windows\FileName.cpp
 # End Source File
 # Begin Source File
@@ -314,11 +334,11 @@ SOURCE=..\..\..\Windows\PropVariant.h
 # End Source File
 # Begin Source File
 
-SOURCE=..\..\..\Windows\PropVariantConversions.cpp
+SOURCE=..\..\..\Windows\PropVariantConv.cpp
 # End Source File
 # Begin Source File
 
-SOURCE=..\..\..\Windows\PropVariantConversions.h
+SOURCE=..\..\..\Windows\PropVariantConv.h
 # End Source File
 # Begin Source File
 
@@ -330,6 +350,14 @@ SOURCE=..\..\..\Windows\Registry.h
 # End Source File
 # Begin Source File
 
+SOURCE=..\..\..\Windows\ResourceString.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\Windows\ResourceString.h
+# End Source File
+# Begin Source File
+
 SOURCE=..\..\..\Windows\Synchronization.cpp
 # End Source File
 # Begin Source File
@@ -338,7 +366,11 @@ SOURCE=..\..\..\Windows\Synchronization.h
 # End Source File
 # Begin Source File
 
-SOURCE=..\..\..\Windows\Time.cpp
+SOURCE=..\..\..\Windows\TimeUtils.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\Windows\TimeUtils.h
 # End Source File
 # End Group
 # Begin Group "UI Common"
@@ -422,6 +454,14 @@ SOURCE=..\Common\PropIDUtils.h
 # End Source File
 # Begin Source File
 
+SOURCE=..\Common\SetProperties.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=..\Common\SetProperties.h
+# End Source File
+# Begin Source File
+
 SOURCE=..\Common\SortUtils.cpp
 # End Source File
 # Begin Source File
@@ -502,6 +542,18 @@ SOURCE=..\Agent\AgentProxy.h
 # End Source File
 # Begin Source File
 
+SOURCE=..\Agent\ArchiveFolder.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=..\Agent\ArchiveFolderOpen.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=..\Agent\ArchiveFolderOut.cpp
+# End Source File
+# Begin Source File
+
 SOURCE=..\Agent\IFolderArchive.h
 # End Source File
 # Begin Source File
@@ -530,6 +582,14 @@ SOURCE=..\..\Compress\CopyCoder.h
 # PROP Default_Filter ""
 # Begin Source File
 
+SOURCE=..\..\Common\CreateCoder.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\Common\CreateCoder.h
+# End Source File
+# Begin Source File
+
 SOURCE=..\..\Common\FilePathAutoRename.cpp
 # End Source File
 # Begin Source File
@@ -546,6 +606,22 @@ SOURCE=..\..\Common\FileStreams.h
 # End Source File
 # Begin Source File
 
+SOURCE=..\..\Common\FilterCoder.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\Common\FilterCoder.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\Common\LimitedStreams.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\Common\LimitedStreams.h
+# End Source File
+# Begin Source File
+
 SOURCE=..\..\Common\ProgressUtils.cpp
 # End Source File
 # Begin Source File
@@ -554,11 +630,31 @@ SOURCE=..\..\Common\ProgressUtils.h
 # End Source File
 # Begin Source File
 
+SOURCE=..\..\Common\PropId.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\Common\StreamObjects.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\Common\StreamObjects.h
+# End Source File
+# Begin Source File
+
 SOURCE=..\..\Common\StreamUtils.cpp
 # End Source File
 # Begin Source File
 
 SOURCE=..\..\Common\StreamUtils.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\Common\UniqBlocks.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\Common\UniqBlocks.h
 # End Source File
 # End Group
 # Begin Group "C"
@@ -621,6 +717,42 @@ SOURCE=..\..\Archive\Common\OutStreamWithCRC.cpp
 # Begin Source File
 
 SOURCE=..\..\Archive\Common\OutStreamWithCRC.h
+# End Source File
+# End Group
+# Begin Group "Interface"
+
+# PROP Default_Filter ""
+# Begin Source File
+
+SOURCE=..\..\Archive\IArchive.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\ICoder.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\IDecl.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\Common\IFileExtractCallback.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\FileManager\IFolder.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\IPassword.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\IProgress.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\PropID.h
 # End Source File
 # End Group
 # End Target

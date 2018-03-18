@@ -103,7 +103,7 @@ void CMemBlockManagerMt::FreeBlock(void *p, bool lockMode)
 
 void CMemBlocks::Free(CMemBlockManagerMt *manager)
 {
-  while(Blocks.Size() > 0)
+  while (Blocks.Size() > 0)
   {
     manager->FreeBlock(Blocks.Back());
     Blocks.DeleteBack();
@@ -120,7 +120,7 @@ void CMemBlocks::FreeOpt(CMemBlockManagerMt *manager)
 HRESULT CMemBlocks::WriteToStream(size_t blockSize, ISequentialOutStream *outStream) const
 {
   UInt64 totalSize = TotalSize;
-  for (int blockIndex = 0; totalSize > 0; blockIndex++)
+  for (unsigned blockIndex = 0; totalSize > 0; blockIndex++)
   {
     UInt32 curSize = (UInt32)blockSize;
     if (totalSize < curSize)
@@ -169,7 +169,7 @@ void CMemLockBlocks::Detach(CMemLockBlocks &blocks, CMemBlockManagerMt *memManag
   blocks.LockMode = LockMode;
   UInt64 totalSize = 0;
   size_t blockSize = memManager->GetBlockSize();
-  for (int i = 0; i < Blocks.Size(); i++)
+  FOR_VECTOR (i, Blocks)
   {
     if (totalSize < TotalSize)
       blocks.Blocks.Add(Blocks[i]);

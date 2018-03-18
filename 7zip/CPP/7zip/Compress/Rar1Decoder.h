@@ -39,6 +39,7 @@ public:
 
   Int64 m_UnpackSize;
   bool m_IsSolid;
+  bool _errorMode;
 
   UInt32 ReadBits(int numBits);
   HRESULT CopyBlock(UInt32 distance, UInt32 len);
@@ -70,11 +71,13 @@ public:
 
   MY_UNKNOWN_IMP1(ICompressSetDecoderProperties2)
 
+  /*
   void ReleaseStreams()
   {
     m_OutWindowStream.ReleaseStream();
     m_InBitStream.ReleaseStream();
   }
+  */
 
   STDMETHOD(Code)(ISequentialInStream *inStream, ISequentialOutStream *outStream,
       const UInt64 *inSize, const UInt64 *outSize, ICompressProgressInfo *progress);

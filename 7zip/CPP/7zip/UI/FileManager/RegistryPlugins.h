@@ -1,9 +1,9 @@
 // RegistryPlugins.h
 
-#ifndef __REGISTRYPLUGINS_H
-#define __REGISTRYPLUGINS_H
+#ifndef __REGISTRY_PLUGINS_H
+#define __REGISTRY_PLUGINS_H
 
-#include "Common/MyString.h"
+#include "../../../Common/MyString.h"
 
 enum EPluginType
 {
@@ -12,7 +12,7 @@ enum EPluginType
 
 struct CPluginInfo
 {
-  UString FilePath;
+  FString FilePath;
   EPluginType Type;
   UString Name;
   CLSID ClassID;

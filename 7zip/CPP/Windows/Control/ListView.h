@@ -3,9 +3,11 @@
 #ifndef __WINDOWS_CONTROL_LISTVIEW_H
 #define __WINDOWS_CONTROL_LISTVIEW_H
 
-#include "Windows/Window.h"
+#include "../../Common/MyWindows.h"
 
 #include <commctrl.h>
+
+#include "../Window.h"
 
 namespace NWindows {
 namespace NControl {
@@ -18,15 +20,30 @@ public:
       HWND parentWindow, HMENU idOrHMenu,
       HINSTANCE instance, LPVOID createParam);
 
-  #ifndef UNDER_CE
-  bool SetUnicodeFormat(bool fUnicode) { return BOOLToBool(ListView_SetUnicodeFormat(_window, BOOLToBool(fUnicode))); }
-  #endif
+  void SetUnicodeFormat()
+  {
+    #ifndef UNDER_CE
+    ListView_SetUnicodeFormat(_window, TRUE);
+    #endif
+  }
  
   bool DeleteAllItems() { return BOOLToBool(ListView_DeleteAllItems(_window)); }
   bool DeleteColumn(int columnIndex) { return BOOLToBool(ListView_DeleteColumn(_window, columnIndex)); }
 
   int InsertColumn(int columnIndex, const LVCOLUMN *columnInfo) { return ListView_InsertColumn(_window, columnIndex, columnInfo); }
   int InsertColumn(int columnIndex, LPCTSTR text, int width);
+  bool SetColumnOrderArray(int count, const int *columns) { return BOOLToBool(ListView_SetColumnOrderArray(_window, count, columns)); }
+
+  /*
+  int GetNumColumns()
+  {
+    HWND header = ListView_GetHeader(_window);
+    if (!header)
+      return -1;
+    return Header_GetItemCount(header);
+  }
+  */
+
   int InsertItem(const LVITEM* item) { return ListView_InsertItem(_window, item); }
   int InsertItem(int index, LPCTSTR text);
   bool SetItem(const LVITEM* item) { return BOOLToBool(ListView_SetItem(_window, item)); }
@@ -34,11 +51,11 @@ public:
 
   #ifndef _UNICODE
 
-  int InsertColumn(int columnIndex, const LVCOLUMNW *columnInfo) { return (int)SendMessage(LVM_INSERTCOLUMNW, (WPARAM)columnIndex, (LPARAM)columnInfo); }
+  int InsertColumn(int columnIndex, const LVCOLUMNW *columnInfo) { return (int)SendMsg(LVM_INSERTCOLUMNW, (WPARAM)columnIndex, (LPARAM)columnInfo); }
   int InsertColumn(int columnIndex, LPCWSTR text, int width);
-  int InsertItem(const LV_ITEMW* item) { return (int)SendMessage(LVM_INSERTITEMW, 0, (LPARAM)item); }
+  int InsertItem(const LV_ITEMW* item) { return (int)SendMsg(LVM_INSERTITEMW, 0, (LPARAM)item); }
   int InsertItem(int index, LPCWSTR text);
-  bool SetItem(const LV_ITEMW* item) { return BOOLToBool((BOOL)SendMessage(LVM_SETITEMW, 0, (LPARAM)item)); }
+  bool SetItem(const LV_ITEMW* item) { return BOOLToBool((BOOL)SendMsg(LVM_SETITEMW, 0, (LPARAM)item)); }
   int SetSubItem(int index, int subIndex, LPCWSTR text);
 
   #endif
@@ -65,8 +82,12 @@ public:
     { return BOOLToBool(ListView_SortItems(_window, compareFunction, dataParam)); }
 
   void SetItemState(int index, UINT state, UINT mask) { ListView_SetItemState(_window, index, state, mask); }
+  void SetItemState_Selected(int index, bool select) { SetItemState(index, select ? LVIS_SELECTED : 0, LVIS_SELECTED); }
+  void SetItemState_Selected(int index) { SetItemState(index, LVIS_SELECTED, LVIS_SELECTED); }
+  void SelectAll() { SetItemState_Selected(-1); }
   void SetItemState_FocusedSelected(int index) { SetItemState(index, LVIS_FOCUSED | LVIS_SELECTED, LVIS_FOCUSED | LVIS_SELECTED); }
   UINT GetItemState(int index, UINT mask) const { return ListView_GetItemState(_window, index, mask); }
+  bool IsItemSelected(int index) const { return GetItemState(index, LVIS_SELECTED) == LVIS_SELECTED; }
 
   bool GetColumn(int columnIndex, LVCOLUMN* columnInfo) const
     { return BOOLToBool(ListView_GetColumn(_window, columnIndex, columnInfo)); }
@@ -103,6 +124,22 @@ public:
   bool SetColumnWidth(int iCol, int cx) { return BOOLToBool(ListView_SetColumnWidth(_window, iCol, cx)); }
   bool SetColumnWidthAuto(int iCol) { return SetColumnWidth(iCol, LVSCW_AUTOSIZE); }
 };
+
+class CListView2: public CListView
+{
+  WNDPROC _origWindowProc;
+public:
+  void SetWindowProc();
+  virtual LRESULT OnMessage(UINT message, WPARAM wParam, LPARAM lParam);
+};
+
+/*
+class CListView3: public CListView2
+{
+public:
+  virtual LRESULT OnMessage(UINT message, WPARAM wParam, LPARAM lParam);
+};
+*/
 
 }}
 

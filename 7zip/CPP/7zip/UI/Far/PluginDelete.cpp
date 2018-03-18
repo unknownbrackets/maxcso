@@ -2,32 +2,23 @@
 
 #include "StdAfx.h"
 
-#include "Windows/FileDir.h"
-
-#include "../Common/WorkDir.h"
+#include <stdio.h>
 
 #include "Messages.h"
 #include "Plugin.h"
-#include "UpdateCallback100.h"
+#include "UpdateCallbackFar.h"
 
 using namespace NFar;
-using namespace NWindows;
-using namespace NFile;
-using namespace NDirectory;
-
-static LPCWSTR kTempArchivePrefix = L"7zA";
 
 int CPlugin::DeleteFiles(PluginPanelItem *panelItems, int numItems, int opMode)
 {
   if (numItems == 0)
     return FALSE;
-  /*
-  if (!m_ArchiverInfo.UpdateEnabled)
+  if (_agent->IsThereReadOnlyArc())
   {
     g_StartupInfo.ShowMessage(NMessageID::kUpdateNotSupportedForThisArchive);
     return FALSE;
   }
-  */
   if ((opMode & OPM_SILENT) == 0)
   {
     const char *msgItems[]=
@@ -45,12 +36,10 @@ int CPlugin::DeleteFiles(PluginPanelItem *panelItems, int numItems, int opMode)
     }
     else if (numItems > 1)
     {
-      sprintf(msg, g_StartupInfo.GetMsgString(NMessageID::kDeleteNumberOfFiles),
-          numItems);
+      sprintf(msg, g_StartupInfo.GetMsgString(NMessageID::kDeleteNumberOfFiles), numItems);
       msgItems[1] = msg;
     }
-    if (g_StartupInfo.ShowMessage(FMSG_WARNING, NULL, msgItems,
-        sizeof(msgItems) / sizeof(msgItems[0]), 2) != 0)
+    if (g_StartupInfo.ShowMessage(FMSG_WARNING, NULL, msgItems, ARRAY_SIZE(msgItems), 2) != 0)
       return (FALSE);
   }
 
@@ -64,30 +53,21 @@ int CPlugin::DeleteFiles(PluginPanelItem *panelItems, int numItems, int opMode)
     progressBoxPointer = &progressBox;
     progressBox.Init(
         // g_StartupInfo.GetMsgString(NMessageID::kWaitTitle),
-        g_StartupInfo.GetMsgString(NMessageID::kDeleting), 48);
+        g_StartupInfo.GetMsgString(NMessageID::kDeleting));
   }
 
-  NWorkDir::CInfo workDirInfo;
-  workDirInfo.Load();
-
-  UString workDir = GetWorkDir(workDirInfo, m_FileName);
-  CreateComplexDirectory(workDir);
-
-  CTempFileW tempFile;
-  UString tempFileName;
-  if (tempFile.Create(workDir, kTempArchivePrefix, tempFileName) == 0)
+  /*
+  CWorkDirTempFile tempFile;
+  if (tempFile.CreateTempFile(m_FileName) != S_OK)
     return FALSE;
+  */
 
-
-  CRecordVector<UINT32> indices;
-  indices.Reserve(numItems);
+  CObjArray<UInt32> indices(numItems);
   int i;
   for (i = 0; i < numItems; i++)
-    indices.Add((UINT32)panelItems[i].UserData);
+    indices[i] = (UInt32)panelItems[i].UserData;
 
-  ////////////////////////////
-  // Save _folder;
-
+  /*
   UStringVector pathVector;
   GetPathParts(pathVector);
   
@@ -98,64 +78,43 @@ int CPlugin::DeleteFiles(PluginPanelItem *panelItems, int numItems, int opMode)
     g_StartupInfo.ShowMessage(NMessageID::kUpdateNotSupportedForThisArchive);
     return FALSE;
   }
-  outArchive->SetFolder(_folder);
+  */
 
   CUpdateCallback100Imp *updateCallbackSpec = new CUpdateCallback100Imp;
-  CMyComPtr<IFolderArchiveUpdateCallback> updateCallback(updateCallbackSpec );
+  CMyComPtr<IFolderArchiveUpdateCallback> updateCallback(updateCallbackSpec);
   
   updateCallbackSpec->Init(/* m_ArchiveHandler, */ progressBoxPointer);
+  updateCallbackSpec->PasswordIsDefined = PasswordIsDefined;
+  updateCallbackSpec->Password = Password;
 
-
-  result = outArchive->DeleteItems(
-      tempFileName,
-      &indices.Front(), indices.Size(),
-      updateCallback);
+  /*
+  outArchive->SetFolder(_folder);
+  result = outArchive->DeleteItems(tempFile.OutStream, indices, numItems, updateCallback);
   updateCallback.Release();
   outArchive.Release();
 
+  if (result == S_OK)
+  {
+    result = AfterUpdate(tempFile, pathVector);
+  }
+  */
+
+  HRESULT result;
+  {
+    CMyComPtr<IFolderOperations> folderOperations;
+    result = _folder.QueryInterface(IID_IFolderOperations, &folderOperations);
+    if (folderOperations)
+      result = folderOperations->Delete(indices, numItems, updateCallback);
+    else if (result != S_OK)
+      result = E_FAIL;
+  }
+
   if (result != S_OK)
   {
-    ShowErrorMessage(result);
+    ShowSysErrorMessage(result);
     return FALSE;
   }
 
-  _folder.Release();
-  m_ArchiveHandler->Close();
-  
-  if (!DeleteFileAlways(m_FileName))
-  {
-    ShowLastErrorMessage();
-    return FALSE;
-  }
-
-  tempFile.DisableDeleting();
-  if (!MyMoveFile(tempFileName, m_FileName))
-  {
-    ShowLastErrorMessage();
-    return FALSE;
-  }
-  
-  result = m_ArchiveHandler->ReOpen(NULL);
-  if (result != S_OK)
-  {
-    ShowErrorMessage(result);
-    return FALSE;
-  }
-
- 
-  ////////////////////////////
-  // Restore _folder;
-
-  m_ArchiveHandler->BindToRootFolder(&_folder);
-  for (i = 0; i < pathVector.Size(); i++)
-  {
-    CMyComPtr<IFolderFolder> newFolder;
-    _folder->BindToFolder(pathVector[i], &newFolder);
-    if (!newFolder)
-      break;
-    _folder = newFolder;
-  }
-  GetCurrentDir();
-
+  SetCurrentDirVar();
   return TRUE;
 }

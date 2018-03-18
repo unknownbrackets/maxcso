@@ -2,15 +2,14 @@
 
 #include "StdAfx.h"
 
-#include "Common/StringConvert.h"
+#include "../../../Common/StringConvert.h"
 
 #ifndef UNDER_CE
-#include "Windows/MemoryLock.h"
+#include "../../../Windows/MemoryLock.h"
 #endif
 
 #include "HelpUtils.h"
 #include "LangUtils.h"
-#include "ProgramLocation.h"
 #include "RegistryUtils.h"
 #include "SettingsPage.h"
 
@@ -18,41 +17,47 @@
 
 using namespace NWindows;
 
-static CIDLangPair kIDLangPairs[] =
+static const UInt32 kLangIDs[] =
 {
-  { IDC_SETTINGS_SHOW_DOTS, 0x03010401},
-  { IDC_SETTINGS_SHOW_REAL_FILE_ICONS, 0x03010402},
-  { IDC_SETTINGS_SHOW_SYSTEM_MENU, 0x03010410},
-  { IDC_SETTINGS_FULL_ROW, 0x03010420},
-  { IDC_SETTINGS_SHOW_GRID, 0x03010421},
-  { IDC_SETTINGS_SINGLE_CLICK, 0x03010422},
-  // { IDC_SETTINGS_UNDERLINE, 0x03010423}
-  { IDC_SETTINGS_ALTERNATIVE_SELECTION, 0x03010430},
-  { IDC_SETTINGS_LARGE_PAGES, 0x03010440}
+  IDX_SETTINGS_SHOW_DOTS,
+  IDX_SETTINGS_SHOW_REAL_FILE_ICONS,
+  IDX_SETTINGS_SHOW_SYSTEM_MENU,
+  IDX_SETTINGS_FULL_ROW,
+  IDX_SETTINGS_SHOW_GRID,
+  IDX_SETTINGS_SINGLE_CLICK,
+  IDX_SETTINGS_ALTERNATIVE_SELECTION,
+  IDX_SETTINGS_LARGE_PAGES
 };
 
-static LPCWSTR kEditTopic = L"FM/options.htm#settings";
+#define kSettingsTopic "FM/options.htm#settings"
 
 extern bool IsLargePageSupported();
 
 bool CSettingsPage::OnInit()
 {
-  LangSetDlgItemsText(HWND(*this), kIDLangPairs, sizeof(kIDLangPairs) / sizeof(kIDLangPairs[0]));
+  _wasChanged = false;
+  _largePages_wasChanged = false;
 
-  CheckButton(IDC_SETTINGS_SHOW_DOTS, ReadShowDots());
-  CheckButton(IDC_SETTINGS_SHOW_SYSTEM_MENU, ReadShowSystemMenu());
-  CheckButton(IDC_SETTINGS_SHOW_REAL_FILE_ICONS, ReadShowRealFileIcons());
+  LangSetDlgItems(*this, kLangIDs, ARRAY_SIZE(kLangIDs));
 
-  CheckButton(IDC_SETTINGS_FULL_ROW, ReadFullRow());
-  CheckButton(IDC_SETTINGS_SHOW_GRID, ReadShowGrid());
-  CheckButton(IDC_SETTINGS_ALTERNATIVE_SELECTION, ReadAlternativeSelection());
+  CFmSettings st;
+  st.Load();
+
+  CheckButton(IDX_SETTINGS_SHOW_DOTS, st.ShowDots);
+  CheckButton(IDX_SETTINGS_SHOW_REAL_FILE_ICONS, st.ShowRealFileIcons);
+  CheckButton(IDX_SETTINGS_FULL_ROW, st.FullRow);
+  CheckButton(IDX_SETTINGS_SHOW_GRID, st.ShowGrid);
+  CheckButton(IDX_SETTINGS_SINGLE_CLICK, st.SingleClick);
+  CheckButton(IDX_SETTINGS_ALTERNATIVE_SELECTION, st.AlternativeSelection);
+  // CheckButton(IDX_SETTINGS_UNDERLINE, st.Underline);
+
+  CheckButton(IDX_SETTINGS_SHOW_SYSTEM_MENU, st.ShowSystemMenu);
+  
   if (IsLargePageSupported())
-    CheckButton(IDC_SETTINGS_LARGE_PAGES, ReadLockMemoryEnable());
+    CheckButton(IDX_SETTINGS_LARGE_PAGES, ReadLockMemoryEnable());
   else
-    EnableItem(IDC_SETTINGS_LARGE_PAGES, false);
-  CheckButton(IDC_SETTINGS_SINGLE_CLICK, ReadSingleClick());
-  // CheckButton(IDC_SETTINGS_UNDERLINE, ReadUnderline());
-
+    EnableItem(IDX_SETTINGS_LARGE_PAGES, false);
+  
   // EnableSubItems();
 
   return CPropertyPage::OnInit();
@@ -61,57 +66,77 @@ bool CSettingsPage::OnInit()
 /*
 void CSettingsPage::EnableSubItems()
 {
-  EnableItem(IDC_SETTINGS_UNDERLINE, IsButtonCheckedBool(IDC_SETTINGS_SINGLE_CLICK));
+  EnableItem(IDX_SETTINGS_UNDERLINE, IsButtonCheckedBool(IDX_SETTINGS_SINGLE_CLICK));
 }
 */
 
 LONG CSettingsPage::OnApply()
 {
-  SaveShowDots(IsButtonCheckedBool(IDC_SETTINGS_SHOW_DOTS));
-  SaveShowSystemMenu(IsButtonCheckedBool(IDC_SETTINGS_SHOW_SYSTEM_MENU));
-  SaveShowRealFileIcons(IsButtonCheckedBool(IDC_SETTINGS_SHOW_REAL_FILE_ICONS));
-
-  SaveFullRow(IsButtonCheckedBool(IDC_SETTINGS_FULL_ROW));
-  SaveShowGrid(IsButtonCheckedBool(IDC_SETTINGS_SHOW_GRID));
-  SaveAlternativeSelection(IsButtonCheckedBool(IDC_SETTINGS_ALTERNATIVE_SELECTION));
-  #ifndef UNDER_CE
-  if (IsLargePageSupported())
+  if (_wasChanged)
   {
-    bool enable = IsButtonCheckedBool(IDC_SETTINGS_LARGE_PAGES);
-    NSecurity::EnableLockMemoryPrivilege(enable);
-    SaveLockMemoryEnable(enable);
+    CFmSettings st;
+    st.ShowDots = IsButtonCheckedBool(IDX_SETTINGS_SHOW_DOTS);
+    st.ShowRealFileIcons = IsButtonCheckedBool(IDX_SETTINGS_SHOW_REAL_FILE_ICONS);
+    st.FullRow = IsButtonCheckedBool(IDX_SETTINGS_FULL_ROW);
+    st.ShowGrid = IsButtonCheckedBool(IDX_SETTINGS_SHOW_GRID);
+    st.SingleClick = IsButtonCheckedBool(IDX_SETTINGS_SINGLE_CLICK);
+    st.AlternativeSelection = IsButtonCheckedBool(IDX_SETTINGS_ALTERNATIVE_SELECTION);
+    // st.Underline = IsButtonCheckedBool(IDX_SETTINGS_UNDERLINE);
+    
+    st.ShowSystemMenu = IsButtonCheckedBool(IDX_SETTINGS_SHOW_SYSTEM_MENU);
+
+    st.Save();
+    
+    _wasChanged = false;
+  }
+  
+  #ifndef UNDER_CE
+  if (_largePages_wasChanged)
+  {
+    if (IsLargePageSupported())
+    {
+      bool enable = IsButtonCheckedBool(IDX_SETTINGS_LARGE_PAGES);
+      NSecurity::EnablePrivilege_LockMemory(enable);
+      SaveLockMemoryEnable(enable);
+    }
+    _largePages_wasChanged = false;
   }
   #endif
   
-  SaveSingleClick(IsButtonCheckedBool(IDC_SETTINGS_SINGLE_CLICK));
-  // SaveUnderline(IsButtonCheckedBool(IDC_SETTINGS_UNDERLINE));
-
   return PSNRET_NOERROR;
 }
 
 void CSettingsPage::OnNotifyHelp()
 {
-  ShowHelpWindow(NULL, kEditTopic); // change it
+  ShowHelpWindow(kSettingsTopic);
 }
 
 bool CSettingsPage::OnButtonClicked(int buttonID, HWND buttonHWND)
 {
-  switch(buttonID)
+  switch (buttonID)
   {
-    case IDC_SETTINGS_SINGLE_CLICK:
+    case IDX_SETTINGS_SINGLE_CLICK:
     /*
       EnableSubItems();
       break;
     */
-    case IDC_SETTINGS_SHOW_DOTS:
-    case IDC_SETTINGS_SHOW_SYSTEM_MENU:
-    case IDC_SETTINGS_SHOW_REAL_FILE_ICONS:
-    case IDC_SETTINGS_FULL_ROW:
-    case IDC_SETTINGS_SHOW_GRID:
-    case IDC_SETTINGS_ALTERNATIVE_SELECTION:
-    case IDC_SETTINGS_LARGE_PAGES:
-      Changed();
-      return true;
+    case IDX_SETTINGS_SHOW_DOTS:
+    case IDX_SETTINGS_SHOW_SYSTEM_MENU:
+    case IDX_SETTINGS_SHOW_REAL_FILE_ICONS:
+    case IDX_SETTINGS_FULL_ROW:
+    case IDX_SETTINGS_SHOW_GRID:
+    case IDX_SETTINGS_ALTERNATIVE_SELECTION:
+      _wasChanged = true;
+      break;
+
+    case IDX_SETTINGS_LARGE_PAGES:
+      _largePages_wasChanged = true;
+      break;
+
+    default:
+      return CPropertyPage::OnButtonClicked(buttonID, buttonHWND);
   }
-  return CPropertyPage::OnButtonClicked(buttonID, buttonHWND);
+
+  Changed();
+  return true;
 }

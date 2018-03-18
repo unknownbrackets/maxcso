@@ -3,6 +3,10 @@
 #ifndef __WINDOWS_CONTROL_PROPERTYPAGE_H
 #define __WINDOWS_CONTROL_PROPERTYPAGE_H
 
+#include "../../Common/MyWindows.h"
+
+#include <prsht.h>
+
 #include "Dialog.h"
 
 namespace NWindows {

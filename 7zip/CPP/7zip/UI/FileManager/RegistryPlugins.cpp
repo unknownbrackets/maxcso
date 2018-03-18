@@ -2,24 +2,23 @@
 
 #include "StdAfx.h"
 
-#include "Windows/DLL.h"
-#include "Windows/PropVariant.h"
-#include "Windows/FileFind.h"
+#include "../../../Windows/DLL.h"
+#include "../../../Windows/FileFind.h"
+#include "../../../Windows/PropVariant.h"
 
-#include "ProgramLocation.h"
-#include "RegistryPlugins.h"
 #include "IFolder.h"
+#include "RegistryPlugins.h"
 
 using namespace NWindows;
 using namespace NFile;
 
 /*
-static const TCHAR *kLMBasePath = TEXT("Software\\7-Zip\\FM");
+static LPCTSTR const kLMBasePath = TEXT("Software\\7-Zip\\FM");
 
-static const TCHAR *kPluginsKeyName = TEXT("Plugins");
-static const TCHAR *kPluginsOpenClassIDValue = TEXT("CLSID");
-static const TCHAR *kPluginsOptionsClassIDValue = TEXT("Options");
-static const TCHAR *kPluginsTypeValue = TEXT("Type");
+static LPCTSTR const kPluginsKeyName = TEXT("Plugins");
+static LPCTSTR const kPluginsOpenClassIDValue = TEXT("CLSID");
+static LPCTSTR const kPluginsOptionsClassIDValue = TEXT("Options");
+static LPCTSTR const kPluginsTypeValue = TEXT("Type");
 
 static CSysString GetFileFolderPluginsKeyName()
 {
@@ -91,23 +90,22 @@ static bool ReadPluginInfo(CPluginInfo &pluginInfo, bool needCheckDll)
   return true;
 }
 
-UString GetProgramFolderPrefix();
-
 void ReadPluginInfoList(CObjectVector<CPluginInfo> &plugins)
 {
   plugins.Clear();
 
-  UString baseFolderPrefix;
-  GetProgramFolderPath(baseFolderPrefix);
+  FString baseFolderPrefix = NDLL::GetModuleDirPrefix();
   {
     CPluginInfo pluginInfo;
-    pluginInfo.FilePath = baseFolderPrefix + L"7-zip.dll";
+    pluginInfo.FilePath = baseFolderPrefix + FTEXT("7-zip.dll");
     if (::ReadPluginInfo(pluginInfo, false))
       plugins.Add(pluginInfo);
   }
-  UString folderPath = baseFolderPrefix + L"Plugins" WSTRING_PATH_SEPARATOR;
-  NFind::CEnumeratorW enumerator(folderPath + L"*");
-  NFind::CFileInfoW fileInfo;
+  FString folderPath = baseFolderPrefix;
+  folderPath += "Plugins" STRING_PATH_SEPARATOR;
+  NFind::CEnumerator enumerator;
+  enumerator.SetDirPrefix(folderPath);
+  NFind::CFileInfo fileInfo;
   while (enumerator.Next(fileInfo))
   {
     if (fileInfo.IsDir())
@@ -122,7 +120,7 @@ void ReadPluginInfoList(CObjectVector<CPluginInfo> &plugins)
 void ReadFileFolderPluginInfoList(CObjectVector<CPluginInfo> &plugins)
 {
   ReadPluginInfoList(plugins);
-  for (int i = 0; i < plugins.Size();)
+  for (unsigned i = 0; i < plugins.Size();)
     if (plugins[i].Type != kPluginTypeFF)
       plugins.Delete(i);
     else
@@ -131,7 +129,7 @@ void ReadFileFolderPluginInfoList(CObjectVector<CPluginInfo> &plugins)
     CPluginInfo p;
     // p.FilePath.Empty();
     p.Type = kPluginTypeFF;
-    p.Name = L"7-Zip";
+    p.Name = "7-Zip";
     // p.ClassID = CLSID_CAgentArchiveHandler;
     p.ClassIDDefined = true;
     // p.OptionsClassID;

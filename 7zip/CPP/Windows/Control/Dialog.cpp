@@ -3,9 +3,10 @@
 #include "StdAfx.h"
 
 #ifndef _UNICODE
-#include "Common/StringConvert.h"
+#include "../../Common/StringConvert.h"
 #endif
-#include "Windows/Control/Dialog.h"
+
+#include "Dialog.h"
 
 extern HINSTANCE g_hInstance;
 #ifndef _UNICODE
@@ -17,17 +18,16 @@ namespace NControl {
 
 static INT_PTR APIENTRY DialogProcedure(HWND dialogHWND, UINT message, WPARAM wParam, LPARAM lParam)
 {
-  CWindow dialogTmp(dialogHWND);
+  CWindow tempDialog(dialogHWND);
   if (message == WM_INITDIALOG)
-    dialogTmp.SetUserDataLongPtr(lParam);
-  CDialog *dialog = (CDialog *)(dialogTmp.GetUserDataLongPtr());
+    tempDialog.SetUserDataLongPtr(lParam);
+  CDialog *dialog = (CDialog *)(tempDialog.GetUserDataLongPtr());
   if (dialog == NULL)
     return FALSE;
   if (message == WM_INITDIALOG)
     dialog->Attach(dialogHWND);
-
   try { return BoolToBOOL(dialog->OnMessage(message, wParam, lParam)); }
-  catch(...) { return true; }
+  catch(...) { return TRUE; }
 }
 
 bool CDialog::OnMessage(UINT message, WPARAM wParam, LPARAM lParam)
@@ -68,7 +68,7 @@ bool CDialog::OnCommand(int code, int itemID, LPARAM lParam)
 
 bool CDialog::OnButtonClicked(int buttonID, HWND /* buttonHWND */)
 {
-  switch(buttonID)
+  switch (buttonID)
   {
     case IDOK: OnOK(); break;
     case IDCANCEL: OnCancel(); break;
@@ -81,7 +81,7 @@ bool CDialog::OnButtonClicked(int buttonID, HWND /* buttonHWND */)
 static bool GetWorkAreaRect(RECT *rect)
 {
   // use another function for multi-monitor.
-  return BOOLToBool(::SystemParametersInfo(SPI_GETWORKAREA, NULL, rect, NULL));
+  return BOOLToBool(::SystemParametersInfo(SPI_GETWORKAREA, 0, rect, 0));
 }
 
 bool IsDialogSizeOK(int xSize, int ySize)
@@ -98,6 +98,55 @@ bool IsDialogSizeOK(int xSize, int ySize)
   return
     xSize / 4 * x <= wx &&
     ySize / 8 * y <= wy;
+}
+
+bool CDialog::GetMargins(int margin, int &x, int &y)
+{
+  x = margin;
+  y = margin;
+  RECT rect;
+  rect.left = 0;
+  rect.top = 0;
+  rect.right = margin;
+  rect.bottom = margin;
+  if (!MapRect(&rect))
+    return false;
+  x = rect.right - rect.left;
+  y = rect.bottom - rect.top;
+  return true;
+}
+
+int CDialog::Units_To_Pixels_X(int units)
+{
+  RECT rect;
+  rect.left = 0;
+  rect.top = 0;
+  rect.right = units;
+  rect.bottom = units;
+  if (!MapRect(&rect))
+    return units * 3 / 2;
+  return rect.right - rect.left;
+}
+
+bool CDialog::GetItemSizes(int id, int &x, int &y)
+{
+  RECT rect;
+  if (!::GetWindowRect(GetItem(id), &rect))
+    return false;
+  x = RECT_SIZE_X(rect);
+  y = RECT_SIZE_Y(rect);
+  return true;
+}
+
+void CDialog::GetClientRectOfItem(int id, RECT &rect)
+{
+  ::GetWindowRect(GetItem(id), &rect);
+  ScreenToClient(&rect);
+}
+
+bool CDialog::MoveItem(int id, int x, int y, int width, int height, bool repaint)
+{
+  return BOOLToBool(::MoveWindow(GetItem(id), x, y, width, height, BoolToBOOL(repaint)));
 }
 
 void CDialog::NormalizeSize(bool fullNormalize)

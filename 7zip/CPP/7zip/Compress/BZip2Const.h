@@ -25,29 +25,41 @@ const Byte kBlockSig3 = 0x26;
 const Byte kBlockSig4 = 0x53;
 const Byte kBlockSig5 = 0x59;
 
-const int kNumOrigBits = 24;
+const unsigned kNumOrigBits = 24;
 
-const int kNumTablesBits = 3;
-const int kNumTablesMin = 2;
-const int kNumTablesMax = 6;
+const unsigned kNumTablesBits = 3;
+const unsigned kNumTablesMin = 2;
+const unsigned kNumTablesMax = 6;
 
-const int kNumLevelsBits = 5;
+const unsigned kNumLevelsBits = 5;
 
-const int kMaxHuffmanLen = 20; // Check it
+const unsigned kMaxHuffmanLen = 20; // Check it
 
-const int kMaxAlphaSize = 258;
+const unsigned kMaxAlphaSize = 258;
 
-const int kGroupSize = 50;
+const unsigned kGroupSize = 50;
 
-const int kBlockSizeMultMin = 1;
-const int kBlockSizeMultMax = 9;
+const unsigned kBlockSizeMultMin = 1;
+const unsigned kBlockSizeMultMax = 9;
+
 const UInt32 kBlockSizeStep = 100000;
 const UInt32 kBlockSizeMax = kBlockSizeMultMax * kBlockSizeStep;
 
-const int kNumSelectorsBits = 15;
+const unsigned kNumSelectorsBits = 15;
 const UInt32 kNumSelectorsMax = (2 + (kBlockSizeMax / kGroupSize));
 
-const int kRleModeRepSize = 4;
+const unsigned kRleModeRepSize = 4;
+
+/*
+The number of selectors stored in bzip2 block:
+(numSelectors <= 18001) - must work with any decoder.
+(numSelectors == 18002) - works with bzip2 1.0.6 decoder and all derived decoders.
+(numSelectors  > 18002)
+   7-Zip decoder doesn't support it.
+   bzip2 1.0.6 decoder can overflow selector[18002] arrays. But there are another
+               arrays after selector arrays. So the compiled code works.
+   lbzip2 2.5 encoder can write up to (18001 + 7) selectors.
+*/
 
 }}
 

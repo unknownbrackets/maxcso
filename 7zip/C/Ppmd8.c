@@ -1,8 +1,10 @@
 /* Ppmd8.c -- PPMdI codec
-2010-03-24 : Igor Pavlov : Public domain
+2017-04-03 : Igor Pavlov : Public domain
 This code is based on PPMd var.I (2002): Dmitry Shkarin : Public domain */
 
-#include <memory.h>
+#include "Precomp.h"
+
+#include <string.h>
 
 #include "Ppmd8.h"
 
@@ -13,7 +15,7 @@ static const UInt16 kInitBinEsc[] = { 0x3CDD, 0x1F3F, 0x59BF, 0x48F3, 0x64A1, 0x
 #define UNIT_SIZE 12
 
 #define U2B(nu) ((UInt32)(nu) * UNIT_SIZE)
-#define U2I(nu) (p->Units2Indx[(nu) - 1])
+#define U2I(nu) (p->Units2Indx[(size_t)(nu) - 1])
 #define I2U(indx) (p->Indx2Units[indx])
 
 #ifdef PPMD_32BIT
@@ -65,7 +67,7 @@ void Ppmd8_Construct(CPpmd8 *p)
   for (i = 0, k = 0; i < PPMD_NUM_INDEXES; i++)
   {
     unsigned step = (i >= 12 ? 4 : (i >> 2) + 1);
-    do { p->Units2Indx[k++] = (Byte)i; } while(--step);
+    do { p->Units2Indx[k++] = (Byte)i; } while (--step);
     p->Indx2Units[i] = (Byte)k;
   }
 
@@ -84,16 +86,16 @@ void Ppmd8_Construct(CPpmd8 *p)
   }
 }
 
-void Ppmd8_Free(CPpmd8 *p, ISzAlloc *alloc)
+void Ppmd8_Free(CPpmd8 *p, ISzAllocPtr alloc)
 {
-  alloc->Free(alloc, p->Base);
+  ISzAlloc_Free(alloc, p->Base);
   p->Size = 0;
   p->Base = 0;
 }
 
-Bool Ppmd8_Alloc(CPpmd8 *p, UInt32 size, ISzAlloc *alloc)
+Bool Ppmd8_Alloc(CPpmd8 *p, UInt32 size, ISzAllocPtr alloc)
 {
-  if (p->Base == 0 || p->Size != size)
+  if (!p->Base || p->Size != size)
   {
     Ppmd8_Free(p, alloc);
     p->AlignOffset =
@@ -102,7 +104,7 @@ Bool Ppmd8_Alloc(CPpmd8 *p, UInt32 size, ISzAlloc *alloc)
       #else
         4 - (size & 3);
       #endif
-    if ((p->Base = (Byte *)alloc->Alloc(alloc, p->AlignOffset + size)) == 0)
+    if ((p->Base = (Byte *)ISzAlloc_Alloc(alloc, p->AlignOffset + size)) == 0)
       return False;
     p->Size = size;
   }
@@ -238,8 +240,8 @@ static void *AllocUnits(CPpmd8 *p, unsigned indx)
 }
 
 #define MyMem12Cpy(dest, src, num) \
-  { UInt32 *d = (UInt32 *)dest; const UInt32 *s = (const UInt32 *)src; UInt32 n = num; \
-    do { d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; s += 3; d += 3; } while(--n); }
+  { UInt32 *d = (UInt32 *)dest; const UInt32 *z = (const UInt32 *)src; UInt32 n = num; \
+    do { d[0] = z[0]; d[1] = z[1]; d[2] = z[2]; z += 3; d += 3; } while (--n); }
 
 static void *ShrinkUnits(CPpmd8 *p, void *oldPtr, unsigned oldNU, unsigned newNU)
 {
@@ -384,7 +386,7 @@ static void RestartModel(CPpmd8 *p)
 
   for (i = m = 0; m < 24; m++)
   {
-    while (p->NS2Indx[i + 3] == m + 3)
+    while (p->NS2Indx[(size_t)i + 3] == m + 3)
       i++;
     for (k = 0; k < 32; k++)
     {
@@ -483,10 +485,11 @@ static CPpmd_Void_Ref CutOff(CPpmd8 *p, CTX_PTR ctx, unsigned order)
     }
     if (i == 0)
     {
-      ctx->Flags = (ctx->Flags & 0x10) + 0x08 * (s->Symbol >= 0x40);
+      ctx->Flags = (Byte)((ctx->Flags & 0x10) + 0x08 * (s->Symbol >= 0x40));
       *ONE_STATE(ctx) = *s;
       FreeUnits(p, s, tmp);
-      ONE_STATE(ctx)->Freq = (Byte)((unsigned)ONE_STATE(ctx)->Freq + 11) >> 3;
+      /* 9.31: the code was fixed. It's was not BUG, if Freq <= MAX_FREQ = 124 */
+      ONE_STATE(ctx)->Freq = (Byte)(((unsigned)ONE_STATE(ctx)->Freq + 11) >> 3);
     }
     else
       Refresh(p, ctx, tmp, ctx->SummFreq > 16 * i);
@@ -554,17 +557,17 @@ static void RestoreModel(CPpmd8 *p, CTX_PTR c1
     if (--(c->NumStats) == 0)
     {
       s = STATS(c);
-      c->Flags = (c->Flags & 0x10) + 0x08 * (s->Symbol >= 0x40);
+      c->Flags = (Byte)((c->Flags & 0x10) + 0x08 * (s->Symbol >= 0x40));
       *ONE_STATE(c) = *s;
       SpecialFreeUnit(p, s);
-      ONE_STATE(c)->Freq = (ONE_STATE(c)->Freq + 11) >> 3;
+      ONE_STATE(c)->Freq = (Byte)(((unsigned)ONE_STATE(c)->Freq + 11) >> 3);
     }
     else
       Refresh(p, c, (c->NumStats+3) >> 1, 0);
  
   for (; c != p->MinContext; c = SUFFIX(c))
     if (!c->NumStats)
-      ONE_STATE(c)->Freq -= ONE_STATE(c)->Freq >> 1;
+      ONE_STATE(c)->Freq = (Byte)(ONE_STATE(c)->Freq - (ONE_STATE(c)->Freq >> 1));
     else if ((c->SummFreq += 4) > 128 + 4 * c->NumStats)
       Refresh(p, c, (c->NumStats + 2) >> 1, 1);
 
@@ -636,7 +639,7 @@ static CTX_PTR CreateSuccessors(CPpmd8 *p, Bool skip, CPpmd_State *s1, CTX_PTR c
     else
     {
       s = ONE_STATE(c);
-      s->Freq += (!SUFFIX(c)->NumStats & (s->Freq < 24));
+      s->Freq = (Byte)(s->Freq + (!SUFFIX(c)->NumStats & (s->Freq < 24)));
     }
     successor = SUCCESSOR(s);
     if (successor != upBranch)
@@ -651,7 +654,7 @@ static CTX_PTR CreateSuccessors(CPpmd8 *p, Bool skip, CPpmd_State *s1, CTX_PTR c
   
   upState.Symbol = *(const Byte *)Ppmd8_GetPtr(p, upBranch);
   SetSuccessor(&upState, upBranch + 1);
-  flags = 0x10 * (p->FoundState->Symbol >= 0x40) + 0x08 * (upState.Symbol >= 0x40);
+  flags = (Byte)(0x10 * (p->FoundState->Symbol >= 0x40) + 0x08 * (upState.Symbol >= 0x40));
 
   if (c->NumStats == 0)
     upState.Freq = ONE_STATE(c)->Freq;
@@ -743,7 +746,7 @@ static CTX_PTR ReduceOrder(CPpmd8 *p, CPpmd_State *s1, CTX_PTR c)
       else
       {
         s = ONE_STATE(c);
-        s->Freq += (s->Freq < 32);
+        s->Freq = (Byte)(s->Freq + (s->Freq < 32));
       }
     }
     if (SUCCESSOR(s))
@@ -769,7 +772,7 @@ static CTX_PTR ReduceOrder(CPpmd8 *p, CPpmd_State *s1, CTX_PTR c)
   if (SUCCESSOR(s) <= upBranch)
   {
     CTX_PTR successor;
-    CPpmd_State *s1 = p->FoundState;
+    CPpmd_State *s2 = p->FoundState;
     p->FoundState = s;
 
     successor = CreateSuccessors(p, False, NULL, c);
@@ -777,7 +780,7 @@ static CTX_PTR ReduceOrder(CPpmd8 *p, CPpmd_State *s1, CTX_PTR c)
       SetSuccessor(s, 0);
     else
       SetSuccessor(s, REF(successor));
-    p->FoundState = s1;
+    p->FoundState = s2;
   }
   
   if (p->OrderFall == 1 && c1 == p->MaxContext)
@@ -889,7 +892,7 @@ static void UpdateModel(CPpmd8 *p)
   #endif
   
   s0 = p->MinContext->SummFreq - (ns = p->MinContext->NumStats) - fFreq;
-  flag = 0x08 * (fSymbol >= 0x40);
+  flag = (Byte)(0x08 * (fSymbol >= 0x40));
   
   for (; c != p->MinContext; c = SUFFIX(c))
   {
@@ -902,7 +905,7 @@ static void UpdateModel(CPpmd8 *p)
         /* Expand for one UNIT */
         unsigned oldNU = (ns1 + 1) >> 1;
         unsigned i = U2I(oldNU);
-        if (i != U2I(oldNU + 1))
+        if (i != U2I((size_t)oldNU + 1))
         {
           void *ptr = AllocUnits(p, i + 1);
           void *oldPtr;
@@ -921,19 +924,19 @@ static void UpdateModel(CPpmd8 *p)
     }
     else
     {
-      CPpmd_State *s = (CPpmd_State*)AllocUnits(p, 0);
-      if (!s)
+      CPpmd_State *s2 = (CPpmd_State*)AllocUnits(p, 0);
+      if (!s2)
       {
         RESTORE_MODEL(c, CTX(fSuccessor));
         return;
       }
-      *s = *ONE_STATE(c);
-      c->Stats = REF(s);
-      if (s->Freq < MAX_FREQ / 4 - 1)
-        s->Freq <<= 1;
+      *s2 = *ONE_STATE(c);
+      c->Stats = REF(s2);
+      if (s2->Freq < MAX_FREQ / 4 - 1)
+        s2->Freq <<= 1;
       else
-        s->Freq = MAX_FREQ - 4;
-      c->SummFreq = (UInt16)(s->Freq + p->InitEsc + (ns > 2));
+        s2->Freq = MAX_FREQ - 4;
+      c->SummFreq = (UInt16)(s2->Freq + p->InitEsc + (ns > 2));
     }
     cf = 2 * fFreq * (c->SummFreq + 6);
     sf = (UInt32)s0 + c->SummFreq;
@@ -948,10 +951,10 @@ static void UpdateModel(CPpmd8 *p)
       c->SummFreq = (UInt16)(c->SummFreq + cf);
     }
     {
-      CPpmd_State *s = STATS(c) + ns1 + 1;
-      SetSuccessor(s, successor);
-      s->Symbol = fSymbol;
-      s->Freq = (Byte)cf;
+      CPpmd_State *s2 = STATS(c) + ns1 + 1;
+      SetSuccessor(s2, successor);
+      s2->Symbol = fSymbol;
+      s2->Freq = (Byte)cf;
       c->Flags |= flag;
       c->NumStats = (Byte)(ns1 + 1);
     }
@@ -1012,7 +1015,7 @@ static void Rescale(CPpmd8 *p)
       if (tmp.Freq > MAX_FREQ / 3)
         tmp.Freq = MAX_FREQ / 3;
       InsertNode(p, stats, U2I((numStats + 2) >> 1));
-      p->MinContext->Flags = (p->MinContext->Flags & 0x10) + 0x08 * (tmp.Symbol >= 0x40);
+      p->MinContext->Flags = (Byte)((p->MinContext->Flags & 0x10) + 0x08 * (tmp.Symbol >= 0x40));
       *(p->FoundState = ONE_STATE(p->MinContext)) = tmp;
       return;
     }
@@ -1035,9 +1038,9 @@ CPpmd_See *Ppmd8_MakeEscFreq(CPpmd8 *p, unsigned numMasked1, UInt32 *escFreq)
   CPpmd_See *see;
   if (p->MinContext->NumStats != 0xFF)
   {
-    see = p->See[p->NS2Indx[p->MinContext->NumStats + 2] - 3] +
+    see = p->See[(size_t)(unsigned)p->NS2Indx[(size_t)(unsigned)p->MinContext->NumStats + 2] - 3] +
         (p->MinContext->SummFreq > 11 * ((unsigned)p->MinContext->NumStats + 1)) +
-        2 * (2 * (unsigned)p->MinContext->NumStats <
+        2 * (unsigned)(2 * (unsigned)p->MinContext->NumStats <
         ((unsigned)SUFFIX(p->MinContext)->NumStats + numMasked1)) +
         p->MinContext->Flags;
     {

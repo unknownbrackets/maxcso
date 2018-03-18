@@ -7,10 +7,10 @@
 
 #include "../../../C/CpuArch.h"
 
-#include "Common/MyVector.h"
-#include "Common/Types.h"
+#include "../../Common/MyVector.h"
 
 #define RARVM_STANDARD_FILTERS
+// #define RARVM_VM_ENABLE
 
 namespace NCompress {
 namespace NRar3 {
@@ -27,9 +27,11 @@ public:
     _bitSize = (byteSize << 3);
     _bitPos = 0;
   }
-  UInt32 ReadBits(int numBits);
+  UInt32 ReadBits(unsigned numBits);
   UInt32 ReadBit();
   bool Avail() const { return (_bitPos < _bitSize); }
+
+  UInt32 ReadEncodedUInt32();
 };
 
 namespace NVm {
@@ -37,14 +39,12 @@ namespace NVm {
 inline UInt32 GetValue32(const void *addr) { return GetUi32(addr); }
 inline void SetValue32(void *addr, UInt32 value) { SetUi32(addr, value); }
 
-UInt32 ReadEncodedUInt32(CMemBitDecoder &inp);
-
-const int kNumRegBits = 3;
+const unsigned kNumRegBits = 3;
 const UInt32 kNumRegs = 1 << kNumRegBits;
 const UInt32 kNumGpRegs = kNumRegs - 1;
 
 const UInt32 kSpaceSize = 0x40000;
-const UInt32 kSpaceMask = kSpaceSize -1;
+const UInt32 kSpaceMask = kSpaceSize - 1;
 const UInt32 kGlobalOffset = 0x3C000;
 const UInt32 kGlobalSize = 0x2000;
 const UInt32 kFixedGlobalSize = 64;
@@ -56,6 +56,9 @@ namespace NGlobalOffset
   const UInt32 kExecCount = 0x2C;
   const UInt32 kGlobalMemOutSize = 0x30;
 }
+
+
+#ifdef RARVM_VM_ENABLE
 
 enum ECommand
 {
@@ -89,20 +92,35 @@ struct CCommand
   COperand Op1, Op2;
 };
 
+#endif
+
+
 struct CBlockRef
 {
   UInt32 Offset;
   UInt32 Size;
 };
 
-struct CProgram
+
+class CProgram
 {
+  #ifdef RARVM_VM_ENABLE
+  void ReadProgram(const Byte *code, UInt32 codeSize);
+public:
   CRecordVector<CCommand> Commands;
+  #endif
+  
+public:
   #ifdef RARVM_STANDARD_FILTERS
   int StandardFilterIndex;
   #endif
+  
+  bool IsSupported;
   CRecordVector<Byte> StaticData;
+
+  bool PrepareProgram(const Byte *code, UInt32 codeSize);
 };
+
 
 struct CProgramInitState
 {
@@ -111,12 +129,11 @@ struct CProgramInitState
 
   void AllocateEmptyFixedGlobal()
   {
-    GlobalData.Clear();
-    GlobalData.Reserve(NVm::kFixedGlobalSize);
-    for (UInt32 i = 0; i < NVm::kFixedGlobalSize; i++)
-      GlobalData.Add(0);
+    GlobalData.ClearAndSetSize(NVm::kFixedGlobalSize);
+    memset(&GlobalData[0], 0, NVm::kFixedGlobalSize);
   }
 };
+
 
 class CVm
 {
@@ -142,36 +159,35 @@ class CVm
   void SetBlockPos(UInt32 v) { SetValue(&Mem[kGlobalOffset + NGlobalOffset::kBlockPos], v); }
 public:
   static void SetValue(void *addr, UInt32 value) { SetValue(false, addr, value); }
+
 private:
+
+  #ifdef RARVM_VM_ENABLE
   UInt32 GetOperand32(const COperand *op) const;
   void SetOperand32(const COperand *op, UInt32 val);
   Byte GetOperand8(const COperand *op) const;
   void SetOperand8(const COperand *op, Byte val);
   UInt32 GetOperand(bool byteMode, const COperand *op) const;
   void SetOperand(bool byteMode, const COperand *op, UInt32 val);
-
-  void DecodeArg(CMemBitDecoder &inp, COperand &op, bool byteMode);
-  
   bool ExecuteCode(const CProgram *prg);
+  #endif
   
   #ifdef RARVM_STANDARD_FILTERS
-  void ExecuteStandardFilter(int filterIndex);
+  bool ExecuteStandardFilter(unsigned filterIndex);
   #endif
   
   Byte *Mem;
   UInt32 R[kNumRegs + 1]; // R[kNumRegs] = 0 always (speed optimization)
   UInt32 Flags;
-  void ReadVmProgram(const Byte *code, UInt32 codeSize, CProgram *prg);
+
 public:
   CVm();
   ~CVm();
   bool Create();
-  void PrepareProgram(const Byte *code, UInt32 codeSize, CProgram *prg);
   void SetMemory(UInt32 pos, const Byte *data, UInt32 dataSize);
   bool Execute(CProgram *prg, const CProgramInitState *initState,
       CBlockRef &outBlockRef, CRecordVector<Byte> &outGlobalData);
   const Byte *GetDataPointer(UInt32 offset) const { return Mem + offset; }
-
 };
 
 #endif

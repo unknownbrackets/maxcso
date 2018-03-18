@@ -1,4 +1,4 @@
-// Zip/Update.h
+// ZipUpdate.h
 
 #ifndef __ZIP_UPDATE_H
 #define __ZIP_UPDATE_H
@@ -14,43 +14,65 @@
 namespace NArchive {
 namespace NZip {
 
+/*
 struct CUpdateRange
 {
   UInt64 Position;
   UInt64 Size;
-  CUpdateRange() {};
+  
+  // CUpdateRange() {};
   CUpdateRange(UInt64 position, UInt64 size): Position(position), Size(size) {};
 };
+*/
 
 struct CUpdateItem
 {
   bool NewData;
-  bool NewProperties;
+  bool NewProps;
   bool IsDir;
   bool NtfsTimeIsDefined;
   bool IsUtf8;
-  int IndexInArchive;
+  // bool IsAltStream;
+  int IndexInArc;
   int IndexInClient;
-  UInt32 Attributes;
+  UInt32 Attrib;
   UInt32 Time;
   UInt64 Size;
   AString Name;
+  CByteBuffer Comment;
   // bool Commented;
   // CUpdateRange CommentRange;
-  FILETIME NtfsMTime;
-  FILETIME NtfsATime;
-  FILETIME NtfsCTime;
+  FILETIME Ntfs_MTime;
+  FILETIME Ntfs_ATime;
+  FILETIME Ntfs_CTime;
 
-  CUpdateItem(): NtfsTimeIsDefined(false), IsUtf8(false), Size(0) {}
+  void Clear()
+  {
+    IsDir = false;
+    NtfsTimeIsDefined = false;
+    IsUtf8 = false;
+    // IsAltStream = false;
+    Size = 0;
+    Name.Empty();
+    Comment.Free();
+  }
+
+  CUpdateItem():
+    IsDir(false),
+    NtfsTimeIsDefined(false),
+    IsUtf8(false),
+    // IsAltStream(false),
+    Size(0)
+    {}
 };
 
 HRESULT Update(
     DECL_EXTERNAL_CODECS_LOC_VARS
     const CObjectVector<CItemEx> &inputItems,
-    const CObjectVector<CUpdateItem> &updateItems,
+    CObjectVector<CUpdateItem> &updateItems,
     ISequentialOutStream *seqOutStream,
-    CInArchive *inArchive,
-    CCompressionMethodMode *compressionMethodMode,
+    CInArchive *inArchive, bool removeSfx,
+    const CCompressionMethodMode &compressionMethodMode,
     IArchiveUpdateCallback *updateCallback);
 
 }}

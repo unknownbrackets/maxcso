@@ -3,21 +3,25 @@
 #ifndef __ZIP_HANDLER_H
 #define __ZIP_HANDLER_H
 
-#include "Common/DynamicBuffer.h"
+#include "../../../Common/DynamicBuffer.h"
 #include "../../ICoder.h"
 #include "../IArchive.h"
 
 #include "../../Common/CreateCoder.h"
 
-#include "ZipIn.h"
 #include "ZipCompressionMode.h"
-
-#ifndef _7ZIP_ST
-#include "../../../Windows/System.h"
-#endif
+#include "ZipIn.h"
 
 namespace NArchive {
 namespace NZip {
+
+const unsigned kNumMethodNames1 = NFileHeader::NCompressionMethod::kLZMA + 1;
+const unsigned kMethodNames2Start = NFileHeader::NCompressionMethod::kXz;
+const unsigned kNumMethodNames2 = NFileHeader::NCompressionMethod::kWzAES + 1 - kMethodNames2Start;
+
+extern const char * const kMethodNames1[kNumMethodNames1];
+extern const char * const kMethodNames2[kNumMethodNames2];
+
 
 class CHandler:
   public IInArchive,
@@ -37,7 +41,7 @@ public:
   INTERFACE_IInArchive(;)
   INTERFACE_IOutArchive(;)
 
-  STDMETHOD(SetProperties)(const wchar_t **names, const PROPVARIANT *values, Int32 numProperties);
+  STDMETHOD(SetProperties)(const wchar_t * const *names, const PROPVARIANT *values, UInt32 numProps);
 
   DECL_ISetCompressCodecsInfo
 
@@ -46,53 +50,30 @@ private:
   CObjectVector<CItemEx> m_Items;
   CInArchive m_Archive;
 
-  int m_Level;
+  CBaseProps _props;
+
   int m_MainMethod;
-  UInt32 m_DicSize;
-  UInt32 m_Algo;
-  UInt32 m_NumPasses;
-  UInt32 m_NumFastBytes;
-  UInt32 m_NumMatchFinderCycles;
-  UInt32 m_MemSize;
-  UInt32 m_Order;
-
-  bool m_NumMatchFinderCyclesDefined;
-
   bool m_ForceAesMode;
-  bool m_IsAesMode;
-  Byte m_AesKeyMode;
-
   bool m_WriteNtfsTimeExtra;
+  bool _removeSfxBlock;
   bool m_ForceLocal;
   bool m_ForceUtf8;
-
-  #ifndef _7ZIP_ST
-  UInt32 _numThreads;
-  #endif
+  bool _forceCodePage;
+  UInt32 _specifiedCodePage;
 
   DECL_EXTERNAL_CODECS_VARS
 
-  void InitMethodProperties()
+  void InitMethodProps()
   {
-    m_Level = -1;
+    _props.Init();
     m_MainMethod = -1;
-    m_Algo =
-    m_DicSize =
-    m_NumPasses =
-    m_NumFastBytes =
-    m_Order =
-    m_MemSize =
-    m_NumMatchFinderCycles = 0xFFFFFFFF;
-    m_NumMatchFinderCyclesDefined = false;
     m_ForceAesMode = false;
-    m_IsAesMode = false;
-    m_AesKeyMode = 3; // aes-256
     m_WriteNtfsTimeExtra = true;
+    _removeSfxBlock = false;
     m_ForceLocal = false;
     m_ForceUtf8 = false;
-    #ifndef _7ZIP_ST
-    _numThreads = NWindows::NSystem::GetNumberOfProcessors();;
-    #endif
+    _forceCodePage = false;
+    _specifiedCodePage = CP_OEMCP;
   }
 };
 

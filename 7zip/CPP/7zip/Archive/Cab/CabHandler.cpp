@@ -2,17 +2,17 @@
 
 #include "StdAfx.h"
 
+// #include <stdio.h>
+
 #include "../../../../C/Alloc.h"
 
-#include "Common/Buffer.h"
-#include "Common/ComTry.h"
-#include "Common/Defs.h"
-#include "Common/IntToString.h"
-#include "Common/StringConvert.h"
-#include "Common/UTFConvert.h"
+#include "../../../Common/ComTry.h"
+#include "../../../Common/IntToString.h"
+#include "../../../Common/StringConvert.h"
+#include "../../../Common/UTFConvert.h"
 
-#include "Windows/PropVariant.h"
-#include "Windows/Time.h"
+#include "../../../Windows/PropVariant.h"
+#include "../../../Windows/TimeUtils.h"
 
 #include "../../Common/ProgressUtils.h"
 #include "../../Common/StreamUtils.h"
@@ -41,102 +41,242 @@ enum
 };
 #endif
 
-static STATPROPSTG kProps[] =
+static const Byte kProps[] =
 {
-  { NULL, kpidPath, VT_BSTR},
-  { NULL, kpidSize, VT_UI8},
-  { NULL, kpidMTime, VT_FILETIME},
-  { NULL, kpidAttrib, VT_UI4},
-  { NULL, kpidMethod, VT_BSTR},
-  { NULL, kpidBlock, VT_I4}
+  kpidPath,
+  kpidSize,
+  kpidMTime,
+  kpidAttrib,
+  kpidMethod,
+  kpidBlock
   #ifdef _CAB_DETAILS
   ,
-  { L"BlockReal", kpidBlockReal, VT_UI4},
-  { NULL, kpidOffset, VT_UI4},
-  { NULL, kpidVolume, VT_UI4}
+  // kpidBlockReal, // L"BlockReal",
+  kpidOffset,
+  kpidVolume
   #endif
 };
 
-static const char *kMethods[] =
+static const Byte kArcProps[] =
 {
-  "None",
-  "MSZip",
-  "Quantum",
-  "LZX"
-};
-
-static const int kNumMethods = sizeof(kMethods) / sizeof(kMethods[0]);
-static const char *kUnknownMethod = "Unknown";
-
-static STATPROPSTG kArcProps[] =
-{
-  { NULL, kpidMethod, VT_BSTR},
-  // { NULL, kpidSolid, VT_BOOL},
-  { NULL, kpidNumBlocks, VT_UI4},
-  { NULL, kpidNumVolumes, VT_UI4}
+  kpidTotalPhySize,
+  kpidMethod,
+  // kpidSolid,
+  kpidNumBlocks,
+  kpidNumVolumes,
+  kpidVolumeIndex,
+  kpidId
 };
 
 IMP_IInArchive_Props
 IMP_IInArchive_ArcProps
 
+static const char * const kMethods[] =
+{
+    "None"
+  , "MSZip"
+  , "Quantum"
+  , "LZX"
+};
+
+static const unsigned kMethodNameBufSize = 32; // "Quantum:255"
+
+static void SetMethodName(char *s, unsigned method, unsigned param)
+{
+  if (method < ARRAY_SIZE(kMethods))
+  {
+    s = MyStpCpy(s, kMethods[method]);
+    if (method != NHeader::NMethod::kLZX &&
+        method != NHeader::NMethod::kQuantum)
+      return;
+    *s++ = ':';
+    method = param;
+  }
+  ConvertUInt32ToString(method, s);
+}
+
 STDMETHODIMP CHandler::GetArchiveProperty(PROPID propID, PROPVARIANT *value)
 {
   COM_TRY_BEGIN
-  NWindows::NCOM::CPropVariant prop;
-  switch(propID)
+  NCOM::CPropVariant prop;
+  switch (propID)
   {
     case kpidMethod:
     {
-      AString resString;
-      CRecordVector<Byte> ids;
-      int i;
-      for (int v = 0; v < m_Database.Volumes.Size(); v++)
+      UInt32 mask = 0;
+      UInt32 params[2] = { 0, 0 };
       {
-        const CDatabaseEx &de = m_Database.Volumes[v];
-        for (i = 0; i < de.Folders.Size(); i++)
-          ids.AddToUniqueSorted(de.Folders[i].GetCompressionMethod());
+        FOR_VECTOR (v, m_Database.Volumes)
+        {
+          const CRecordVector<CFolder> &folders = m_Database.Volumes[v].Folders;
+          FOR_VECTOR (i, folders)
+          {
+            const CFolder &folder = folders[i];
+            unsigned method = folder.GetMethod();
+            mask |= ((UInt32)1 << method);
+            if (method == NHeader::NMethod::kLZX ||
+                method == NHeader::NMethod::kQuantum)
+            {
+              unsigned di = (method == NHeader::NMethod::kQuantum) ? 0 : 1;
+              if (params[di] < folder.MethodMinor)
+                params[di] = folder.MethodMinor;
+            }
+          }
+        }
       }
-      for (i = 0; i < ids.Size(); i++)
+      
+      AString s;
+      
+      for (unsigned i = 0; i < kNumMethodsMax; i++)
       {
-        Byte id = ids[i];
-        AString method = (id < kNumMethods) ? kMethods[id] : kUnknownMethod;
-        if (!resString.IsEmpty())
-          resString += ' ';
-        resString += method;
+        if ((mask & (1 << i)) == 0)
+          continue;
+        s.Add_Space_if_NotEmpty();
+        char temp[kMethodNameBufSize];
+        SetMethodName(temp, i, params[i == NHeader::NMethod::kQuantum ? 0 : 1]);
+        s += temp;
       }
-      prop = resString;
+      
+      prop = s;
       break;
     }
     // case kpidSolid: prop = _database.IsSolid(); break;
     case kpidNumBlocks:
     {
       UInt32 numFolders = 0;
-      for (int v = 0; v < m_Database.Volumes.Size(); v++)
+      FOR_VECTOR (v, m_Database.Volumes)
         numFolders += m_Database.Volumes[v].Folders.Size();
       prop = numFolders;
       break;
     }
-    case kpidNumVolumes:
+
+    case kpidTotalPhySize:
     {
-      prop = (UInt32)m_Database.Volumes.Size();
+      if (m_Database.Volumes.Size() > 1)
+      {
+        UInt64 sum = 0;
+        FOR_VECTOR (v, m_Database.Volumes)
+          sum += m_Database.Volumes[v].ArcInfo.Size;
+        prop = sum;
+      }
       break;
     }
+
+    case kpidNumVolumes:
+      prop = (UInt32)m_Database.Volumes.Size();
+      break;
+
+    case kpidVolumeIndex:
+    {
+      if (!m_Database.Volumes.IsEmpty())
+      {
+        const CDatabaseEx &db = m_Database.Volumes[0];
+        const CInArcInfo &ai = db.ArcInfo;
+        prop = (UInt32)ai.CabinetNumber;
+      }
+      break;
+    }
+
+    case kpidId:
+    {
+      if (m_Database.Volumes.Size() != 0)
+      {
+        prop = (UInt32)m_Database.Volumes[0].ArcInfo.SetID;
+      }
+      break;
+    }
+
+    case kpidOffset:
+      /*
+      if (m_Database.Volumes.Size() == 1)
+        prop = m_Database.Volumes[0].StartPosition;
+      */
+      prop = _offset;
+      break;
+    
+    case kpidPhySize:
+      /*
+      if (m_Database.Volumes.Size() == 1)
+        prop = (UInt64)m_Database.Volumes[0].ArcInfo.Size;
+      */
+      prop = (UInt64)_phySize;
+      break;
+
+    case kpidErrorFlags:
+    {
+      UInt32 v = 0;
+      if (!_isArc) v |= kpv_ErrorFlags_IsNotArc;
+      if (_errorInHeaders) v |= kpv_ErrorFlags_HeadersError;
+      if (_unexpectedEnd)  v |= kpv_ErrorFlags_UnexpectedEnd;
+      prop = v;
+      break;
+    }
+    
+    case kpidError:
+      if (!_errorMessage.IsEmpty())
+        prop = _errorMessage;
+      break;
+
+    case kpidName:
+    {
+      if (m_Database.Volumes.Size() == 1)
+      {
+        const CDatabaseEx &db = m_Database.Volumes[0];
+        const CInArcInfo &ai = db.ArcInfo;
+        if (ai.SetID != 0)
+        {
+          AString s;
+          s.Add_UInt32(ai.SetID);
+          s += '_';
+          s.Add_UInt32(ai.CabinetNumber + 1);
+          s += ".cab";
+          prop = s;
+        }
+        /*
+        // that code is incomplete. It gcan give accurate name of volume
+        char s[32];
+        ConvertUInt32ToString(ai.CabinetNumber + 2, s);
+        unsigned len = MyStringLen(s);
+        if (ai.IsThereNext())
+        {
+          AString fn = ai.NextArc.FileName;
+          if (fn.Len() > 4 && StringsAreEqualNoCase_Ascii(fn.RightPtr(4), ".cab"))
+            fn.DeleteFrom(fn.Len() - 4);
+          if (len < fn.Len())
+          {
+            if (strcmp(s, fn.RightPtr(len)) == 0)
+            {
+              AString s2 = fn;
+              s2.DeleteFrom(fn.Len() - len);
+              ConvertUInt32ToString(ai.CabinetNumber + 1, s);
+              s2 += s;
+              s2 += ".cab";
+              prop = GetUnicodeString(s2);
+            }
+          }
+        }
+        */
+      }
+      break;
+    }
+
+    // case kpidShortComment:
   }
   prop.Detach(value);
   return S_OK;
   COM_TRY_END
 }
 
-STDMETHODIMP CHandler::GetProperty(UInt32 index, PROPID propID,  PROPVARIANT *value)
+STDMETHODIMP CHandler::GetProperty(UInt32 index, PROPID propID, PROPVARIANT *value)
 {
   COM_TRY_BEGIN
-  NWindows::NCOM::CPropVariant prop;
+  NCOM::CPropVariant prop;
   
   const CMvItem &mvItem = m_Database.Items[index];
   const CDatabaseEx &db = m_Database.Volumes[mvItem.VolumeIndex];
-  int itemIndex = mvItem.ItemIndex;
+  unsigned itemIndex = mvItem.ItemIndex;
   const CItem &item = db.Items[itemIndex];
-  switch(propID)
+  switch (propID)
   {
     case kpidPath:
     {
@@ -145,12 +285,13 @@ STDMETHODIMP CHandler::GetProperty(UInt32 index, PROPID propID,  PROPVARIANT *va
         ConvertUTF8ToUnicode(item.Name, unicodeName);
       else
         unicodeName = MultiByteToUnicodeString(item.Name, CP_ACP);
-      prop = (const wchar_t *)NItemName::WinNameToOSName(unicodeName);
+      prop = (const wchar_t *)NItemName::WinPathToOsPath(unicodeName);
       break;
     }
+    
     case kpidIsDir:  prop = item.IsDir(); break;
     case kpidSize:  prop = item.Size; break;
-    case kpidAttrib:  prop = item.GetWinAttributes(); break;
+    case kpidAttrib:  prop = item.GetWinAttrib(); break;
 
     case kpidMTime:
     {
@@ -170,24 +311,17 @@ STDMETHODIMP CHandler::GetProperty(UInt32 index, PROPID propID,  PROPVARIANT *va
     {
       UInt32 realFolderIndex = item.GetFolderIndex(db.Folders.Size());
       const CFolder &folder = db.Folders[realFolderIndex];
-      int methodIndex = folder.GetCompressionMethod();
-      AString method = (methodIndex < kNumMethods) ? kMethods[methodIndex] : kUnknownMethod;
-      if (methodIndex == NHeader::NCompressionMethodMajor::kLZX ||
-        methodIndex == NHeader::NCompressionMethodMajor::kQuantum)
-      {
-        method += ':';
-        char temp[32];
-        ConvertUInt64ToString(folder.CompressionTypeMinor, temp);
-        method += temp;
-      }
-      prop = method;
+      char s[kMethodNameBufSize];;
+      SetMethodName(s, folder.GetMethod(), folder.MethodMinor);
+      prop = s;
       break;
     }
+
     case kpidBlock:  prop = (Int32)m_Database.GetFolderIndex(&mvItem); break;
     
     #ifdef _CAB_DETAILS
     
-    case kpidBlockReal:  prop = (UInt32)item.FolderIndex; break;
+    // case kpidBlockReal:  prop = (UInt32)item.FolderIndex; break;
     case kpidOffset:  prop = (UInt32)item.Offset; break;
     case kpidVolume:  prop = (UInt32)mvItem.VolumeIndex; break;
 
@@ -198,129 +332,190 @@ STDMETHODIMP CHandler::GetProperty(UInt32 index, PROPID propID,  PROPVARIANT *va
   COM_TRY_END
 }
 
-/*
-class CProgressImp: public CProgressVirt
-{
-  CMyComPtr<IArchiveOpenCallback> m_OpenArchiveCallback;
-public:
-  STDMETHOD(SetTotal)(const UInt64 *numFiles);
-  STDMETHOD(SetCompleted)(const UInt64 *numFiles);
-  void Init(IArchiveOpenCallback *openArchiveCallback)
-    { m_OpenArchiveCallback = openArchiveCallback; }
-};
-
-STDMETHODIMP CProgressImp::SetTotal(const UInt64 *numFiles)
-{
-  if (m_OpenArchiveCallback)
-    return m_OpenArchiveCallback->SetCompleted(numFiles, NULL);
-  return S_OK;
-}
-
-STDMETHODIMP CProgressImp::SetCompleted(const UInt64 *numFiles)
-{
-  if (m_OpenArchiveCallback)
-    return m_OpenArchiveCallback->SetCompleted(numFiles, NULL);
-  return S_OK;
-}
-*/
-
 STDMETHODIMP CHandler::Open(IInStream *inStream,
     const UInt64 *maxCheckStartPosition,
     IArchiveOpenCallback *callback)
 {
   COM_TRY_BEGIN
   Close();
-  HRESULT res = S_FALSE;
+
   CInArchive archive;
   CMyComPtr<IArchiveOpenVolumeCallback> openVolumeCallback;
   callback->QueryInterface(IID_IArchiveOpenVolumeCallback, (void **)&openVolumeCallback);
   
   CMyComPtr<IInStream> nextStream = inStream;
   bool prevChecked = false;
+  UString startVolName;
+  bool startVolName_was_Requested = false;
   UInt64 numItems = 0;
-  try
+  unsigned numTempVolumes = 0;
+  // try
   {
-    while (nextStream != 0)
+    while (nextStream)
     {
       CDatabaseEx db;
       db.Stream = nextStream;
-      res = archive.Open(maxCheckStartPosition, db);
-      if (res == S_OK)
+      
+      HRESULT res = archive.Open(db, maxCheckStartPosition);
+      
+      _errorInHeaders |= archive.HeaderError;
+      _errorInHeaders |= archive.ErrorInNames;
+      _unexpectedEnd |= archive.UnexpectedEnd;
+      
+      if (res == S_OK && !m_Database.Volumes.IsEmpty())
       {
-        if (!m_Database.Volumes.IsEmpty())
+        const CArchInfo &lastArc = m_Database.Volumes.Back().ArcInfo;
+        unsigned cabNumber = db.ArcInfo.CabinetNumber;
+        if (lastArc.SetID != db.ArcInfo.SetID)
+          res = S_FALSE;
+        else if (prevChecked)
         {
-          const CDatabaseEx &dbPrev = m_Database.Volumes[prevChecked ? m_Database.Volumes.Size() - 1 : 0];
-          if (dbPrev.ArchiveInfo.SetID != db.ArchiveInfo.SetID ||
-              dbPrev.ArchiveInfo.CabinetNumber + (prevChecked ? 1: - 1) !=
-              db.ArchiveInfo.CabinetNumber)
+          if (cabNumber != lastArc.CabinetNumber + 1)
+            res = S_FALSE;
+        }
+        else if (cabNumber >= lastArc.CabinetNumber)
+          res = S_FALSE;
+        else if (numTempVolumes != 0)
+        {
+          const CArchInfo &prevArc = m_Database.Volumes[numTempVolumes - 1].ArcInfo;
+          if (cabNumber != prevArc.CabinetNumber + 1)
             res = S_FALSE;
         }
       }
+      
+      if (archive.IsArc || res == S_OK)
+      {
+        _isArc = true;
+        if (m_Database.Volumes.IsEmpty())
+        {
+          _offset = db.StartPosition;
+          _phySize = db.ArcInfo.Size;
+        }
+      }
+      
       if (res == S_OK)
-        m_Database.Volumes.Insert(prevChecked ? m_Database.Volumes.Size() : 0, db);
-      else if (res != S_FALSE)
-        return res;
+      {
+        numItems += db.Items.Size();
+        m_Database.Volumes.Insert(prevChecked ? m_Database.Volumes.Size() : numTempVolumes, db);
+        if (!prevChecked && m_Database.Volumes.Size() > 1)
+        {
+          numTempVolumes++;
+          if (db.ArcInfo.CabinetNumber + 1 == m_Database.Volumes[numTempVolumes].ArcInfo.CabinetNumber)
+            numTempVolumes = 0;
+        }
+      }
       else
       {
+        if (res != S_FALSE)
+          return res;
         if (m_Database.Volumes.IsEmpty())
           return S_FALSE;
         if (prevChecked)
           break;
         prevChecked = true;
+        if (numTempVolumes != 0)
+        {
+          m_Database.Volumes.DeleteFrontal(numTempVolumes);
+          numTempVolumes = 0;
+        }
       }
 
-      numItems += db.Items.Size();
       RINOK(callback->SetCompleted(&numItems, NULL));
         
-      nextStream = 0;
+      nextStream = NULL;
+      
       for (;;)
       {
-        const COtherArchive *otherArchive = 0;
+        const COtherArc *otherArc = NULL;
+        
         if (!prevChecked)
         {
-          const CInArchiveInfo &ai = m_Database.Volumes.Front().ArchiveInfo;
-          if (ai.IsTherePrev())
-            otherArchive = &ai.PrevArc;
+          if (numTempVolumes == 0)
+          {
+            const CInArcInfo &ai = m_Database.Volumes[0].ArcInfo;
+            if (ai.IsTherePrev())
+              otherArc = &ai.PrevArc;
+            else
+              prevChecked = true;
+          }
           else
-            prevChecked = true;
+          {
+            const CInArcInfo &ai = m_Database.Volumes[numTempVolumes - 1].ArcInfo;
+            if (ai.IsThereNext())
+              otherArc = &ai.NextArc;
+            else
+            {
+              prevChecked = true;
+              m_Database.Volumes.DeleteFrontal(numTempVolumes);
+              numTempVolumes = 0;
+            }
+          }
         }
-        if (otherArchive == 0)
+        
+        if (!otherArc)
         {
-          const CInArchiveInfo &ai = m_Database.Volumes.Back().ArchiveInfo;
+          const CInArcInfo &ai = m_Database.Volumes.Back().ArcInfo;
           if (ai.IsThereNext())
-            otherArchive = &ai.NextArc;
+            otherArc = &ai.NextArc;
         }
-        if (!otherArchive)
+        
+        if (!otherArc)
           break;
-        const UString fullName = MultiByteToUnicodeString(otherArchive->FileName, CP_ACP);
         if (!openVolumeCallback)
           break;
+        // printf("\n%s", otherArc->FileName);
+        const UString fullName = MultiByteToUnicodeString(otherArc->FileName, CP_ACP);
+
+        if (!startVolName_was_Requested)
+        {
+          // some "bad" cab example can contain the link to itself.
+          startVolName_was_Requested = true;
+          {
+            NCOM::CPropVariant prop;
+            RINOK(openVolumeCallback->GetProperty(kpidName, &prop));
+            if (prop.vt == VT_BSTR)
+              startVolName = prop.bstrVal;
+          }
+          if (fullName == startVolName)
+            break;
+        }
 
         HRESULT result = openVolumeCallback->GetStream(fullName, &nextStream);
         if (result == S_OK)
           break;
         if (result != S_FALSE)
           return result;
+
+        if (!_errorMessage.IsEmpty())
+          _errorMessage.Add_LF();
+        _errorMessage += "Can't open volume: ";
+        _errorMessage += fullName;
+        
         if (prevChecked)
           break;
         prevChecked = true;
+        if (numTempVolumes != 0)
+        {
+          m_Database.Volumes.DeleteFrontal(numTempVolumes);
+          numTempVolumes = 0;
+        }
       }
+
+    } // read nextStream iteration
+
+    if (numTempVolumes != 0)
+    {
+      m_Database.Volumes.DeleteFrontal(numTempVolumes);
+      numTempVolumes = 0;
     }
-    if (res == S_OK)
+    if (m_Database.Volumes.IsEmpty())
+      return S_FALSE;
+    else
     {
       m_Database.FillSortAndShrink();
       if (!m_Database.Check())
-        res = S_FALSE;
+        return S_FALSE;
     }
-  }
-  catch(...)
-  {
-    res = S_FALSE;
-  }
-  if (res != S_OK)
-  {
-    Close();
-    return res;
   }
   COM_TRY_END
   return S_OK;
@@ -328,6 +523,14 @@ STDMETHODIMP CHandler::Open(IInStream *inStream,
 
 STDMETHODIMP CHandler::Close()
 {
+  _errorMessage.Empty();
+  _isArc = false;
+  _errorInHeaders = false;
+  _unexpectedEnd = false;
+  // _mainVolIndex = -1;
+  _phySize = 0;
+  _offset = 0;
+
   m_Database.Clear();
   return S_OK;
 }
@@ -346,12 +549,12 @@ private:
   
   Byte *TempBuf;
   UInt32 TempBufSize;
-  int NumIdenticalFiles;
+  unsigned NumIdenticalFiles;
   bool TempBufMode;
   UInt32 m_BufStartFolderOffset;
 
-  int m_StartIndex;
-  int m_CurrentIndex;
+  unsigned m_StartIndex;
+  unsigned m_CurrentIndex;
   CMyComPtr<IArchiveExtractCallback> m_ExtractCallback;
   bool m_TestMode;
 
@@ -381,21 +584,23 @@ public:
   void Init(
       const CMvDatabaseEx *database,
       const CRecordVector<bool> *extractStatuses,
-      int startIndex,
+      unsigned startIndex,
       UInt64 folderSize,
       IArchiveExtractCallback *extractCallback,
       bool testMode);
-  HRESULT FlushCorrupted();
+  HRESULT FlushCorrupted(unsigned folderIndex);
   HRESULT Unsupported();
 
+  bool NeedMoreWrite() const { return (m_FolderSize > m_PosInFolder); }
   UInt64 GetRemain() const { return m_FolderSize - m_PosInFolder; }
   UInt64 GetPosInFolder() const { return m_PosInFolder; }
 };
 
+
 void CFolderOutStream::Init(
     const CMvDatabaseEx *database,
     const CRecordVector<bool> *extractStatuses,
-    int startIndex,
+    unsigned startIndex,
     UInt64 folderSize,
     IArchiveExtractCallback *extractCallback,
     bool testMode)
@@ -416,6 +621,7 @@ void CFolderOutStream::Init(
   NumIdenticalFiles = 0;
 }
 
+
 HRESULT CFolderOutStream::CloseFileWithResOp(Int32 resOp)
 {
   m_RealOutStream.Release();
@@ -424,6 +630,7 @@ HRESULT CFolderOutStream::CloseFileWithResOp(Int32 resOp)
   return m_ExtractCallback->SetOperationResult(resOp);
 }
 
+
 HRESULT CFolderOutStream::CloseFile()
 {
   return CloseFileWithResOp(m_IsOk ?
@@ -431,14 +638,16 @@ HRESULT CFolderOutStream::CloseFile()
       NExtract::NOperationResult::kDataError);
 }
 
+
 HRESULT CFolderOutStream::OpenFile()
 {
   if (NumIdenticalFiles == 0)
   {
     const CMvItem &mvItem = m_Database->Items[m_StartIndex + m_CurrentIndex];
     const CItem &item = m_Database->Volumes[mvItem.VolumeIndex].Items[mvItem.ItemIndex];
-    int numExtractItems = 0;
-    int curIndex;
+    unsigned numExtractItems = 0;
+    unsigned curIndex;
+    
     for (curIndex = m_CurrentIndex; curIndex < m_ExtractStatuses->Size(); curIndex++)
     {
       const CMvItem &mvItem2 = m_Database->Items[m_StartIndex + curIndex];
@@ -450,10 +659,12 @@ HRESULT CFolderOutStream::OpenFile()
       if (!m_TestMode && (*m_ExtractStatuses)[curIndex])
         numExtractItems++;
     }
+    
     NumIdenticalFiles = (curIndex - m_CurrentIndex);
     if (NumIdenticalFiles == 0)
       NumIdenticalFiles = 1;
     TempBufMode = false;
+    
     if (numExtractItems > 1)
     {
       if (!TempBuf || item.Size > TempBufSize)
@@ -493,6 +704,7 @@ HRESULT CFolderOutStream::OpenFile()
   return m_ExtractCallback->PrepareOperation(askMode);
 }
 
+
 HRESULT CFolderOutStream::WriteEmptyFiles()
 {
   if (m_FileIsOpen)
@@ -512,20 +724,22 @@ HRESULT CFolderOutStream::WriteEmptyFiles()
   return S_OK;
 }
 
-// This is Write function
+
 HRESULT CFolderOutStream::Write2(const void *data, UInt32 size, UInt32 *processedSize, bool isOK)
 {
   COM_TRY_BEGIN
+  
   UInt32 realProcessed = 0;
-  if (processedSize != NULL)
+  if (processedSize)
    *processedSize = 0;
+  
   while (size != 0)
   {
     if (m_FileIsOpen)
     {
       UInt32 numBytesToWrite = MyMin(m_RemainFileSize, size);
       HRESULT res = S_OK;
-      if (numBytesToWrite > 0)
+      if (numBytesToWrite != 0)
       {
         if (!isOK)
           m_IsOk = false;
@@ -539,14 +753,16 @@ HRESULT CFolderOutStream::Write2(const void *data, UInt32 size, UInt32 *processe
           memcpy(TempBuf + (m_PosInFolder - m_BufStartFolderOffset), data, numBytesToWrite);
       }
       realProcessed += numBytesToWrite;
-      if (processedSize != NULL)
+      if (processedSize)
         *processedSize = realProcessed;
       data = (const void *)((const Byte *)data + numBytesToWrite);
       size -= numBytesToWrite;
       m_RemainFileSize -= numBytesToWrite;
       m_PosInFolder += numBytesToWrite;
+      
       if (res != S_OK)
         return res;
+      
       if (m_RemainFileSize == 0)
       {
         RINOK(CloseFile());
@@ -561,23 +777,34 @@ HRESULT CFolderOutStream::Write2(const void *data, UInt32 size, UInt32 *processe
           
           if (!TempBuf && TempBufMode && m_RealOutStream)
           {
-            RINOK(CloseFileWithResOp(NExtract::NOperationResult::kUnSupportedMethod));
+            RINOK(CloseFileWithResOp(NExtract::NOperationResult::kUnsupportedMethod));
           }
           else
           {
             RINOK(CloseFile());
           }
+      
           RINOK(result);
         }
+      
         TempBufMode = false;
       }
+  
       if (realProcessed > 0)
         break; // with this break this function works as Write-Part
     }
     else
     {
       if (m_CurrentIndex >= m_ExtractStatuses->Size())
-        return E_FAIL;
+      {
+        // we ignore extra data;
+        realProcessed += size;
+        if (processedSize)
+          *processedSize = realProcessed;
+        m_PosInFolder += size;
+        return S_OK;
+        // return E_FAIL;
+      }
 
       const CMvItem &mvItem = m_Database->Items[m_StartIndex + m_CurrentIndex];
       const CItem &item = m_Database->Volumes[mvItem.VolumeIndex].Items[mvItem.ItemIndex];
@@ -585,18 +812,21 @@ HRESULT CFolderOutStream::Write2(const void *data, UInt32 size, UInt32 *processe
       m_RemainFileSize = item.Size;
 
       UInt32 fileOffset = item.Offset;
+      
       if (fileOffset < m_PosInFolder)
         return E_FAIL;
+      
       if (fileOffset > m_PosInFolder)
       {
         UInt32 numBytesToWrite = MyMin(fileOffset - (UInt32)m_PosInFolder, size);
         realProcessed += numBytesToWrite;
-        if (processedSize != NULL)
+        if (processedSize)
           *processedSize = realProcessed;
         data = (const void *)((const Byte *)data + numBytesToWrite);
         size -= numBytesToWrite;
         m_PosInFolder += numBytesToWrite;
       }
+      
       if (fileOffset == m_PosInFolder)
       {
         RINOK(OpenFile());
@@ -606,41 +836,58 @@ HRESULT CFolderOutStream::Write2(const void *data, UInt32 size, UInt32 *processe
       }
     }
   }
+  
   return WriteEmptyFiles();
+  
   COM_TRY_END
 }
+
 
 STDMETHODIMP CFolderOutStream::Write(const void *data, UInt32 size, UInt32 *processedSize)
 {
   return Write2(data, size, processedSize, true);
 }
 
-HRESULT CFolderOutStream::FlushCorrupted()
+
+HRESULT CFolderOutStream::FlushCorrupted(unsigned folderIndex)
 {
-  const UInt32 kBufferSize = (1 << 10);
-  Byte buffer[kBufferSize];
-  for (int i = 0; i < kBufferSize; i++)
-    buffer[i] = 0;
+  if (!NeedMoreWrite())
+  {
+    CMyComPtr<IArchiveExtractCallbackMessage> callbackMessage;
+    m_ExtractCallback.QueryInterface(IID_IArchiveExtractCallbackMessage, &callbackMessage);
+    if (callbackMessage)
+    {
+      RINOK(callbackMessage->ReportExtractResult(NEventIndexType::kBlockIndex, folderIndex, NExtract::NOperationResult::kDataError));
+    }
+    return S_OK;
+  }
+
+  const unsigned kBufSize = (1 << 12);
+  Byte buf[kBufSize];
+  for (unsigned i = 0; i < kBufSize; i++)
+    buf[i] = 0;
+  
   for (;;)
   {
-    UInt64 remain = GetRemain();
-    if (remain == 0)
+    if (!NeedMoreWrite())
       return S_OK;
-    UInt32 size = (UInt32)MyMin(remain, (UInt64)kBufferSize);
+    UInt64 remain = GetRemain();
+    UInt32 size = (remain < kBufSize ? (UInt32)remain : (UInt32)kBufSize);
     UInt32 processedSizeLocal = 0;
-    RINOK(Write2(buffer, size, &processedSizeLocal, false));
+    RINOK(Write2(buf, size, &processedSizeLocal, false));
   }
 }
 
+
 HRESULT CFolderOutStream::Unsupported()
 {
-  while(m_CurrentIndex < m_ExtractStatuses->Size())
+  while (m_CurrentIndex < m_ExtractStatuses->Size())
   {
     HRESULT result = OpenFile();
     if (result != S_FALSE && result != S_OK)
       return result;
     m_RealOutStream.Release();
-    RINOK(m_ExtractCallback->SetOperationResult(NExtract::NOperationResult::kUnSupportedMethod));
+    RINOK(m_ExtractCallback->SetOperationResult(NExtract::NOperationResult::kUnsupportedMethod));
     m_CurrentIndex++;
   }
   return S_OK;
@@ -651,10 +898,11 @@ STDMETHODIMP CHandler::Extract(const UInt32 *indices, UInt32 numItems,
     Int32 testModeSpec, IArchiveExtractCallback *extractCallback)
 {
   COM_TRY_BEGIN
-  bool allFilesMode = (numItems == (UInt32)-1);
+
+  bool allFilesMode = (numItems == (UInt32)(Int32)-1);
   if (allFilesMode)
     numItems = m_Database.Items.Size();
-  if(numItems == 0)
+  if (numItems == 0)
     return S_OK;
   bool testMode = (testModeSpec != 0);
   UInt64 totalUnPacked = 0;
@@ -662,9 +910,10 @@ STDMETHODIMP CHandler::Extract(const UInt32 *indices, UInt32 numItems,
   UInt32 i;
   int lastFolder = -2;
   UInt64 lastFolderSize = 0;
-  for(i = 0; i < numItems; i++)
+  
+  for (i = 0; i < numItems; i++)
   {
-    int index = allFilesMode ? i : indices[i];
+    unsigned index = allFilesMode ? i : indices[i];
     const CMvItem &mvItem = m_Database.Items[index];
     const CItem &item = m_Database.Volumes[mvItem.VolumeIndex].Items[mvItem.ItemIndex];
     if (item.IsDir())
@@ -675,6 +924,7 @@ STDMETHODIMP CHandler::Extract(const UInt32 *indices, UInt32 numItems,
     lastFolder = folderIndex;
     lastFolderSize = item.GetEndOffset();
   }
+  
   totalUnPacked += lastFolderSize;
 
   extractCallback->SetTotal(totalUnPacked);
@@ -694,10 +944,10 @@ STDMETHODIMP CHandler::Extract(const UInt32 *indices, UInt32 numItems,
   CMyComPtr<ICompressCoder> deflateDecoder;
 
   NCompress::NLzx::CDecoder *lzxDecoderSpec = NULL;
-  CMyComPtr<ICompressCoder> lzxDecoder;
+  CMyComPtr<IUnknown> lzxDecoder;
 
   NCompress::NQuantum::CDecoder *quantumDecoderSpec = NULL;
-  CMyComPtr<ICompressCoder> quantumDecoder;
+  CMyComPtr<IUnknown> quantumDecoder;
 
   CCabBlockInStream *cabBlockInStreamSpec = new CCabBlockInStream();
   CMyComPtr<ISequentialInStream> cabBlockInStream = cabBlockInStreamSpec;
@@ -705,13 +955,21 @@ STDMETHODIMP CHandler::Extract(const UInt32 *indices, UInt32 numItems,
     return E_OUTOFMEMORY;
 
   CRecordVector<bool> extractStatuses;
-  for(i = 0; i < numItems;)
+  
+  for (i = 0;;)
   {
-    int index = allFilesMode ? i : indices[i];
+    lps->OutSize = totalUnPacked;
+    lps->InSize = totalPacked;
+    RINOK(lps->SetCur());
+
+    if (i >= numItems)
+      break;
+
+    unsigned index = allFilesMode ? i : indices[i];
 
     const CMvItem &mvItem = m_Database.Items[index];
     const CDatabaseEx &db = m_Database.Volumes[mvItem.VolumeIndex];
-    int itemIndex = mvItem.ItemIndex;
+    unsigned itemIndex = mvItem.ItemIndex;
     const CItem &item = db.Items[itemIndex];
 
     i++;
@@ -727,7 +985,9 @@ STDMETHODIMP CHandler::Extract(const UInt32 *indices, UInt32 numItems,
       RINOK(extractCallback->SetOperationResult(NExtract::NOperationResult::kOK));
       continue;
     }
+    
     int folderIndex = m_Database.GetFolderIndex(&mvItem);
+    
     if (folderIndex < 0)
     {
       // If we need previous archive
@@ -741,22 +1001,24 @@ STDMETHODIMP CHandler::Extract(const UInt32 *indices, UInt32 numItems,
       RINOK(extractCallback->SetOperationResult(NExtract::NOperationResult::kDataError));
       continue;
     }
-    int startIndex2 = m_Database.FolderStartFileIndex[folderIndex];
-    int startIndex = startIndex2;
+    
+    unsigned startIndex2 = m_Database.FolderStartFileIndex[folderIndex];
+    unsigned startIndex = startIndex2;
     extractStatuses.Clear();
     for (; startIndex < index; startIndex++)
       extractStatuses.Add(false);
     extractStatuses.Add(true);
     startIndex++;
     UInt64 curUnpack = item.GetEndOffset();
-    for(;i < numItems; i++)
+    
+    for (; i < numItems; i++)
     {
-      int indexNext = allFilesMode ? i : indices[i];
-      const CMvItem &mvItem = m_Database.Items[indexNext];
-      const CItem &item = m_Database.Volumes[mvItem.VolumeIndex].Items[mvItem.ItemIndex];
-      if (item.IsDir())
+      unsigned indexNext = allFilesMode ? i : indices[i];
+      const CMvItem &mvItem2 = m_Database.Items[indexNext];
+      const CItem &item2 = m_Database.Volumes[mvItem2.VolumeIndex].Items[mvItem2.ItemIndex];
+      if (item2.IsDir())
         continue;
-      int newFolderIndex = m_Database.GetFolderIndex(&mvItem);
+      int newFolderIndex = m_Database.GetFolderIndex(&mvItem2);
 
       if (newFolderIndex != folderIndex)
         break;
@@ -764,68 +1026,74 @@ STDMETHODIMP CHandler::Extract(const UInt32 *indices, UInt32 numItems,
         extractStatuses.Add(false);
       extractStatuses.Add(true);
       startIndex++;
-      curUnpack = item.GetEndOffset();
+      curUnpack = item2.GetEndOffset();
     }
-
-    lps->OutSize = totalUnPacked;
-    lps->InSize = totalPacked;
-    RINOK(lps->SetCur());
 
     CFolderOutStream *cabFolderOutStream = new CFolderOutStream;
     CMyComPtr<ISequentialOutStream> outStream(cabFolderOutStream);
 
-    const CFolder &folder = db.Folders[item.GetFolderIndex(db.Folders.Size())];
+    unsigned folderIndex2 = item.GetFolderIndex(db.Folders.Size());
+    const CFolder &folder = db.Folders[folderIndex2];
 
     cabFolderOutStream->Init(&m_Database, &extractStatuses, startIndex2,
         curUnpack, extractCallback, testMode);
 
     cabBlockInStreamSpec->MsZip = false;
-    switch(folder.GetCompressionMethod())
+    HRESULT res = S_OK;
+    
+    switch (folder.GetMethod())
     {
-      case NHeader::NCompressionMethodMajor::kNone:
+      case NHeader::NMethod::kNone:
         break;
-      case NHeader::NCompressionMethodMajor::kMSZip:
-        if(deflateDecoderSpec == NULL)
+      
+      case NHeader::NMethod::kMSZip:
+        if (!deflateDecoder)
         {
           deflateDecoderSpec = new NCompress::NDeflate::NDecoder::CCOMCoder;
           deflateDecoder = deflateDecoderSpec;
         }
         cabBlockInStreamSpec->MsZip = true;
         break;
-      case NHeader::NCompressionMethodMajor::kLZX:
-        if(lzxDecoderSpec == NULL)
+      
+      case NHeader::NMethod::kLZX:
+        if (!lzxDecoder)
         {
           lzxDecoderSpec = new NCompress::NLzx::CDecoder;
           lzxDecoder = lzxDecoderSpec;
         }
-        RINOK(lzxDecoderSpec->SetParams(folder.CompressionTypeMinor));
+        res = lzxDecoderSpec->SetParams_and_Alloc(folder.MethodMinor);
         break;
-      case NHeader::NCompressionMethodMajor::kQuantum:
-        if(quantumDecoderSpec == NULL)
+
+      case NHeader::NMethod::kQuantum:
+        if (!quantumDecoder)
         {
           quantumDecoderSpec = new NCompress::NQuantum::CDecoder;
           quantumDecoder = quantumDecoderSpec;
         }
-        quantumDecoderSpec->SetParams(folder.CompressionTypeMinor);
+        res = quantumDecoderSpec->SetParams(folder.MethodMinor);
         break;
+      
       default:
-      {
-        RINOK(cabFolderOutStream->Unsupported());
-        totalUnPacked += curUnpack;
-        continue;
-      }
+        res = E_INVALIDARG;
+        break;
     }
 
-    cabBlockInStreamSpec->InitForNewFolder();
-
-    HRESULT res = S_OK;
+    if (res == E_INVALIDARG)
+    {
+      RINOK(cabFolderOutStream->Unsupported());
+      totalUnPacked += curUnpack;
+      continue;
+    }
+    RINOK(res);
 
     {
-      int volIndex = mvItem.VolumeIndex;
+      unsigned volIndex = mvItem.VolumeIndex;
       int locFolderIndex = item.GetFolderIndex(db.Folders.Size());
       bool keepHistory = false;
       bool keepInputBuffer = false;
-      for (UInt32 f = 0; cabFolderOutStream->GetRemain() != 0;)
+      bool thereWasNotAlignedChunk = false;
+      
+      for (UInt32 bl = 0; cabFolderOutStream->NeedMoreWrite();)
       {
         if (volIndex >= m_Database.Volumes.Size())
         {
@@ -833,30 +1101,41 @@ STDMETHODIMP CHandler::Extract(const UInt32 *indices, UInt32 numItems,
           break;
         }
 
-        const CDatabaseEx &db = m_Database.Volumes[volIndex];
-        const CFolder &folder = db.Folders[locFolderIndex];
-        if (f == 0)
-        {
-          cabBlockInStreamSpec->SetStream(db.Stream);
-          cabBlockInStreamSpec->ReservedSize = db.ArchiveInfo.GetDataBlockReserveSize();
-          RINOK(db.Stream->Seek(db.StartPosition + folder.DataStart, STREAM_SEEK_SET, NULL));
-        }
-        if (f == folder.NumDataBlocks)
-        {
-          volIndex++;
-          locFolderIndex = 0;
-          f = 0;
-          continue;
-        }
-        f++;
-
-        cabBlockInStreamSpec->DataError = false;
+        const CDatabaseEx &db2 = m_Database.Volumes[volIndex];
+        const CFolder &folder2 = db2.Folders[locFolderIndex];
         
+        if (bl == 0)
+        {
+          cabBlockInStreamSpec->ReservedSize = db2.ArcInfo.GetDataBlockReserveSize();
+          RINOK(db2.Stream->Seek(db2.StartPosition + folder2.DataStart, STREAM_SEEK_SET, NULL));
+        }
+        
+        if (bl == folder2.NumDataBlocks)
+        {
+          /*
+            CFolder::NumDataBlocks (CFFOLDER::cCFData in CAB specification) is 16-bit.
+            But there are some big CAB archives from MS that contain more
+            than (0xFFFF) CFDATA blocks in folder.
+            Old cab extracting software can show error (or ask next volume)
+            but cab extracting library in new Windows ignores this error.
+            15.00 : We also try to ignore such error, if archive is not multi-volume.
+          */
+          if (m_Database.Volumes.Size() > 1)
+          {
+            volIndex++;
+            locFolderIndex = 0;
+            bl = 0;
+            continue;
+          }
+        }
+        
+        bl++;
+
         if (!keepInputBuffer)
           cabBlockInStreamSpec->InitForNewBlock();
 
         UInt32 packSize, unpackSize;
-        res = cabBlockInStreamSpec->PreRead(packSize, unpackSize);
+        res = cabBlockInStreamSpec->PreRead(db2.Stream, packSize, unpackSize);
         if (res == S_FALSE)
           break;
         RINOK(res);
@@ -871,54 +1150,104 @@ STDMETHODIMP CHandler::Extract(const UInt32 *indices, UInt32 numItems,
         lps->InSize = totalPacked;
         RINOK(lps->SetCur());
 
-        UInt64 unpackRemain = cabFolderOutStream->GetRemain();
-
         const UInt32 kBlockSizeMax = (1 << 15);
-        if (unpackRemain > kBlockSizeMax)
-          unpackRemain = kBlockSizeMax;
-        if (unpackRemain > unpackSize)
-          unpackRemain  = unpackSize;
-   
-        switch(folder.GetCompressionMethod())
+
+        /* We don't try to reduce last block.
+           Note that LZX converts data with x86 filter.
+           and filter needs larger input data than reduced size.
+           It's simpler to decompress full chunk here.
+           also we need full block for quantum for more integrity checks */
+
+        if (unpackSize > kBlockSizeMax)
         {
-          case NHeader::NCompressionMethodMajor::kNone:
-            res = copyCoder->Code(cabBlockInStream, outStream, NULL, &unpackRemain, NULL);
-            break;
-          case NHeader::NCompressionMethodMajor::kMSZip:
-            deflateDecoderSpec->SetKeepHistory(keepHistory);
-            res = deflateDecoder->Code(cabBlockInStream, outStream, NULL, &unpackRemain, NULL);
-            break;
-          case NHeader::NCompressionMethodMajor::kLZX:
-            lzxDecoderSpec->SetKeepHistory(keepHistory);
-            res = lzxDecoder->Code(cabBlockInStream, outStream, NULL, &unpackRemain, NULL);
-            break;
-          case NHeader::NCompressionMethodMajor::kQuantum:
-            quantumDecoderSpec->SetKeepHistory(keepHistory);
-            res = quantumDecoder->Code(cabBlockInStream, outStream, NULL, &unpackRemain, NULL);
+          res = S_FALSE;
           break;
         }
+
+        if (unpackSize != kBlockSizeMax)
+        {
+          if (thereWasNotAlignedChunk)
+          {
+            res = S_FALSE;
+            break;
+          }
+          thereWasNotAlignedChunk = true;
+        }
+
+        UInt64 unpackSize64 = unpackSize;
+        UInt32 packSizeChunk = cabBlockInStreamSpec->GetPackSizeAvail();
+
+        switch (folder2.GetMethod())
+        {
+          case NHeader::NMethod::kNone:
+            res = copyCoder->Code(cabBlockInStream, outStream, NULL, &unpackSize64, NULL);
+            break;
+          
+          case NHeader::NMethod::kMSZip:
+            deflateDecoderSpec->Set_KeepHistory(keepHistory);
+            /* v9.31: now we follow MSZIP specification that requires to finish deflate stream at the end of each block.
+               But PyCabArc can create CAB archives that doesn't have finish marker at the end of block.
+               Cabarc probably ignores such errors in cab archives.
+               Maybe we also should ignore that error?
+               Or we should extract full file and show the warning? */
+            deflateDecoderSpec->Set_NeedFinishInput(true);
+            res = deflateDecoder->Code(cabBlockInStream, outStream, NULL, &unpackSize64, NULL);
+            if (res == S_OK)
+            {
+              if (!deflateDecoderSpec->IsFinished())
+                res = S_FALSE;
+              if (!deflateDecoderSpec->IsFinalBlock())
+                res = S_FALSE;
+            }
+            break;
+
+          case NHeader::NMethod::kLZX:
+            lzxDecoderSpec->SetKeepHistory(keepHistory);
+            lzxDecoderSpec->KeepHistoryForNext = true;
+            
+            res = lzxDecoderSpec->Code(cabBlockInStreamSpec->GetData(), packSizeChunk, unpackSize);
+
+            if (res == S_OK)
+              res = WriteStream(outStream,
+                  lzxDecoderSpec->GetUnpackData(),
+                  lzxDecoderSpec->GetUnpackSize());
+            break;
+          
+          case NHeader::NMethod::kQuantum:
+            res = quantumDecoderSpec->Code(cabBlockInStreamSpec->GetData(),
+                packSizeChunk, outStream, unpackSize, keepHistory);
+            break;
+        }
+      
         if (res != S_OK)
         {
           if (res != S_FALSE)
             RINOK(res);
           break;
         }
+        
         keepHistory = true;
       }
+      
       if (res == S_OK)
       {
         RINOK(cabFolderOutStream->WriteEmptyFiles());
       }
     }
-    if (res != S_OK || cabFolderOutStream->GetRemain() != 0)
+
+    if (res != S_OK || cabFolderOutStream->NeedMoreWrite())
     {
-      RINOK(cabFolderOutStream->FlushCorrupted());
+      RINOK(cabFolderOutStream->FlushCorrupted(folderIndex2));
     }
+
     totalUnPacked += curUnpack;
   }
+
   return S_OK;
+
   COM_TRY_END
 }
+
 
 STDMETHODIMP CHandler::GetNumberOfItems(UInt32 *numItems)
 {

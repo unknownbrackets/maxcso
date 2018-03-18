@@ -1,8 +1,9 @@
-#define IDD_SYSTEM                      540
-#define IDD_SYSTEM_2                    640
-#define IDS_PLUGIN                      990
-// #define IDC_SYSTEM_INTEGRATE_TO_CONTEXT_MENU 1010
-#define IDC_SYSTEM_STATIC_ASSOCIATE     1020
-#define IDC_SYSTEM_LIST_ASSOCIATE       1021
-#define IDC_SYSTEM_LIST_PLUGINS         1022
-#define IDC_SYSTEM_SELECT_ALL           1023
+#define IDD_SYSTEM     2200
+#define IDD_SYSTEM_2  12200
+
+#define IDT_SYSTEM_ASSOCIATE  2201
+#define IDS_SYSTEM_ALL_USERS  2202
+
+#define IDL_SYSTEM_ASSOCIATE   100
+#define IDB_SYSTEM_CURRENT     101
+#define IDB_SYSTEM_ALL         102

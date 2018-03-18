@@ -5,20 +5,18 @@
 
 #include "../../Common/MyCom.h"
 #include "../../Windows/FileDir.h"
-#include "../../Windows/FileIO.h"
 
 #include "../IStream.h"
 
 class CInOutTempBuffer
 {
-  NWindows::NFile::NDirectory::CTempFile _tempFile;
+  NWindows::NFile::NDir::CTempFile _tempFile;
   NWindows::NFile::NIO::COutFile _outFile;
   Byte *_buf;
-  UInt32 _bufPos;
-  CSysString _tempFileName;
-  bool _tempFileCreated;
+  size_t _bufPos;
   UInt64 _size;
   UInt32 _crc;
+  bool _tempFileCreated;
 
   bool WriteToFile(const void *data, UInt32 size);
 public:
@@ -33,6 +31,7 @@ public:
   UInt64 GetDataSize() const { return _size; }
 };
 
+/*
 class CSequentialOutTempBufferImp:
   public ISequentialOutStream,
   public CMyUnknownImp
@@ -44,5 +43,6 @@ public:
 
   STDMETHOD(Write)(const void *data, UInt32 size, UInt32 *processedSize);
 };
+*/
 
 #endif

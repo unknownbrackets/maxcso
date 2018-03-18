@@ -3,7 +3,7 @@
 #ifndef __ARCHIVE_ISO_HEADER_H
 #define __ARCHIVE_ISO_HEADER_H
 
-#include "Common/Types.h"
+#include "../../../Common/MyTypes.h"
 
 namespace NArchive {
 namespace NIso {
@@ -22,9 +22,10 @@ const Byte kVersion = 1;
 namespace NFileFlags
 {
   const Byte kDirectory = 1 << 1;
+  const Byte kNonFinalExtent = 1 << 7;
 }
 
-extern const char *kElToritoSpec;
+extern const char * const kElToritoSpec;
 
 const UInt32 kStartPos = 0x8000;
 
@@ -33,6 +34,11 @@ namespace NBootEntryId
   const Byte kValidationEntry = 1;
   const Byte kInitialEntryNotBootable = 0;
   const Byte kInitialEntryBootable = 0x88;
+
+  const Byte kMoreHeaders = 0x90;
+  const Byte kFinalHeader = 0x91;
+  
+  const Byte kExtensionIndicator = 0x44;
 }
 
 namespace NBootPlatformId
@@ -42,7 +48,7 @@ namespace NBootPlatformId
   const Byte kMac = 2;
 }
 
-const BYTE kBootMediaTypeMask = 0xF;
+const Byte kBootMediaTypeMask = 0xF;
 
 namespace NBootMediaType
 {
@@ -52,9 +58,6 @@ namespace NBootMediaType
   const Byte k2d88Floppy = 3;
   const Byte kHardDisk = 4;
 }
-
-const int kNumBootMediaTypes = 5;
-extern const wchar_t *kMediaTypes[];
 
 }}
 

@@ -3,17 +3,26 @@
 #ifndef __COMMON_INT_TO_STRING_H
 #define __COMMON_INT_TO_STRING_H
 
-#include <stddef.h>
-#include "Types.h"
+#include "MyTypes.h"
 
-void ConvertUInt64ToString(UInt64 value, char *s, UInt32 base = 10);
-void ConvertUInt64ToString(UInt64 value, wchar_t *s);
-void ConvertInt64ToString(Int64 value, char *s);
-void ConvertInt64ToString(Int64 value, wchar_t *s);
+void ConvertUInt32ToString(UInt32 value, char *s) throw();
+void ConvertUInt64ToString(UInt64 value, char *s) throw();
 
-void ConvertUInt32ToString(UInt32 value, char *s);
-void ConvertUInt32ToString(UInt32 value, wchar_t *s);
+void ConvertUInt32ToString(UInt32 value, wchar_t *s) throw();
+void ConvertUInt64ToString(UInt64 value, wchar_t *s) throw();
 
-void ConvertUInt32ToHexWithZeros(UInt32 value, char *s);
+void ConvertUInt64ToOct(UInt64 value, char *s) throw();
+
+void ConvertUInt32ToHex(UInt32 value, char *s) throw();
+void ConvertUInt64ToHex(UInt64 value, char *s) throw();
+void ConvertUInt32ToHex8Digits(UInt32 value, char *s) throw();
+// void ConvertUInt32ToHex8Digits(UInt32 value, wchar_t *s) throw();
+
+void ConvertInt64ToString(Int64 value, char *s) throw();
+void ConvertInt64ToString(Int64 value, wchar_t *s) throw();
+
+// use RawLeGuid only for RAW bytes that contain stored GUID as Little-endian.
+char *RawLeGuidToString(const Byte *guid, char *s) throw();
+char *RawLeGuidToString_Braced(const Byte *guid, char *s) throw();
 
 #endif

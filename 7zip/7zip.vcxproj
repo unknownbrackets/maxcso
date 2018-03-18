@@ -21,8 +21,10 @@
   <ItemGroup>
     <ClInclude Include="CPP\7zip\Archive\Common\ParseProperties.h" />
     <ClInclude Include="CPP\7zip\Archive\DeflateProps.h" />
+    <ClInclude Include="CPP\7zip\Common\CWrappers.h" />
     <ClInclude Include="CPP\7zip\Common\FileStreams.h" />
     <ClInclude Include="CPP\7zip\Common\OutBuffer.h" />
+    <ClInclude Include="CPP\7zip\Common\StreamUtils.h" />
     <ClInclude Include="CPP\7zip\Compress\DeflateEncoder.h" />
     <ClInclude Include="CPP\Common\MyString.h" />
     <ClInclude Include="CPP\Common\StringConvert.h" />
@@ -38,8 +40,10 @@
   <ItemGroup>
     <ClCompile Include="CPP\7zip\Archive\Common\ParseProperties.cpp" />
     <ClCompile Include="CPP\7zip\Archive\DeflateProps.cpp" />
+    <ClCompile Include="CPP\7zip\Common\CWrappers.cpp" />
     <ClCompile Include="CPP\7zip\Common\FileStreams.cpp" />
     <ClCompile Include="CPP\7zip\Common\OutBuffer.cpp" />
+    <ClCompile Include="CPP\7zip\Common\StreamUtils.cpp" />
     <ClCompile Include="CPP\7zip\Compress\DeflateEncoder.cpp" />
     <ClCompile Include="CPP\Common\MyString.cpp" />
     <ClCompile Include="CPP\Common\StringConvert.cpp" />

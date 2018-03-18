@@ -1,11 +1,16 @@
 // MyWindows.h
 
-#ifndef __MYWINDOWS_H
-#define __MYWINDOWS_H
+#ifndef __MY_WINDOWS_H
+#define __MY_WINDOWS_H
 
 #ifdef _WIN32
 
 #include <windows.h>
+
+#ifdef UNDER_CE
+  #undef VARIANT_TRUE
+  #define VARIANT_TRUE ((VARIANT_BOOL)-1)
+#endif
 
 #else
 
@@ -13,6 +18,8 @@
 #include <string.h>
 
 #include "MyGuidDef.h"
+
+#define WINAPI
 
 typedef char CHAR;
 typedef unsigned char UCHAR;
@@ -37,11 +44,21 @@ typedef UINT32 ULONG;
 #undef DWORD
 typedef UINT32 DWORD;
 
+typedef long BOOL;
+
+#ifndef FALSE
+  #define FALSE 0
+  #define TRUE 1
+#endif
+
+// typedef size_t ULONG_PTR;
+typedef size_t DWORD_PTR;
+
 typedef Int64 LONGLONG;
 typedef UInt64 ULONGLONG;
 
-typedef struct LARGE_INTEGER { LONGLONG QuadPart; }LARGE_INTEGER;
-typedef struct _ULARGE_INTEGER { ULONGLONG QuadPart;} ULARGE_INTEGER;
+typedef struct _LARGE_INTEGER { LONGLONG QuadPart; } LARGE_INTEGER;
+typedef struct _ULARGE_INTEGER { ULONGLONG QuadPart; } ULARGE_INTEGER;
 
 typedef const CHAR *LPCSTR;
 typedef CHAR TCHAR;
@@ -57,7 +74,7 @@ typedef struct _FILETIME
 {
   DWORD dwLowDateTime;
   DWORD dwHighDateTime;
-}FILETIME;
+} FILETIME;
 
 #define HRESULT LONG
 #define FAILED(Status) ((HRESULT)(Status)<0)
@@ -145,8 +162,6 @@ typedef WORD PROPVAR_PAD1;
 typedef WORD PROPVAR_PAD2;
 typedef WORD PROPVAR_PAD3;
 
-#ifdef __cplusplus
-
 typedef struct tagPROPVARIANT
 {
   VARTYPE vt;
@@ -177,11 +192,17 @@ typedef tagVARIANT VARIANT;
 typedef VARIANT VARIANTARG;
 
 MY_EXTERN_C HRESULT VariantClear(VARIANTARG *prop);
-MY_EXTERN_C HRESULT VariantCopy(VARIANTARG *dest, VARIANTARG *src);
+MY_EXTERN_C HRESULT VariantCopy(VARIANTARG *dest, const VARIANTARG *src);
 
-#endif
+typedef struct tagSTATPROPSTG
+{
+  LPOLESTR lpwstrName;
+  PROPID propid;
+  VARTYPE vt;
+} STATPROPSTG;
 
 MY_EXTERN_C BSTR SysAllocStringByteLen(LPCSTR psz, UINT len);
+MY_EXTERN_C BSTR SysAllocStringLen(const OLECHAR *sz, UINT len);
 MY_EXTERN_C BSTR SysAllocString(const OLECHAR *sz);
 MY_EXTERN_C void SysFreeString(BSTR bstr);
 MY_EXTERN_C UINT SysStringByteLen(BSTR bstr);
@@ -192,6 +213,7 @@ MY_EXTERN_C LONG CompareFileTime(const FILETIME* ft1, const FILETIME* ft2);
 
 #define CP_ACP    0
 #define CP_OEMCP  1
+#define CP_UTF8   65001
 
 typedef enum tagSTREAM_SEEK
 {

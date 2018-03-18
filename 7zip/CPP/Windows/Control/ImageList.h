@@ -1,9 +1,11 @@
 // Windows/Control/ImageList.h
 
-#ifndef __WINDOWS_CONTROL_IMAGELIST_H
-#define __WINDOWS_CONTROL_IMAGELIST_H
+#ifndef __WINDOWS_CONTROL_IMAGE_LIST_H
+#define __WINDOWS_CONTROL_IMAGE_LIST_H
 
-#include "Windows/Defs.h"
+#include <commctrl.h>
+
+#include "../Defs.h"
 
 namespace NWindows {
 namespace NControl {

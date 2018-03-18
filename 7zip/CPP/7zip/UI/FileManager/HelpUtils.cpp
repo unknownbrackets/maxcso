@@ -2,26 +2,31 @@
 
 #include "StdAfx.h"
 
+#include "HelpUtils.h"
+
+#if defined(UNDER_CE) || !defined(_WIN32)
+
+void ShowHelpWindow(LPCSTR)
+{
+}
+
+#else
+
 #include <HtmlHelp.h>
 
-#include "Common/StringConvert.h"
-#include "HelpUtils.h"
-#include "ProgramLocation.h"
+#include "../../../Common/StringConvert.h"
 
-static LPCWSTR kHelpFileName = L"7-zip.chm::/";
+#include "../../../Windows/DLL.h"
 
-#ifdef UNDER_CE
-void ShowHelpWindow(HWND, LPCWSTR)
+#define kHelpFileName "7-zip.chm::/"
+
+void ShowHelpWindow(LPCSTR topicFile)
 {
-}
-#else
-void ShowHelpWindow(HWND hwnd, LPCWSTR topicFile)
-{
-  UString path;
-  if (!::GetProgramFolderPath(path))
-    return;
+  FString path = NWindows::NDLL::GetModuleDirPrefix();
   path += kHelpFileName;
   path += topicFile;
-  HtmlHelp(hwnd, GetSystemString(path), HH_DISPLAY_TOPIC, NULL);
+  // HWND hwnd = NULL;
+  HtmlHelp(NULL, GetSystemString(fs2us(path)), HH_DISPLAY_TOPIC, 0);
 }
+
 #endif

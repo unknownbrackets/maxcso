@@ -3,16 +3,15 @@
 #ifndef __FS_DRIVES_H
 #define __FS_DRIVES_H
 
-#include "Common/MyCom.h"
-#include "Common/MyString.h"
+#include "../../../Common/MyCom.h"
+#include "../../../Common/MyString.h"
 
 #include "IFolder.h"
 
 struct CDriveInfo
 {
-  UString Name;
-  UString FullSystemName;
-  bool KnownSizes;
+  FString Name;
+  FString FullSystemName;
   UInt64 DriveSize;
   UInt64 FreeSpace;
   UInt64 ClusterSize;
@@ -21,7 +20,12 @@ struct CDriveInfo
   UString FileSystemName;
   UINT DriveType;
 
-  UString GetDeviceFileIoName() const;
+  bool KnownSize;
+  bool KnownSizes;
+  bool IsPhysicalDrive;
+
+  FString GetDeviceFileIoName() const;
+  CDriveInfo(): KnownSize(false), KnownSizes(false), IsPhysicalDrive(false) {}
 };
 
 class CFSDrives:
@@ -32,10 +36,11 @@ class CFSDrives:
 {
   CObjectVector<CDriveInfo> _drives;
   bool _volumeMode;
+  bool _superMode;
 
-  HRESULT BindToFolderSpec(const wchar_t *name, IFolderFolder **resultFolder);
-  UString GetExt(int index) const;
-  HRESULT GetLength(int index, UInt64 &length) const;
+  HRESULT BindToFolderSpec(CFSTR name, IFolderFolder **resultFolder);
+  void AddExt(FString &s, unsigned index) const;
+  HRESULT GetFileSize(unsigned index, UInt64 &fileSize) const;
 public:
   MY_UNKNOWN_IMP2(IFolderGetSystemIconIndex, IFolderOperations)
 
@@ -44,9 +49,10 @@ public:
 
   STDMETHOD(GetSystemIconIndex)(UInt32 index, Int32 *iconIndex);
 
-  void Init(bool volMode = false)
+  void Init(bool volMode = false, bool superMode = false)
   {
     _volumeMode = volMode;
+    _superMode = superMode;
   }
 };
 

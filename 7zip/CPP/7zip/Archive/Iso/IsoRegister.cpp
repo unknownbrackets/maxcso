@@ -5,9 +5,17 @@
 #include "../../Common/RegisterArc.h"
 
 #include "IsoHandler.h"
-static IInArchive *CreateArc() { return new NArchive::NIso::CHandler; }
 
-static CArcInfo g_ArcInfo =
-  { L"Iso", L"iso img", 0, 0xE7, { 'C', 'D', '0', '0', '1', 0x1 }, 7, false, CreateArc, 0 };
+namespace NArchive {
+namespace NIso {
 
-REGISTER_ARC(Iso)
+static const Byte k_Signature[] = { 'C', 'D', '0', '0', '1' };
+
+REGISTER_ARC_I(
+  "Iso", "iso img", 0, 0xE7,
+  k_Signature,
+  NArchive::NIso::kStartPos + 1,
+  0,
+  NULL)
+
+}}

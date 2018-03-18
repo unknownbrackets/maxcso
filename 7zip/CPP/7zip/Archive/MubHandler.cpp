@@ -4,109 +4,148 @@
 
 #include "../../../C/CpuArch.h"
 
-#include "Common/ComTry.h"
+#include "../../Common/ComTry.h"
+#include "../../Common/IntToString.h"
+#include "../../Common/MyString.h"
 
-#include "Windows/PropVariant.h"
+#include "../../Windows/PropVariant.h"
 
-#include "../Common/LimitedStreams.h"
-#include "../Common/ProgressUtils.h"
 #include "../Common/RegisterArc.h"
 #include "../Common/StreamUtils.h"
 
-#include "../Compress/CopyCoder.h"
+#include "HandlerCont.h"
 
-#define Get32(p) GetBe32(p)
+static UInt32 Get32(const Byte *p, bool be) { if (be) return GetBe32(p); return GetUi32(p); }
+
+using namespace NWindows;
+using namespace NCOM;
 
 namespace NArchive {
 namespace NMub {
+
+#define MACH_CPU_ARCH_ABI64 (1 << 24)
+#define MACH_CPU_TYPE_386    7
+#define MACH_CPU_TYPE_ARM   12
+#define MACH_CPU_TYPE_SPARC 14
+#define MACH_CPU_TYPE_PPC   18
+
+#define MACH_CPU_TYPE_PPC64 (MACH_CPU_ARCH_ABI64 | MACH_CPU_TYPE_PPC)
+#define MACH_CPU_TYPE_AMD64 (MACH_CPU_ARCH_ABI64 | MACH_CPU_TYPE_386)
+#define MACH_CPU_TYPE_ARM64 (MACH_CPU_ARCH_ABI64 | MACH_CPU_TYPE_ARM)
+
+#define MACH_CPU_SUBTYPE_LIB64 (1 << 31)
+
+#define MACH_CPU_SUBTYPE_I386_ALL 3
 
 struct CItem
 {
   UInt32 Type;
   UInt32 SubType;
-  UInt64 Offset;
-  UInt64 Size;
-  UInt32 Align;
-  bool IsTail;
+  UInt32 Offset;
+  UInt32 Size;
+  // UInt32 Align;
 };
 
-const UInt32 kNumFilesMax = 10;
+static const UInt32 kNumFilesMax = 10;
 
-class CHandler:
-  public IInArchive,
-  public IInArchiveGetStream,
-  public CMyUnknownImp
+class CHandler: public CHandlerCont
 {
-  UInt64 _startPos;
-  CMyComPtr<IInStream> _stream;
+  // UInt64 _startPos;
+  UInt64 _phySize;
   UInt32 _numItems;
-  CItem _items[kNumFilesMax + 1];
+  bool _bigEndian;
+  CItem _items[kNumFilesMax];
+
   HRESULT Open2(IInStream *stream);
+
+  virtual int GetItem_ExtractInfo(UInt32 index, UInt64 &pos, UInt64 &size) const
+  {
+    const CItem &item = _items[index];
+    pos = item.Offset;
+    size = item.Size;
+    return NExtract::NOperationResult::kOK;
+  }
+
 public:
-  MY_UNKNOWN_IMP2(IInArchive, IInArchiveGetStream)
-  INTERFACE_IInArchive(;)
-  STDMETHOD(GetStream)(UInt32 index, ISequentialInStream **stream);
+  INTERFACE_IInArchive_Cont(;)
 };
 
-STATPROPSTG kProps[] =
+static const Byte kArcProps[] =
 {
-  { NULL, kpidSize, VT_UI8}
+  kpidBigEndian
+};
+
+static const Byte kProps[] =
+{
+  kpidSize
 };
 
 IMP_IInArchive_Props
-IMP_IInArchive_ArcProps_NO
+IMP_IInArchive_ArcProps
 
-#define MACH_ARCH_ABI64  0x1000000
-#define MACH_MACHINE_386   7
-#define MACH_MACHINE_ARM   12
-#define MACH_MACHINE_SPARC 14
-#define MACH_MACHINE_PPC   18
-
-#define MACH_MACHINE_PPC64 (MACH_MACHINE_PPC | MACH_ARCH_ABI64)
-#define MACH_MACHINE_AMD64 (MACH_MACHINE_386 | MACH_ARCH_ABI64)
-
-STDMETHODIMP CHandler::GetProperty(UInt32 index, PROPID propID, PROPVARIANT *value)
+STDMETHODIMP CHandler::GetArchiveProperty(PROPID propID, PROPVARIANT *value)
 {
-  NWindows::NCOM::CPropVariant prop;
-  const CItem &item = _items[index];
-  switch(propID)
+  PropVariant_Clear(value);
+  switch (propID)
   {
-    case kpidExtension:
-    {
-      const wchar_t *ext;
-      if (item.IsTail)
-        ext = L"tail";
-      else
-      {
-        switch(item.Type)
-        {
-          case MACH_MACHINE_386:   ext = L"86";    break;
-          case MACH_MACHINE_ARM:   ext = L"arm";   break;
-          case MACH_MACHINE_SPARC: ext = L"sparc"; break;
-          case MACH_MACHINE_PPC:   ext = L"ppc";   break;
-          case MACH_MACHINE_PPC64: ext = L"ppc64"; break;
-          case MACH_MACHINE_AMD64: ext = L"x64";   break;
-          default: ext = L"unknown"; break;
-        }
-      }
-      prop = ext;
-      break;
-    }
-    case kpidSize:
-    case kpidPackSize:
-      prop = (UInt64)item.Size;
-      break;
+    case kpidBigEndian: PropVarEm_Set_Bool(value, _bigEndian); break;
+    case kpidPhySize: PropVarEm_Set_UInt64(value, _phySize); break;
   }
-  prop.Detach(value);
   return S_OK;
 }
 
-#define MACH_TYPE_ABI64 (1 << 24)
-#define MACH_SUBTYPE_ABI64 (1 << 31)
+STDMETHODIMP CHandler::GetProperty(UInt32 index, PROPID propID, PROPVARIANT *value)
+{
+  PropVariant_Clear(value);
+  const CItem &item = _items[index];
+  switch (propID)
+  {
+    case kpidExtension:
+    {
+      char temp[32];
+      const char *ext = 0;
+      switch (item.Type)
+      {
+        case MACH_CPU_TYPE_386:   ext = "x86";   break;
+        case MACH_CPU_TYPE_ARM:   ext = "arm";   break;
+        case MACH_CPU_TYPE_SPARC: ext = "sparc"; break;
+        case MACH_CPU_TYPE_PPC:   ext = "ppc";   break;
+        case MACH_CPU_TYPE_AMD64: ext = "x64";   break;
+        case MACH_CPU_TYPE_ARM64: ext = "arm64"; break;
+        case MACH_CPU_TYPE_PPC64: ext = "ppc64"; break;
+        default:
+          temp[0] = 'c';
+          temp[1] = 'p';
+          temp[2] = 'u';
+          ConvertUInt32ToString(item.Type & ~MACH_CPU_ARCH_ABI64, temp + 3);
+          if (item.Type & MACH_CPU_ARCH_ABI64)
+            MyStringCopy(temp + MyStringLen(temp), "_64");
+          break;
+      }
+      if (ext)
+        strcpy(temp, ext);
+      if (item.SubType != 0 && (
+          item.Type != MACH_CPU_TYPE_386 &&
+          item.Type != MACH_CPU_TYPE_AMD64 ||
+          (item.SubType & ~(UInt32)MACH_CPU_SUBTYPE_LIB64) != MACH_CPU_SUBTYPE_I386_ALL))
+      {
+        unsigned pos = MyStringLen(temp);
+        temp[pos++] = '-';
+          ConvertUInt32ToString(item.SubType, temp + pos);
+      }
+      return PropVarEm_Set_Str(value, temp);
+    }
+    case kpidSize:
+    case kpidPackSize:
+      PropVarEm_Set_UInt64(value, item.Size);
+      break;
+  }
+  return S_OK;
+}
 
 HRESULT CHandler::Open2(IInStream *stream)
 {
-  RINOK(stream->Seek(0, STREAM_SEEK_SET, &_startPos));
+  // RINOK(stream->Seek(0, STREAM_SEEK_CUR, &_startPos));
 
   const UInt32 kHeaderSize = 8;
   const UInt32 kRecordSize = 5 * 4;
@@ -116,44 +155,45 @@ HRESULT CHandler::Open2(IInStream *stream)
   RINOK(ReadStream(stream, buf, &processed));
   if (processed < kHeaderSize)
     return S_FALSE;
-  UInt32 num = Get32(buf + 4);
-  if (Get32(buf) != 0xCAFEBABE || num > kNumFilesMax || processed < kHeaderSize + num * kRecordSize)
+  
+  bool be;
+  switch (GetBe32(buf))
+  {
+    case 0xCAFEBABE: be = true; break;
+    case 0xB9FAF10E: be = false; break;
+    default: return S_FALSE;
+  }
+  _bigEndian = be;
+  UInt32 num = Get32(buf + 4, be);
+  if (num > kNumFilesMax || processed < kHeaderSize + num * kRecordSize)
+    return S_FALSE;
+  if (num == 0)
     return S_FALSE;
   UInt64 endPosMax = kHeaderSize;
+
   for (UInt32 i = 0; i < num; i++)
   {
     const Byte *p = buf + kHeaderSize + i * kRecordSize;
     CItem &sb = _items[i];
-    sb.IsTail = false;
-    sb.Type = Get32(p);
-    sb.SubType = Get32(p + 4);
-    sb.Offset = Get32(p + 8);
-    sb.Size = Get32(p + 12);
-    sb.Align = Get32(p + 16);
-
-    if ((sb.Type & ~MACH_TYPE_ABI64) >= 0x100 ||
-        (sb.SubType & ~MACH_SUBTYPE_ABI64) >= 0x100 ||
-        sb.Align > 31)
+    sb.Type = Get32(p, be);
+    sb.SubType = Get32(p + 4, be);
+    sb.Offset = Get32(p + 8, be);
+    sb.Size = Get32(p + 12, be);
+    UInt32 align = Get32(p + 16, be);
+    if (align > 31)
+      return S_FALSE;
+    if (sb.Offset < kHeaderSize + num * kRecordSize)
+      return S_FALSE;
+    if ((sb.Type & ~MACH_CPU_ARCH_ABI64) >= 0x100 ||
+        (sb.SubType & ~MACH_CPU_SUBTYPE_LIB64) >= 0x100)
       return S_FALSE;
 
     UInt64 endPos = (UInt64)sb.Offset + sb.Size;
-    if (endPos > endPosMax)
+    if (endPosMax < endPos)
       endPosMax = endPos;
   }
-  UInt64 fileSize;
-  RINOK(stream->Seek(0, STREAM_SEEK_END, &fileSize));
-  fileSize -= _startPos;
   _numItems = num;
-  if (fileSize > endPosMax)
-  {
-    CItem &sb = _items[_numItems++];
-    sb.IsTail = true;
-    sb.Type = 0;
-    sb.SubType = 0;
-    sb.Offset = endPosMax;
-    sb.Size = fileSize - endPosMax;
-    sb.Align = 0;
-  }
+  _phySize = endPosMax;
   return S_OK;
 }
 
@@ -178,6 +218,7 @@ STDMETHODIMP CHandler::Close()
 {
   _stream.Release();
   _numItems = 0;
+  _phySize = 0;
   return S_OK;
 }
 
@@ -187,80 +228,19 @@ STDMETHODIMP CHandler::GetNumberOfItems(UInt32 *numItems)
   return S_OK;
 }
 
-STDMETHODIMP CHandler::Extract(const UInt32 *indices, UInt32 numItems,
-    Int32 testMode, IArchiveExtractCallback *extractCallback)
-{
-  COM_TRY_BEGIN
-  bool allFilesMode = (numItems == (UInt32)-1);
-  if (allFilesMode)
-    numItems = _numItems;
-  if (numItems == 0)
-    return S_OK;
-  UInt64 totalSize = 0;
-  UInt32 i;
-  for (i = 0; i < numItems; i++)
-    totalSize += _items[allFilesMode ? i : indices[i]].Size;
-  extractCallback->SetTotal(totalSize);
+namespace NBe {
 
-  UInt64 currentTotalSize = 0;
-  
-  NCompress::CCopyCoder *copyCoderSpec = new NCompress::CCopyCoder();
-  CMyComPtr<ICompressCoder> copyCoder = copyCoderSpec;
+static const Byte k_Signature[] = {
+    7, 0xCA, 0xFE, 0xBA, 0xBE, 0, 0, 0,
+    4, 0xB9, 0xFA, 0xF1, 0x0E };
 
-  CLocalProgress *lps = new CLocalProgress;
-  CMyComPtr<ICompressProgressInfo> progress = lps;
-  lps->Init(extractCallback, false);
+REGISTER_ARC_I(
+  "Mub", "mub", 0, 0xE2,
+  k_Signature,
+  0,
+  NArcInfoFlags::kMultiSignature,
+  NULL)
 
-  CLimitedSequentialInStream *streamSpec = new CLimitedSequentialInStream;
-  CMyComPtr<ISequentialInStream> inStream(streamSpec);
-  streamSpec->SetStream(_stream);
-
-  for (i = 0; i < numItems; i++)
-  {
-    lps->InSize = lps->OutSize = currentTotalSize;
-    RINOK(lps->SetCur());
-    CMyComPtr<ISequentialOutStream> realOutStream;
-    Int32 askMode = testMode ?
-        NExtract::NAskMode::kTest :
-        NExtract::NAskMode::kExtract;
-    UInt32 index = allFilesMode ? i : indices[i];
-    const CItem &item = _items[index];
-    RINOK(extractCallback->GetStream(index, &realOutStream, askMode));
-    currentTotalSize += item.Size;
-    
-    if (!testMode && !realOutStream)
-      continue;
-    RINOK(extractCallback->PrepareOperation(askMode));
-    if (testMode)
-    {
-      RINOK(extractCallback->SetOperationResult(NExtract::NOperationResult::kOK));
-      continue;
-    }
-    RINOK(_stream->Seek(_startPos + item.Offset, STREAM_SEEK_SET, NULL));
-    streamSpec->Init(item.Size);
-    RINOK(copyCoder->Code(inStream, realOutStream, NULL, NULL, progress));
-    realOutStream.Release();
-    RINOK(extractCallback->SetOperationResult((copyCoderSpec->TotalSize == item.Size) ?
-        NExtract::NOperationResult::kOK:
-        NExtract::NOperationResult::kDataError));
-  }
-  return S_OK;
-  COM_TRY_END
 }
-
-STDMETHODIMP CHandler::GetStream(UInt32 index, ISequentialInStream **stream)
-{
-  COM_TRY_BEGIN
-  const CItem &item = _items[index];
-  return CreateLimitedInStream(_stream, _startPos + item.Offset, item.Size, stream);
-  COM_TRY_END
-}
-
-static IInArchive *CreateArc() { return new CHandler; }
-
-static CArcInfo g_ArcInfo =
-  { L"Mub", L"", 0, 0xE2, { 0xCA, 0xFE, 0xBA, 0xBE, 0, 0, 0 }, 7, false, CreateArc, 0 };
-
-REGISTER_ARC(Mub)
 
 }}

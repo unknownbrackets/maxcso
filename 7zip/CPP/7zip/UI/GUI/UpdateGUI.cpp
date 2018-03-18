@@ -2,22 +2,20 @@
 
 #include "StdAfx.h"
 
-#include "UpdateGUI.h"
+#include "../../../Common/IntToString.h"
+#include "../../../Common/StringConvert.h"
+#include "../../../Common/StringToInt.h"
 
-#include "Common/IntToString.h"
-#include "Common/StringConvert.h"
-#include "Common/StringToInt.h"
-
-#include "Windows/Error.h"
-#include "Windows/FileDir.h"
-#include "Windows/Thread.h"
+#include "../../../Windows/DLL.h"
+#include "../../../Windows/FileDir.h"
+#include "../../../Windows/FileName.h"
+#include "../../../Windows/Thread.h"
 
 #include "../Common/WorkDir.h"
 
 #include "../Explorer/MyMessages.h"
 
 #include "../FileManager/LangUtils.h"
-#include "../FileManager/ProgramLocation.h"
 #include "../FileManager/StringUtils.h"
 #include "../FileManager/resourceGui.h"
 
@@ -28,9 +26,10 @@
 
 using namespace NWindows;
 using namespace NFile;
+using namespace NDir;
 
-static const wchar_t *kDefaultSfxModule = L"7z.sfx";
-static const wchar_t *kSFXExtension = L"exe";
+static const char * const kDefaultSfxModule = "7z.sfx";
+static const char * const kSFXExtension = "exe";
 
 extern void AddMessageToString(UString &dest, const UString &src);
 
@@ -41,25 +40,28 @@ class CThreadUpdating: public CProgressThreadVirt
   HRESULT ProcessVirt();
 public:
   CCodecs *codecs;
+  const CObjectVector<COpenType> *formatIndices;
+  const UString *cmdArcPath;
   CUpdateCallbackGUI *UpdateCallbackGUI;
-  const NWildcard::CCensor *WildcardCensor;
+  NWildcard::CCensor *WildcardCensor;
   CUpdateOptions *Options;
+  bool needSetPath;
 };
  
 HRESULT CThreadUpdating::ProcessVirt()
 {
   CUpdateErrorInfo ei;
-  HRESULT res = UpdateArchive(codecs, *WildcardCensor, *Options,
-     ei, UpdateCallbackGUI, UpdateCallbackGUI);
-  ErrorMessage = ei.Message;
-  ErrorPath1 = ei.FileName;
-  ErrorPath2 = ei.FileName2;
+  HRESULT res = UpdateArchive(codecs, *formatIndices, *cmdArcPath,
+      *WildcardCensor, *Options,
+      ei, UpdateCallbackGUI, UpdateCallbackGUI, needSetPath);
+  FinalMessage.ErrorMessage.Message = ei.Message.Ptr();
+  ErrorPaths = ei.FileNames;
   if (ei.SystemError != S_OK && ei.SystemError != E_FAIL && ei.SystemError != E_ABORT)
     return ei.SystemError;
   return res;
 }
 
-static void AddProp(CObjectVector<CProperty> &properties, const UString &name, const UString &value)
+static void AddProp(CObjectVector<CProperty> &properties, const char *name, const UString &value)
 {
   CProperty prop;
   prop.Name = name;
@@ -67,23 +69,23 @@ static void AddProp(CObjectVector<CProperty> &properties, const UString &name, c
   properties.Add(prop);
 }
 
-static void AddProp(CObjectVector<CProperty> &properties, const UString &name, UInt32 value)
+static void AddProp(CObjectVector<CProperty> &properties, const char *name, UInt32 value)
 {
-  wchar_t tmp[32];
+  char tmp[32];
   ConvertUInt64ToString(value, tmp);
-  AddProp(properties, name, tmp);
+  AddProp(properties, name, UString(tmp));
 }
 
-static void AddProp(CObjectVector<CProperty> &properties, const UString &name, bool value)
+static void AddProp(CObjectVector<CProperty> &properties, const char *name, bool value)
 {
-  AddProp(properties, name, value ? UString(L"on"): UString(L"off"));
+  AddProp(properties, name, UString(value ? "on": "off"));
 }
 
 static bool IsThereMethodOverride(bool is7z, const UString &propertiesString)
 {
   UStringVector strings;
   SplitString(propertiesString, strings);
-  for (int i = 0; i < strings.Size(); i++)
+  FOR_VECTOR (i, strings)
   {
     const UString &s = strings[i];
     if (is7z)
@@ -95,7 +97,7 @@ static bool IsThereMethodOverride(bool is7z, const UString &propertiesString)
     }
     else
     {
-      if (s.Length() > 0)
+      if (s.Len() > 0)
         if (s[0] == L'm' && s[1] == L'=')
           return true;
     }
@@ -108,7 +110,7 @@ static void ParseAndAddPropertires(CObjectVector<CProperty> &properties,
 {
   UStringVector strings;
   SplitString(propertiesString, strings);
-  for (int i = 0; i < strings.Size(); i++)
+  FOR_VECTOR (i, strings)
   {
     const UString &s = strings[i];
     CProperty property;
@@ -117,8 +119,8 @@ static void ParseAndAddPropertires(CObjectVector<CProperty> &properties,
       property.Name = s;
     else
     {
-      property.Name = s.Left(index);
-      property.Value = s.Mid(index + 1);
+      property.Name.SetFrom(s, index);
+      property.Value = s.Ptr(index + 1);
     }
     properties.Add(property);
   }
@@ -126,12 +128,12 @@ static void ParseAndAddPropertires(CObjectVector<CProperty> &properties,
 
 static UString GetNumInBytesString(UInt64 v)
 {
-  wchar_t s[32];
+  char s[32];
   ConvertUInt64ToString(v, s);
-  size_t len = wcslen(s);
-  s[len++] = L'B';
-  s[len] = L'\0';
-  return s;
+  size_t len = MyStringLen(s);
+  s[len++] = 'B';
+  s[len] = '\0';
+  return UString(s);
 }
 
 static void SetOutProperties(
@@ -150,65 +152,95 @@ static void SetOutProperties(
     bool /* sfxMode */)
 {
   if (level != (UInt32)(Int32)-1)
-    AddProp(properties, L"x", (UInt32)level);
+    AddProp(properties, "x", (UInt32)level);
   if (setMethod)
   {
     if (!method.IsEmpty())
-      AddProp(properties, is7z ? L"0": L"m", method);
+      AddProp(properties, is7z ? "0": "m", method);
     if (dictionary != (UInt32)(Int32)-1)
     {
-      UString name;
+      AString name;
       if (is7z)
-        name = L"0";
-      if (orderMode)
-        name += L"mem";
-      else
-        name += L"d";
+        name = "0";
+      name += (orderMode ? "mem" : "d");
       AddProp(properties, name, GetNumInBytesString(dictionary));
     }
     if (order != (UInt32)(Int32)-1)
     {
-      UString name;
+      AString name;
       if (is7z)
-        name = L"0";
-      if (orderMode)
-        name += L"o";
-      else
-        name += L"fb";
+        name = "0";
+      name += (orderMode ? "o" : "fb");
       AddProp(properties, name, (UInt32)order);
     }
   }
     
   if (!encryptionMethod.IsEmpty())
-    AddProp(properties, L"em", encryptionMethod);
+    AddProp(properties, "em", encryptionMethod);
 
   if (encryptHeadersIsAllowed)
-    AddProp(properties, L"he", encryptHeaders);
+    AddProp(properties, "he", encryptHeaders);
   if (solidIsSpecified)
-    AddProp(properties, L"s", GetNumInBytesString(solidBlockSize));
+    AddProp(properties, "s", GetNumInBytesString(solidBlockSize));
   if (multiThreadIsAllowed)
-    AddProp(properties, L"mt", numThreads);
+    AddProp(properties, "mt", numThreads);
 }
+
+struct C_UpdateMode_ToAction_Pair
+{
+  NCompressDialog::NUpdateMode::EEnum UpdateMode;
+  const NUpdateArchive::CActionSet *ActionSet;
+};
+
+static const C_UpdateMode_ToAction_Pair g_UpdateMode_Pairs[] =
+{
+  { NCompressDialog::NUpdateMode::kAdd,    &NUpdateArchive::k_ActionSet_Add },
+  { NCompressDialog::NUpdateMode::kUpdate, &NUpdateArchive::k_ActionSet_Update },
+  { NCompressDialog::NUpdateMode::kFresh,  &NUpdateArchive::k_ActionSet_Fresh },
+  { NCompressDialog::NUpdateMode::kSync,   &NUpdateArchive::k_ActionSet_Sync }
+};
+
+static int FindActionSet(const NUpdateArchive::CActionSet &actionSet)
+{
+  for (unsigned i = 0; i < ARRAY_SIZE(g_UpdateMode_Pairs); i++)
+    if (actionSet.IsEqualTo(*g_UpdateMode_Pairs[i].ActionSet))
+      return i;
+  return -1;
+}
+
+static int FindUpdateMode(NCompressDialog::NUpdateMode::EEnum mode)
+{
+  for (unsigned i = 0; i < ARRAY_SIZE(g_UpdateMode_Pairs); i++)
+    if (mode == g_UpdateMode_Pairs[i].UpdateMode)
+      return i;
+  return -1;
+}
+
 
 static HRESULT ShowDialog(
     CCodecs *codecs,
-    const NWildcard::CCensor &censor,
-    CUpdateOptions &options, CUpdateCallbackGUI *callback, HWND hwndParent)
+    const CObjectVector<NWildcard::CCensorPath> &censor,
+    CUpdateOptions &options,
+    CUpdateCallbackGUI *callback, HWND hwndParent)
 {
   if (options.Commands.Size() != 1)
     throw "It must be one command";
-  UString currentDirPrefix;
+  /*
+  FString currentDirPrefix;
   #ifndef UNDER_CE
   {
-    if (!NDirectory::MyGetCurrentDirectory(currentDirPrefix))
+    if (!MyGetCurrentDirectory(currentDirPrefix))
       return E_FAIL;
     NName::NormalizeDirPathPrefix(currentDirPrefix);
   }
   #endif
+  */
 
   bool oneFile = false;
-  NFind::CFileInfoW fileInfo;
+  NFind::CFileInfo fileInfo;
   UString name;
+  
+  /*
   if (censor.Pairs.Size() > 0)
   {
     const NWildcard::CPair &pair = censor.Pairs[0];
@@ -218,13 +250,13 @@ static HRESULT ShowDialog(
       if (item.ForFile)
       {
         name = pair.Prefix;
-        for (int i = 0; i < item.PathParts.Size(); i++)
+        FOR_VECTOR (i, item.PathParts)
         {
           if (i > 0)
-            name += WCHAR_PATH_SEPARATOR;
+            name.Add_PathSepar();
           name += item.PathParts[i];
         }
-        if (fileInfo.Find(name))
+        if (fileInfo.Find(us2fs(name)))
         {
           if (censor.Pairs.Size() == 1 && pair.Head.IncludeItems.Size() == 1)
             oneFile = !fileInfo.IsDir();
@@ -232,41 +264,96 @@ static HRESULT ShowDialog(
       }
     }
   }
-    
+  */
+  if (censor.Size() > 0)
+  {
+    const NWildcard::CCensorPath &cp = censor[0];
+    if (cp.Include)
+    {
+      {
+        if (fileInfo.Find(us2fs(cp.Path)))
+        {
+          if (censor.Size() == 1)
+            oneFile = !fileInfo.IsDir();
+        }
+      }
+    }
+  }
+
+  
+  #if defined(_WIN32) && !defined(UNDER_CE)
+  CCurrentDirRestorer curDirRestorer;
+  #endif
   CCompressDialog dialog;
   NCompressDialog::CInfo &di = dialog.Info;
   dialog.ArcFormats = &codecs->Formats;
-  for (int i = 0; i < codecs->Formats.Size(); i++)
+
+  if (options.MethodMode.Type_Defined)
+    di.FormatIndex = options.MethodMode.Type.FormatIndex;
+  
+  FOR_VECTOR (i, codecs->Formats)
   {
     const CArcInfoEx &ai = codecs->Formats[i];
-    if (ai.Name.CompareNoCase(L"swfc") == 0)
-      if (!oneFile || name.Right(4).CompareNoCase(L".swf") != 0)
-        continue;
-    if (ai.UpdateEnabled && (oneFile || !ai.KeepName))
-      dialog.ArcIndices.Add(i);
+    if (!ai.UpdateEnabled)
+      continue;
+    if (!oneFile && ai.Flags_KeepName())
+      continue;
+    if ((int)i != di.FormatIndex)
+      if (ai.Name.IsEqualTo_Ascii_NoCase("swfc"))
+        if (!oneFile || name.Len() < 4 || !StringsAreEqualNoCase_Ascii(name.RightPtr(4), ".swf"))
+          continue;
+    dialog.ArcIndices.Add(i);
   }
-  if (dialog.ArcIndices.Size() == 0)
+  if (dialog.ArcIndices.IsEmpty())
   {
     ShowErrorMessage(L"No Update Engines");
     return E_FAIL;
   }
 
   // di.ArchiveName = options.ArchivePath.GetFinalPath();
-  di.ArchiveName = options.ArchivePath.GetPathWithoutExt();
-  dialog.OriginalFileName = options.ArchivePath.Prefix + fileInfo.Name;
+  di.ArcPath = options.ArchivePath.GetPathWithoutExt();
+  dialog.OriginalFileName = fs2us(fileInfo.Name);
+
+  di.PathMode = options.PathMode;
     
-  di.CurrentDirPrefix = currentDirPrefix;
+  // di.CurrentDirPrefix = currentDirPrefix;
   di.SFXMode = options.SfxMode;
   di.OpenShareForWrite = options.OpenShareForWrite;
+  di.DeleteAfterCompressing = options.DeleteAfterCompressing;
+
+  di.SymLinks = options.SymLinks;
+  di.HardLinks = options.HardLinks;
+  di.AltStreams = options.AltStreams;
+  di.NtSecurity = options.NtSecurity;
   
   if (callback->PasswordIsDefined)
     di.Password = callback->Password;
     
   di.KeepName = !oneFile;
-    
+
+  NUpdateArchive::CActionSet &actionSet = options.Commands.Front().ActionSet;
+ 
+  {
+    int index = FindActionSet(actionSet);
+    if (index < 0)
+      return E_NOTIMPL;
+    di.UpdateMode = g_UpdateMode_Pairs[(unsigned)index].UpdateMode;
+  }
+
   if (dialog.Create(hwndParent) != IDOK)
     return E_ABORT;
-    
+
+  options.DeleteAfterCompressing = di.DeleteAfterCompressing;
+
+  options.SymLinks = di.SymLinks;
+  options.HardLinks = di.HardLinks;
+  options.AltStreams = di.AltStreams;
+  options.NtSecurity = di.NtSecurity;
+ 
+  #if defined(_WIN32) && !defined(UNDER_CE)
+  curDirRestorer.NeedRestore = dialog.CurrentDirWasChanged;
+  #endif
+  
   options.VolumesSizes = di.VolumeSizes;
   /*
   if (di.VolumeSizeIsDefined)
@@ -275,26 +362,17 @@ static HRESULT ShowDialog(
     return E_FAIL;
   }
   */
-  
-  NUpdateArchive::CActionSet &actionSet = options.Commands.Front().ActionSet;
-  
-  switch(di.UpdateMode)
+
+ 
   {
-    case NCompressDialog::NUpdateMode::kAdd:
-      actionSet = NUpdateArchive::kAddActionSet;
-      break;
-    case NCompressDialog::NUpdateMode::kUpdate:
-      actionSet = NUpdateArchive::kUpdateActionSet;
-      break;
-    case NCompressDialog::NUpdateMode::kFresh:
-      actionSet = NUpdateArchive::kFreshActionSet;
-      break;
-    case NCompressDialog::NUpdateMode::kSynchronize:
-      actionSet = NUpdateArchive::kSynchronizeActionSet;
-      break;
-    default:
-      throw 1091756;
+    int index = FindUpdateMode(di.UpdateMode);
+    if (index < 0)
+      return E_FAIL;
+    actionSet = *g_UpdateMode_Pairs[index].ActionSet;
   }
+
+  options.PathMode = di.PathMode;
+
   const CArcInfoEx &archiverInfo = codecs->Formats[di.FormatIndex];
   callback->PasswordIsDefined = (!di.Password.IsEmpty());
   if (callback->PasswordIsDefined)
@@ -302,7 +380,7 @@ static HRESULT ShowDialog(
 
   options.MethodMode.Properties.Clear();
 
-  bool is7z = archiverInfo.Name.CompareNoCase(L"7z") == 0;
+  bool is7z = archiverInfo.Name.IsEqualTo_Ascii_NoCase("7z");
   bool methodOverride = IsThereMethodOverride(is7z, di.Options);
 
   SetOutProperties(
@@ -324,31 +402,36 @@ static HRESULT ShowDialog(
 
   if (di.SFXMode)
     options.SfxMode = true;
-  options.MethodMode.FormatIndex = di.FormatIndex;
+  options.MethodMode.Type = COpenType();
+  options.MethodMode.Type_Defined = true;
+  options.MethodMode.Type.FormatIndex = di.FormatIndex;
 
   options.ArchivePath.VolExtension = archiverInfo.GetMainExt();
   if (di.SFXMode)
     options.ArchivePath.BaseExtension = kSFXExtension;
   else
     options.ArchivePath.BaseExtension = options.ArchivePath.VolExtension;
-  options.ArchivePath.ParseFromPath(di.ArchiveName);
+  options.ArchivePath.ParseFromPath(di.ArcPath, k_ArcNameMode_Smart);
 
   NWorkDir::CInfo workDirInfo;
   workDirInfo.Load();
   options.WorkingDir.Empty();
   if (workDirInfo.Mode != NWorkDir::NMode::kCurrent)
   {
-    UString fullPath;
-    NDirectory::MyGetFullPathName(di.ArchiveName, fullPath);
-    options.WorkingDir = GetWorkDir(workDirInfo, fullPath);
-    NDirectory::CreateComplexDirectory(options.WorkingDir);
+    FString fullPath;
+    MyGetFullPathName(us2fs(di.ArcPath), fullPath);
+    FString namePart;
+    options.WorkingDir = GetWorkDir(workDirInfo, fullPath, namePart);
+    CreateComplexDir(options.WorkingDir);
   }
   return S_OK;
 }
 
 HRESULT UpdateGUI(
     CCodecs *codecs,
-    const NWildcard::CCensor &censor,
+    const CObjectVector<COpenType> &formatIndices,
+    const UString &cmdArcPath,
+    NWildcard::CCensor &censor,
     CUpdateOptions &options,
     bool showDialog,
     bool &messageWasDisplayed,
@@ -356,34 +439,38 @@ HRESULT UpdateGUI(
     HWND hwndParent)
 {
   messageWasDisplayed = false;
+  bool needSetPath  = true;
   if (showDialog)
   {
-    RINOK(ShowDialog(codecs, censor, options, callback, hwndParent));
+    RINOK(ShowDialog(codecs, censor.CensorPaths, options, callback, hwndParent));
+    needSetPath = false;
   }
   if (options.SfxMode && options.SfxModule.IsEmpty())
   {
-    UString folder;
-    if (!GetProgramFolderPath(folder))
-      folder.Empty();
-    options.SfxModule = folder + kDefaultSfxModule;
+    options.SfxModule = NWindows::NDLL::GetModuleDirPrefix();
+    options.SfxModule += kDefaultSfxModule;
   }
 
   CThreadUpdating tu;
 
+  tu.needSetPath = needSetPath;
+
   tu.codecs = codecs;
+  tu.formatIndices = &formatIndices;
+  tu.cmdArcPath = &cmdArcPath;
 
   tu.UpdateCallbackGUI = callback;
   tu.UpdateCallbackGUI->ProgressDialog = &tu.ProgressDialog;
   tu.UpdateCallbackGUI->Init();
 
-  UString title = LangString(IDS_PROGRESS_COMPRESSING, 0x02000DC0);
+  UString title = LangString(IDS_PROGRESS_COMPRESSING);
 
   /*
   if (hwndParent != 0)
   {
     tu.ProgressDialog.MainWindow = hwndParent;
     // tu.ProgressDialog.MainTitle = fileName;
-    tu.ProgressDialog.MainAddTitle = title + L" ";
+    tu.ProgressDialog.MainAddTitle = title + L' ';
   }
   */
 
@@ -393,7 +480,6 @@ HRESULT UpdateGUI(
 
   RINOK(tu.Create(title, hwndParent));
 
-  messageWasDisplayed = tu.ThreadFinishedOK &
-      tu.ProgressDialog.MessagesDisplayed;
+  messageWasDisplayed = tu.ThreadFinishedOK && tu.ProgressDialog.MessagesDisplayed;
   return tu.Result;
 }

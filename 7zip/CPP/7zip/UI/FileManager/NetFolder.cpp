@@ -2,7 +2,7 @@
 
 #include "StdAfx.h"
 
-#include "Windows/PropVariant.h"
+#include "../../../Windows/PropVariant.h"
 
 #include "../../PropID.h"
 
@@ -13,23 +13,23 @@
 using namespace NWindows;
 using namespace NNet;
 
-static const STATPROPSTG kProps[] =
+static const Byte  kProps[] =
 {
-  { NULL, kpidName, VT_BSTR},
-  { NULL, kpidLocalName, VT_BSTR},
-  { NULL, kpidComment, VT_BSTR},
-  { NULL, kpidProvider, VT_BSTR}
+  kpidName,
+  kpidLocalName,
+  kpidComment,
+  kpidProvider
 };
 
 void CNetFolder::Init(const UString &path)
 {
   /*
-  if (path.Length() > 2)
+  if (path.Len() > 2)
   {
     if (path[0] == L'\\' && path[1] == L'\\')
     {
       CResource netResource;
-      netResource.RemoteName = GetSystemString(path.Left(path.Length() - 1));
+      netResource.RemoteName = GetSystemString(path.Left(path.Len() - 1));
       netResource.Scope = RESOURCE_GLOBALNET;
       netResource.Type = RESOURCETYPE_DISK;
       netResource.DisplayType = RESOURCEDISPLAYTYPE_SERVER;
@@ -42,7 +42,8 @@ void CNetFolder::Init(const UString &path)
   */
   CResourceW resource;
   resource.RemoteNameIsDefined = true;
-  resource.RemoteName = path.Left(path.Length() - 1);
+  if (!path.IsEmpty())
+    resource.RemoteName.SetFrom(path, path.Len() - 1);
   resource.ProviderIsDefined = false;
   resource.LocalNameIsDefined = false;
   resource.CommentIsDefined = false;
@@ -72,7 +73,15 @@ void CNetFolder::Init(const NWindows::NNet::CResourceW *netResource,
     _netResourcePointer = &_netResource;
 
     // if (_netResource.DisplayType == RESOURCEDISPLAYTYPE_SERVER)
-    _path = _netResource.RemoteName + WCHAR_PATH_SEPARATOR;
+    _path = _netResource.RemoteName;
+    
+    /* WinXP-64: When we move UP from Network share without _parentFolder chain,
+         we can get empty _netResource.RemoteName. Do we need to use Provider there ? */
+    if (_path.IsEmpty())
+      _path = _netResource.Provider;
+
+    if (!_path.IsEmpty())
+      _path.Add_PathSepar();
   }
   _parentFolder = parentFolder;
 }
@@ -110,11 +119,11 @@ STDMETHODIMP CNetFolder::LoadItems()
       if (!resource.RemoteNameIsDefined) // For Win 98, I don't know what's wrong
         resource.RemoteName = resource.Comment;
       resource.Name = resource.RemoteName;
-      int pos = resource.Name.ReverseFind(WCHAR_PATH_SEPARATOR);
+      int pos = resource.Name.ReverseFind_PathSepar();
       if (pos >= 0)
       {
         // _path = resource.Name.Left(pos + 1);
-        resource.Name = resource.Name.Mid(pos + 1);
+        resource.Name.DeleteFrontal(pos + 1);
       }
       _items.Add(resource);
     }
@@ -136,8 +145,8 @@ STDMETHODIMP CNetFolder::LoadItems()
       resource.RemoteName = _path + resource.Name;
 
       NFile::NFind::CFindFile findFile;
-      NFile::NFind::CFileInfoW fileInfo;
-      if (!findFile.FindFirst(resource.RemoteName + UString(WCHAR_PATH_SEPARATOR) + UString(L"*"), fileInfo))
+      NFile::NFind::CFileInfo fileInfo;
+      if (!findFile.FindFirst(us2fs(resource.RemoteName) + FString(FCHAR_PATH_SEPARATOR) + FCHAR_ANY_MASK, fileInfo))
         continue;
       resource.Usage = RESOURCEUSAGE_CONNECTABLE;
       resource.LocalNameIsDefined = false;
@@ -161,7 +170,7 @@ STDMETHODIMP CNetFolder::GetProperty(UInt32 itemIndex, PROPID propID, PROPVARIAN
 {
   NCOM::CPropVariant prop;
   const CResourceEx &item = _items[itemIndex];
-  switch(propID)
+  switch (propID)
   {
     case kpidIsDir:  prop = true; break;
     case kpidName:
@@ -185,7 +194,7 @@ STDMETHODIMP CNetFolder::BindToFolder(UInt32 index, IFolderFolder **resultFolder
   {
     NFsFolder::CFSFolder *fsFolderSpec = new NFsFolder::CFSFolder;
     CMyComPtr<IFolderFolder> subFolder = fsFolderSpec;
-    RINOK(fsFolderSpec->Init(resource.RemoteName + WCHAR_PATH_SEPARATOR, this));
+    RINOK(fsFolderSpec->Init(us2fs(resource.RemoteName + WCHAR_PATH_SEPARATOR))); // , this
     *resultFolder = subFolder.Detach();
   }
   else
@@ -223,7 +232,7 @@ STDMETHODIMP CNetFolder::BindToParentFolder(IFolderFolder **resultFolder)
 
     CNetFolder *netFolder = new CNetFolder;
     CMyComPtr<IFolderFolder> subFolder = netFolder;
-    netFolder->Init(&resourceParent, 0, WCHAR_PATH_SEPARATOR);
+    netFolder->Init(&resourceParent, 0, WSTRING_PATH_SEPARATOR);
     *resultFolder = subFolder.Detach();
   }
   return S_OK;
@@ -234,9 +243,9 @@ IMP_IFolderFolder_Props(CNetFolder)
 STDMETHODIMP CNetFolder::GetFolderProperty(PROPID propID, PROPVARIANT *value)
 {
   NWindows::NCOM::CPropVariant prop;
-  switch(propID)
+  switch (propID)
   {
-    case kpidType: prop = L"NetFolder"; break;
+    case kpidType: prop = "NetFolder"; break;
     case kpidPath: prop = _path; break;
   }
   prop.Detach(value);
@@ -253,7 +262,7 @@ STDMETHODIMP CNetFolder::GetSystemIconIndex(UInt32 index, Int32 *iconIndex)
   if (resource.DisplayType == RESOURCEDISPLAYTYPE_SERVER ||
       resource.Usage == RESOURCEUSAGE_CONNECTABLE)
   {
-    if (GetRealIconIndex(resource.RemoteName, 0, iconIndexTemp))
+    if (GetRealIconIndex(us2fs(resource.RemoteName), 0, iconIndexTemp))
     {
       *iconIndex = iconIndexTemp;
       return S_OK;
@@ -261,7 +270,7 @@ STDMETHODIMP CNetFolder::GetSystemIconIndex(UInt32 index, Int32 *iconIndex)
   }
   else
   {
-    if (GetRealIconIndex(TEXT(""), FILE_ATTRIBUTE_DIRECTORY, iconIndexTemp))
+    if (GetRealIconIndex(FTEXT(""), FILE_ATTRIBUTE_DIRECTORY, iconIndexTemp))
     {
       *iconIndex = iconIndexTemp;
       return S_OK;

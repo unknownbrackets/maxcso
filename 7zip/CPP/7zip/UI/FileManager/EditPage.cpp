@@ -12,88 +12,136 @@
 
 using namespace NWindows;
 
-static CIDLangPair kIDLangPairs[] =
+static const UInt32 kLangIDs[] =
 {
-  { IDC_EDIT_STATIC_EDITOR, 0x03010201},
-  { IDC_EDIT_STATIC_DIFF, 0x03010202}
+  IDT_EDIT_EDITOR,
+  IDT_EDIT_DIFF
 };
 
-static LPCWSTR kEditTopic = L"FM/options.htm#editor";
+static const UInt32 kLangIDs_Colon[] =
+{
+  IDT_EDIT_VIEWER
+};
+
+#define kEditTopic "FM/options.htm#editor"
 
 bool CEditPage::OnInit()
 {
-  LangSetDlgItemsText(HWND(*this), kIDLangPairs, sizeof(kIDLangPairs) / sizeof(kIDLangPairs[0]));
+  _initMode = true;
 
-  _editor.Attach(GetItem(IDC_EDIT_EDIT_EDITOR));
-  _diff.Attach(GetItem(IDC_EDIT_EDIT_DIFF));
-  
+  LangSetDlgItems(*this, kLangIDs, ARRAY_SIZE(kLangIDs));
+  LangSetDlgItems_Colon(*this, kLangIDs_Colon, ARRAY_SIZE(kLangIDs_Colon));
+
+  _ctrls[0].Ctrl = IDE_EDIT_VIEWER; _ctrls[0].Button = IDB_EDIT_VIEWER;
+  _ctrls[1].Ctrl = IDE_EDIT_EDITOR; _ctrls[1].Button = IDB_EDIT_EDITOR;
+  _ctrls[2].Ctrl = IDE_EDIT_DIFF;   _ctrls[2].Button = IDB_EDIT_DIFF;
+
+  for (unsigned i = 0; i < 3; i++)
   {
+    CEditPageCtrl &c = _ctrls[i];
+    c.WasChanged = false;
+    c.Edit.Attach(GetItem(c.Ctrl));
     UString path;
-    ReadRegEditor(path);
-    _editor.SetText(path);
+    if (i < 2)
+      ReadRegEditor(i > 0, path);
+    else
+      ReadRegDiff(path);
+    c.Edit.SetText(path);
   }
-  {
-    UString path;
-    ReadRegDiff(path);
-    _diff.SetText(path);
-  }
+
+  _initMode = false;
+
   return CPropertyPage::OnInit();
 }
 
 LONG CEditPage::OnApply()
 {
+  for (unsigned i = 0; i < 3; i++)
   {
-    UString path;
-    _editor.GetText(path);
-    SaveRegEditor(path);
+    CEditPageCtrl &c = _ctrls[i];
+    if (c.WasChanged)
+    {
+      UString path;
+      c.Edit.GetText(path);
+      if (i < 2)
+        SaveRegEditor(i > 0, path);
+      else
+        SaveRegDiff(path);
+      c.WasChanged = false;
+    }
   }
-  {
-    UString path;
-    _diff.GetText(path);
-    SaveRegDiff(path);
-  }
+  
   return PSNRET_NOERROR;
 }
 
 void CEditPage::OnNotifyHelp()
 {
-  ShowHelpWindow(NULL, kEditTopic);
+  ShowHelpWindow(kEditTopic);
 }
+
+void SplitCmdLineSmart(const UString &cmd, UString &prg, UString &params);
 
 static void Edit_BrowseForFile(NWindows::NControl::CEdit &edit, HWND hwnd)
 {
-  UString path;
-  edit.GetText(path);
+  UString cmd;
+  edit.GetText(cmd);
+
+  UString param;
+  UString prg;
+  
+  SplitCmdLineSmart(cmd, prg, param);
+
   UString resPath;
-  if (MyBrowseForFile(hwnd, 0, path, L"*.exe", resPath))
+  
+  if (MyBrowseForFile(hwnd, 0, prg, NULL, L"*.exe", resPath))
   {
-    edit.SetText(resPath);
+    resPath.Trim();
+    cmd = resPath;
+    /*
+    if (!param.IsEmpty() && !resPath.IsEmpty())
+    {
+      cmd.InsertAtFront(L'\"');
+      cmd += L'\"';
+      cmd.Add_Space();
+      cmd += param;
+    }
+    */
+
+    edit.SetText(cmd);
     // Changed();
   }
 }
 
 bool CEditPage::OnButtonClicked(int buttonID, HWND buttonHWND)
 {
-  switch (buttonID)
+  for (unsigned i = 0; i < 3; i++)
   {
-    case IDC_EDIT_BUTTON_EDITOR:
-      Edit_BrowseForFile(_editor, *this);
+    CEditPageCtrl &c = _ctrls[i];
+    if (buttonID == c.Button)
+    {
+      Edit_BrowseForFile(c.Edit, *this);
       return true;
-    case IDC_EDIT_BUTTON_DIFF:
-      Edit_BrowseForFile(_diff, *this);
-      return true;
+    }
   }
+  
   return CPropertyPage::OnButtonClicked(buttonID, buttonHWND);
 }
 
 bool CEditPage::OnCommand(int code, int itemID, LPARAM param)
 {
-  if (code == EN_CHANGE &&
-      (itemID == IDC_EDIT_EDIT_EDITOR ||
-      itemID == IDC_EDIT_EDIT_DIFF))
+  if (!_initMode && code == EN_CHANGE)
   {
-    Changed();
-    return true;
+    for (unsigned i = 0; i < 3; i++)
+    {
+      CEditPageCtrl &c = _ctrls[i];
+      if (itemID == c.Ctrl)
+      {
+        c.WasChanged = true;
+        Changed();
+        return true;
+      }
+    }
   }
+
   return CPropertyPage::OnCommand(code, itemID, param);
 }

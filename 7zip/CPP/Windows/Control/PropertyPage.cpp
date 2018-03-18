@@ -2,10 +2,11 @@
 
 #include "StdAfx.h"
 
-#include "Windows/Control/PropertyPage.h"
 #ifndef _UNICODE
 #include "../../Common/StringConvert.h"
 #endif
+
+#include "PropertyPage.h"
 
 extern HINSTANCE g_hInstance;
 #ifndef _UNICODE
@@ -15,50 +16,30 @@ extern bool g_IsNT;
 namespace NWindows {
 namespace NControl {
 
-INT_PTR APIENTRY ProperyPageProcedure(HWND dialogHWND, UINT message,
-    WPARAM wParam, LPARAM lParam)
+static INT_PTR APIENTRY MyProperyPageProcedure(HWND dialogHWND, UINT message, WPARAM wParam, LPARAM lParam)
 {
-  CDialog tempDialog(dialogHWND);
+  CWindow tempDialog(dialogHWND);
   if (message == WM_INITDIALOG)
     tempDialog.SetUserDataLongPtr(((PROPSHEETPAGE *)lParam)->lParam);
   CDialog *dialog = (CDialog *)(tempDialog.GetUserDataLongPtr());
+  if (dialog == NULL)
+    return FALSE;
   if (message == WM_INITDIALOG)
     dialog->Attach(dialogHWND);
-  switch (message)
-  {
-    case WM_INITDIALOG:
-      return dialog->OnInit();
-    case WM_COMMAND:
-      return dialog->OnCommand(wParam, lParam);
-    case WM_NOTIFY:
-      return dialog->OnNotify((UINT)wParam, (LPNMHDR) lParam);
-  }
-  if (dialog == NULL)
-    return false;
-  return dialog->OnMessage(message, wParam, lParam);
+  try { return BoolToBOOL(dialog->OnMessage(message, wParam, lParam)); }
+  catch(...) { return TRUE; }
 }
 
 bool CPropertyPage::OnNotify(UINT /* controlID */, LPNMHDR lParam)
 {
-  switch(lParam->code)
+  switch (lParam->code)
   {
-    case PSN_APPLY:
-      SetMsgResult(OnApply(LPPSHNOTIFY(lParam)));
-      break;
-    case PSN_KILLACTIVE:
-      SetMsgResult(BoolToBOOL(OnKillActive(LPPSHNOTIFY(lParam))));
-      break;
-    case PSN_SETACTIVE:
-      SetMsgResult(OnSetActive(LPPSHNOTIFY(lParam)));
-      break;
-    case PSN_RESET:
-      OnReset(LPPSHNOTIFY(lParam));
-      break;
-    case PSN_HELP:
-      OnNotifyHelp(LPPSHNOTIFY(lParam));
-      break;
-    default:
-      return false;
+    case PSN_APPLY: SetMsgResult(OnApply(LPPSHNOTIFY(lParam))); break;
+    case PSN_KILLACTIVE: SetMsgResult(BoolToBOOL(OnKillActive(LPPSHNOTIFY(lParam)))); break;
+    case PSN_SETACTIVE: SetMsgResult(OnSetActive(LPPSHNOTIFY(lParam))); break;
+    case PSN_RESET: OnReset(LPPSHNOTIFY(lParam)); break;
+    case PSN_HELP: OnNotifyHelp(LPPSHNOTIFY(lParam)); break;
+    default: return false;
   }
   return true;
 }
@@ -73,7 +54,7 @@ INT_PTR MyPropertySheet(const CObjectVector<CPageInfo> &pagesInfo, HWND hwndPare
   #endif
   CRecordVector<PROPSHEETPAGEW> pagesW;
 
-  int i;
+  unsigned i;
   #ifndef _UNICODE
   for (i = 0; i < pagesInfo.Size(); i++)
     titles.Add(GetSystemString(pagesInfo[i].Title));
@@ -90,7 +71,7 @@ INT_PTR MyPropertySheet(const CObjectVector<CPageInfo> &pagesInfo, HWND hwndPare
       page.hInstance = g_hInstance;
       page.pszTemplate = MAKEINTRESOURCE(pageInfo.ID);
       page.pszIcon = NULL;
-      page.pfnDlgProc = NWindows::NControl::ProperyPageProcedure;
+      page.pfnDlgProc = NWindows::NControl::MyProperyPageProcedure;
       
       if (titles[i].IsEmpty())
         page.pszTitle = NULL;
@@ -111,7 +92,7 @@ INT_PTR MyPropertySheet(const CObjectVector<CPageInfo> &pagesInfo, HWND hwndPare
       page.hInstance = g_hInstance;
       page.pszTemplate = MAKEINTRESOURCEW(pageInfo.ID);
       page.pszIcon = NULL;
-      page.pfnDlgProc = NWindows::NControl::ProperyPageProcedure;
+      page.pfnDlgProc = NWindows::NControl::MyProperyPageProcedure;
       
       if (pageInfo.Title.IsEmpty())
         page.pszTitle = NULL;
@@ -134,7 +115,7 @@ INT_PTR MyPropertySheet(const CObjectVector<CPageInfo> &pagesInfo, HWND hwndPare
     sheet.dwFlags = PSH_PROPSHEETPAGE;
     sheet.hwndParent = hwndParent;
     sheet.hInstance = g_hInstance;
-    AString titleA = GetSystemString(title);
+    AString titleA (GetSystemString(title));
     sheet.pszCaption = titleA;
     sheet.nPages = pagesInfo.Size();
     sheet.nStartPage = 0;

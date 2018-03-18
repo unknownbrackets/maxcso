@@ -2,11 +2,13 @@
 
 #include "StdAfx.h"
 
+#include "../Common/MyBuffer.h"
+
 #ifndef _UNICODE
-#include "Common/StringConvert.h"
+#include "../Common/StringConvert.h"
 #endif
 
-#include "Windows/Net.h"
+#include "Net.h"
 
 #ifndef _UNICODE
 extern bool g_IsNT;
@@ -202,9 +204,8 @@ DWORD CEnum::NextW(LPDWORD lpcCount, LPVOID lpBuffer, LPDWORD lpBufferSize)
 
 DWORD CEnum::Next(CResource &resource)
 {
-  CByteBuffer byteBuffer;
   const DWORD kBufferSize = 16384;
-  byteBuffer.SetCapacity(kBufferSize);
+  CByteArr byteBuffer(kBufferSize);
   LPNETRESOURCE lpnrLocal = (LPNETRESOURCE) (BYTE *)(byteBuffer);
   ZeroMemory(lpnrLocal, kBufferSize);
   DWORD bufferSize = kBufferSize;
@@ -223,9 +224,8 @@ DWORD CEnum::Next(CResourceW &resource)
 {
   if (g_IsNT)
   {
-    CByteBuffer byteBuffer;
     const DWORD kBufferSize = 16384;
-    byteBuffer.SetCapacity(kBufferSize);
+    CByteArr byteBuffer(kBufferSize);
     LPNETRESOURCEW lpnrLocal = (LPNETRESOURCEW) (BYTE *)(byteBuffer);
     ZeroMemory(lpnrLocal, kBufferSize);
     DWORD bufferSize = kBufferSize;
@@ -248,9 +248,8 @@ DWORD CEnum::Next(CResourceW &resource)
 
 DWORD GetResourceParent(const CResource &resource, CResource &parentResource)
 {
-  CByteBuffer byteBuffer;
   const DWORD kBufferSize = 16384;
-  byteBuffer.SetCapacity(kBufferSize);
+  CByteArr byteBuffer(kBufferSize);
   LPNETRESOURCE lpnrLocal = (LPNETRESOURCE) (BYTE *)(byteBuffer);
   ZeroMemory(lpnrLocal, kBufferSize);
   DWORD bufferSize = kBufferSize;
@@ -268,9 +267,8 @@ DWORD GetResourceParent(const CResourceW &resource, CResourceW &parentResource)
 {
   if (g_IsNT)
   {
-    CByteBuffer byteBuffer;
     const DWORD kBufferSize = 16384;
-    byteBuffer.SetCapacity(kBufferSize);
+    CByteArr byteBuffer(kBufferSize);
     LPNETRESOURCEW lpnrLocal = (LPNETRESOURCEW) (BYTE *)(byteBuffer);
     ZeroMemory(lpnrLocal, kBufferSize);
     DWORD bufferSize = kBufferSize;
@@ -293,9 +291,8 @@ DWORD GetResourceParent(const CResourceW &resource, CResourceW &parentResource)
 DWORD GetResourceInformation(const CResource &resource,
     CResource &destResource, CSysString &systemPathPart)
 {
-  CByteBuffer byteBuffer;
   const DWORD kBufferSize = 16384;
-  byteBuffer.SetCapacity(kBufferSize);
+  CByteArr byteBuffer(kBufferSize);
   LPNETRESOURCE lpnrLocal = (LPNETRESOURCE) (BYTE *)(byteBuffer);
   ZeroMemory(lpnrLocal, kBufferSize);
   DWORD bufferSize = kBufferSize;
@@ -318,9 +315,8 @@ DWORD GetResourceInformation(const CResourceW &resource,
 {
   if (g_IsNT)
   {
-    CByteBuffer byteBuffer;
     const DWORD kBufferSize = 16384;
-    byteBuffer.SetCapacity(kBufferSize);
+    CByteArr byteBuffer(kBufferSize);
     LPNETRESOURCEW lpnrLocal = (LPNETRESOURCEW) (BYTE *)(byteBuffer);
     ZeroMemory(lpnrLocal, kBufferSize);
     DWORD bufferSize = kBufferSize;
@@ -368,8 +364,8 @@ DWORD AddConnection2(const CResourceW &resource, LPCWSTR password, LPCWSTR userN
   }
   CResource resourceA;
   ConvertResourceWToResource(resource, resourceA);
-  CSysString passwordA = GetSystemString(password);
-  CSysString userNameA = GetSystemString(userName);
+  const CSysString passwordA (GetSystemString(password));
+  const CSysString userNameA (GetSystemString(userName));
   return AddConnection2(resourceA,
     password ? (LPCTSTR)passwordA: 0,
     userName ? (LPCTSTR)userNameA: 0,

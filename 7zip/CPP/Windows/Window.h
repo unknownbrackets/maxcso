@@ -3,8 +3,28 @@
 #ifndef __WINDOWS_WINDOW_H
 #define __WINDOWS_WINDOW_H
 
+#include "../Common/MyWindows.h"
+#include "../Common/MyString.h"
+
 #include "Defs.h"
-#include "Common/MyString.h"
+
+#ifndef UNDER_CE
+
+#define MY__WM_CHANGEUISTATE  0x0127
+#define MY__WM_UPDATEUISTATE  0x0128
+#define MY__WM_QUERYUISTATE   0x0129
+
+// LOWORD(wParam) values in WM_*UISTATE
+#define MY__UIS_SET         1
+#define MY__UIS_CLEAR       2
+#define MY__UIS_INITIALIZE  3
+
+// HIWORD(wParam) values in WM_*UISTATE
+#define MY__UISF_HIDEFOCUS  0x1
+#define MY__UISF_HIDEACCEL  0x2
+#define MY__UISF_ACTIVE     0x4
+
+#endif
 
 namespace NWindows {
 
@@ -142,6 +162,8 @@ public:
 
   bool GetClientRect(LPRECT rect) { return BOOLToBool(::GetClientRect(_window, rect)); }
   bool Show(int cmdShow) { return BOOLToBool(::ShowWindow(_window, cmdShow)); }
+  bool Show_Bool(bool show) { return Show(show ? SW_SHOW: SW_HIDE); }
+
   #ifndef UNDER_CE
   bool SetPlacement(CONST WINDOWPLACEMENT *placement) { return BOOLToBool(::SetWindowPlacement(_window, placement)); }
   bool GetPlacement(WINDOWPLACEMENT *placement) { return BOOLToBool(::GetWindowPlacement(_window, placement)); }
@@ -149,7 +171,7 @@ public:
   bool Update() { return BOOLToBool(::UpdateWindow(_window)); }
   bool InvalidateRect(LPCRECT rect, bool backgroundErase = true)
     { return BOOLToBool(::InvalidateRect(_window, rect, BoolToBOOL(backgroundErase))); }
-  void SetRedraw(bool redraw = true) { SendMessage(WM_SETREDRAW, BoolToBOOL(redraw), 0); }
+  void SetRedraw(bool redraw = true) { SendMsg(WM_SETREDRAW, BoolToBOOL(redraw), 0); }
 
   LONG_PTR SetStyle(LONG_PTR style) { return SetLongPtr(GWL_STYLE, style); }
   LONG_PTR GetStyle() const { return GetLongPtr(GWL_STYLE); }
@@ -201,23 +223,23 @@ public:
  
   HWND SetFocus() { return ::SetFocus(_window); }
 
-  LRESULT SendMessage(UINT message, WPARAM wParam = 0, LPARAM lParam = 0)
-    { return ::SendMessage(_window, message, wParam, lParam) ;}
+  LRESULT SendMsg(UINT message, WPARAM wParam = 0, LPARAM lParam = 0)
+    { return ::SendMessage(_window, message, wParam, lParam); }
   #ifndef _UNICODE
-  LRESULT SendMessageW(UINT message, WPARAM wParam = 0, LPARAM lParam = 0)
-    { return ::SendMessageW(_window, message, wParam, lParam) ;}
+  LRESULT SendMsgW(UINT message, WPARAM wParam = 0, LPARAM lParam = 0)
+    { return ::SendMessageW(_window, message, wParam, lParam); }
   #endif
 
-  bool PostMessage(UINT message, WPARAM wParam = 0, LPARAM lParam = 0)
-    {  return BOOLToBool(::PostMessage(_window, message, wParam, lParam)) ;}
+  bool PostMsg(UINT message, WPARAM wParam = 0, LPARAM lParam = 0)
+    { return BOOLToBool(::PostMessage(_window, message, wParam, lParam)); }
   #ifndef _UNICODE
-  LRESULT PostMessageW(UINT message, WPARAM wParam = 0, LPARAM lParam = 0)
-    { return ::PostMessageW(_window, message, wParam, lParam) ;}
+  bool PostMsgW(UINT message, WPARAM wParam = 0, LPARAM lParam = 0)
+    { return BOOLToBool(::PostMessageW(_window, message, wParam, lParam)); }
   #endif
 
   bool SetText(LPCTSTR s) { return BOOLToBool(::SetWindowText(_window, s)); }
   #ifndef _UNICODE
-  bool CWindow::SetText(LPCWSTR s) { return MySetWindowText(_window, s); }
+  bool SetText(LPCWSTR s) { return MySetWindowText(_window, s); }
   #endif
 
   int GetTextLength() const
@@ -249,13 +271,14 @@ public:
   bool KillTimer(UINT_PTR idEvent)
     {return BOOLToBool(::KillTimer(_window, idEvent)); }
 
-  HICON SetIcon(WPARAM sizeType, HICON icon) { return (HICON)SendMessage(WM_SETICON, sizeType, (LPARAM)icon); }
+  HICON SetIcon(WPARAM sizeType, HICON icon) { return (HICON)SendMsg(WM_SETICON, sizeType, (LPARAM)icon); }
 };
 
 #define RECT_SIZE_X(r) ((r).right - (r).left)
 #define RECT_SIZE_Y(r) ((r).bottom - (r).top)
 
+inline bool IsKeyDown(int virtKey) { return (::GetKeyState(virtKey) & 0x8000) != 0; }
+
 }
 
 #endif
-

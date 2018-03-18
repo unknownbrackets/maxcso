@@ -9,48 +9,66 @@ namespace NBitm {
 
 const unsigned kNumBigValueBits = 8 * 4;
 const unsigned kNumValueBytes = 3;
-const unsigned kNumValueBits = 8  * kNumValueBytes;
+const unsigned kNumValueBits = 8 * kNumValueBytes;
 
 const UInt32 kMask = (1 << kNumValueBits) - 1;
+
+// _bitPos - the number of free bits (high bits in _value)
+// (kNumBigValueBits - _bitPos) = (32 - _bitPos) == the number of ready to read bits (low bits of _value)
 
 template<class TInByte>
 class CDecoder
 {
-  unsigned m_BitPos;
-  UInt32 m_Value;
+  unsigned _bitPos;
+  UInt32 _value;
+  TInByte _stream;
 public:
-  TInByte m_Stream;
-  bool Create(UInt32 bufferSize) { return m_Stream.Create(bufferSize); }
-  void SetStream(ISequentialInStream *inStream) { m_Stream.SetStream(inStream);}
-  void ReleaseStream() { m_Stream.ReleaseStream();}
+  bool Create(UInt32 bufSize) { return _stream.Create(bufSize); }
+  void SetStream(ISequentialInStream *inStream) { _stream.SetStream(inStream);}
 
   void Init()
   {
-    m_Stream.Init();
-    m_BitPos = kNumBigValueBits;
+    _stream.Init();
+    _bitPos = kNumBigValueBits;
+    _value = 0;
     Normalize();
   }
   
-  UInt64 GetProcessedSize() const { return m_Stream.GetProcessedSize() - (kNumBigValueBits - m_BitPos) / 8; }
-  
-  void Normalize()
+  UInt64 GetStreamSize() const { return _stream.GetStreamSize(); }
+  UInt64 GetProcessedSize() const { return _stream.GetProcessedSize() - ((kNumBigValueBits - _bitPos) >> 3); }
+
+  bool ExtraBitsWereRead() const
   {
-    for (;m_BitPos >= 8; m_BitPos -= 8)
-      m_Value = (m_Value << 8) | m_Stream.ReadByte();
+    return (_stream.NumExtraBytes > 4 || kNumBigValueBits - _bitPos < (_stream.NumExtraBytes << 3));
   }
 
+  bool ExtraBitsWereRead_Fast() const
+  {
+    return (_stream.NumExtraBytes > 4);
+  }
+  
+  MY_FORCE_INLINE
+  void Normalize()
+  {
+    for (; _bitPos >= 8; _bitPos -= 8)
+      _value = (_value << 8) | _stream.ReadByte();
+  }
+
+  MY_FORCE_INLINE
   UInt32 GetValue(unsigned numBits) const
   {
-    // return (m_Value << m_BitPos) >> (kNumBigValueBits - numBits);
-    return ((m_Value >> (8 - m_BitPos)) & kMask) >> (kNumValueBits - numBits);
+    // return (_value << _bitPos) >> (kNumBigValueBits - numBits);
+    return ((_value >> (8 - _bitPos)) & kMask) >> (kNumValueBits - numBits);
   }
-  
+
+  MY_FORCE_INLINE
   void MovePos(unsigned numBits)
   {
-    m_BitPos += numBits;
+    _bitPos += numBits;
     Normalize();
   }
-  
+
+  MY_FORCE_INLINE
   UInt32 ReadBits(unsigned numBits)
   {
     UInt32 res = GetValue(numBits);
@@ -58,7 +76,23 @@ public:
     return res;
   }
 
-  void AlignToByte() { MovePos((32 - m_BitPos) & 7); }
+  /*
+  unsigned ReadBit()
+  {
+    UInt32 res = ((_value >> (8 - _bitPos)) & kMask) >> (kNumValueBits - 1);
+    if (++_bitPos >= 8)
+    {
+      _value = (_value << 8) | _stream.ReadByte();
+      _bitPos -= 8;
+    }
+    return (unsigned)res;
+  }
+  */
+
+  void AlignToByte() { MovePos((kNumBigValueBits - _bitPos) & 7); }
+
+  MY_FORCE_INLINE
+  UInt32 ReadAlignBits() { return ReadBits((kNumBigValueBits - _bitPos) & 7); }
 };
 
 }

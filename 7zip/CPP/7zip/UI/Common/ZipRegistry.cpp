@@ -2,12 +2,11 @@
 
 #include "StdAfx.h"
 
-#include "Common/IntToString.h"
-#include "Common/StringConvert.h"
+#include "../../../Common/IntToString.h"
 
-#include "Windows/FileDir.h"
-#include "Windows/Registry.h"
-#include "Windows/Synchronization.h"
+#include "../../../Windows/FileDir.h"
+#include "../../../Windows/Registry.h"
+#include "../../../Windows/Synchronization.h"
 
 #include "ZipRegistry.h"
 
@@ -17,9 +16,9 @@ using namespace NRegistry;
 static NSynchronization::CCriticalSection g_CS;
 #define CS_LOCK NSynchronization::CCriticalSectionLock lock(g_CS);
 
-static const TCHAR *kCuPrefix = TEXT("Software") TEXT(STRING_PATH_SEPARATOR) TEXT("7-Zip") TEXT(STRING_PATH_SEPARATOR);
+static LPCTSTR const kCuPrefix = TEXT("Software") TEXT(STRING_PATH_SEPARATOR) TEXT("7-Zip") TEXT(STRING_PATH_SEPARATOR);
 
-static CSysString GetKeyPath(const CSysString &path) { return kCuPrefix + path; }
+static CSysString GetKeyPath(LPCTSTR path) { return kCuPrefix + (CSysString)path; }
 
 static LONG OpenMainKey(CKey &key, LPCTSTR keyName)
 {
@@ -31,34 +30,76 @@ static LONG CreateMainKey(CKey &key, LPCTSTR keyName)
   return key.Create(HKEY_CURRENT_USER, GetKeyPath(keyName));
 }
 
+static void Key_Set_BoolPair(CKey &key, LPCTSTR name, const CBoolPair &b)
+{
+  if (b.Def)
+    key.SetValue(name, b.Val);
+}
+
+static void Key_Get_BoolPair(CKey &key, LPCTSTR name, CBoolPair &b)
+{
+  b.Val = false;
+  b.Def = (key.GetValue_IfOk(name, b.Val) == ERROR_SUCCESS);
+}
+
+static void Key_Get_BoolPair_true(CKey &key, LPCTSTR name, CBoolPair &b)
+{
+  b.Val = true;
+  b.Def = (key.GetValue_IfOk(name, b.Val) == ERROR_SUCCESS);
+}
+
 namespace NExtract
 {
 
-static const TCHAR *kKeyName = TEXT("Extraction");
+static LPCTSTR const kKeyName = TEXT("Extraction");
 
-static const TCHAR *kExtractMode = TEXT("ExtractMode");
-static const TCHAR *kOverwriteMode = TEXT("OverwriteMode");
-static const TCHAR *kShowPassword = TEXT("ShowPassword");
-static const TCHAR *kPathHistory = TEXT("PathHistory");
+static LPCTSTR const kExtractMode = TEXT("ExtractMode");
+static LPCTSTR const kOverwriteMode = TEXT("OverwriteMode");
+static LPCTSTR const kShowPassword = TEXT("ShowPassword");
+static LPCTSTR const kPathHistory = TEXT("PathHistory");
+static LPCTSTR const kSplitDest = TEXT("SplitDest");
+static LPCTSTR const kElimDup = TEXT("ElimDup");
+// static LPCTSTR const kAltStreams = TEXT("AltStreams");
+static LPCTSTR const kNtSecur = TEXT("Security");
 
 void CInfo::Save() const
 {
   CS_LOCK
   CKey key;
   CreateMainKey(key, kKeyName);
-  key.SetValue(kExtractMode, (UInt32)PathMode);
-  key.SetValue(kOverwriteMode, (UInt32)OverwriteMode);
-  key.SetValue(kShowPassword, ShowPassword);
+
+  if (PathMode_Force)
+    key.SetValue(kExtractMode, (UInt32)PathMode);
+  if (OverwriteMode_Force)
+    key.SetValue(kOverwriteMode, (UInt32)OverwriteMode);
+
+  Key_Set_BoolPair(key, kSplitDest, SplitDest);
+  Key_Set_BoolPair(key, kElimDup, ElimDup);
+  // Key_Set_BoolPair(key, kAltStreams, AltStreams);
+  Key_Set_BoolPair(key, kNtSecur, NtSecurity);
+  Key_Set_BoolPair(key, kShowPassword, ShowPassword);
+
   key.RecurseDeleteKey(kPathHistory);
   key.SetValue_Strings(kPathHistory, Paths);
 }
 
+void Save_ShowPassword(bool showPassword)
+{
+  CS_LOCK
+  CKey key;
+  CreateMainKey(key, kKeyName);
+  key.SetValue(kShowPassword, showPassword);
+}
 
 void CInfo::Load()
 {
-  PathMode = NPathMode::kCurrentPathnames;
-  OverwriteMode = NOverwriteMode::kAskBefore;
-  ShowPassword = false;
+  PathMode = NPathMode::kCurPaths;
+  PathMode_Force = false;
+  OverwriteMode = NOverwriteMode::kAsk;
+  OverwriteMode_Force = false;
+  
+  SplitDest.Val = true;
+
   Paths.Clear();
 
   CS_LOCK
@@ -68,11 +109,34 @@ void CInfo::Load()
   
   key.GetValue_Strings(kPathHistory, Paths);
   UInt32 v;
-  if (key.QueryValue(kExtractMode, v) == ERROR_SUCCESS && v <= NPathMode::kNoPathnames)
+  if (key.QueryValue(kExtractMode, v) == ERROR_SUCCESS && v <= NPathMode::kAbsPaths)
+  {
     PathMode = (NPathMode::EEnum)v;
-  if (key.QueryValue(kOverwriteMode, v) == ERROR_SUCCESS && v <= NOverwriteMode::kAutoRenameExisting)
+    PathMode_Force = true;
+  }
+  if (key.QueryValue(kOverwriteMode, v) == ERROR_SUCCESS && v <= NOverwriteMode::kRenameExisting)
+  {
     OverwriteMode = (NOverwriteMode::EEnum)v;
-  key.GetValue_IfOk(kShowPassword, ShowPassword);
+    OverwriteMode_Force = true;
+  }
+
+  Key_Get_BoolPair_true(key, kSplitDest, SplitDest);
+
+  Key_Get_BoolPair(key, kElimDup, ElimDup);
+  // Key_Get_BoolPair(key, kAltStreams, AltStreams);
+  Key_Get_BoolPair(key, kNtSecur, NtSecurity);
+  Key_Get_BoolPair(key, kShowPassword, ShowPassword);
+}
+
+bool Read_ShowPassword()
+{
+  CS_LOCK
+  CKey key;
+  bool showPassword = false;
+  if (OpenMainKey(key, kKeyName) != ERROR_SUCCESS)
+    return showPassword;
+  key.GetValue_IfOk(kShowPassword, showPassword);
+  return showPassword;
 }
 
 }
@@ -80,25 +144,30 @@ void CInfo::Load()
 namespace NCompression
 {
 
-static const TCHAR *kKeyName = TEXT("Compression");
+static LPCTSTR const kKeyName = TEXT("Compression");
 
-static const TCHAR *kArcHistory = TEXT("ArcHistory");
-static const WCHAR *kArchiver = L"Archiver";
-static const TCHAR *kShowPassword = TEXT("ShowPassword");
-static const TCHAR *kEncryptHeaders = TEXT("EncryptHeaders");
+static LPCTSTR const kArcHistory = TEXT("ArcHistory");
+static LPCWSTR const kArchiver = L"Archiver";
+static LPCTSTR const kShowPassword = TEXT("ShowPassword");
+static LPCTSTR const kEncryptHeaders = TEXT("EncryptHeaders");
 
-static const TCHAR *kOptionsKeyName = TEXT("Options");
+static LPCTSTR const kOptionsKeyName = TEXT("Options");
 
-static const TCHAR *kLevel = TEXT("Level");
-static const TCHAR *kDictionary = TEXT("Dictionary");
-static const TCHAR *kOrder = TEXT("Order");
-static const TCHAR *kBlockSize = TEXT("BlockSize");
-static const TCHAR *kNumThreads = TEXT("NumThreads");
-static const WCHAR *kMethod = L"Method";
-static const WCHAR *kOptions = L"Options";
-static const WCHAR *kEncryptionMethod = L"EncryptionMethod";
+static LPCTSTR const kLevel = TEXT("Level");
+static LPCTSTR const kDictionary = TEXT("Dictionary");
+static LPCTSTR const kOrder = TEXT("Order");
+static LPCTSTR const kBlockSize = TEXT("BlockSize");
+static LPCTSTR const kNumThreads = TEXT("NumThreads");
+static LPCWSTR const kMethod = L"Method";
+static LPCWSTR const kOptions = L"Options";
+static LPCWSTR const kEncryptionMethod = L"EncryptionMethod";
 
-static void SetRegString(CKey &key, const WCHAR *name, const UString &value)
+static LPCTSTR const kNtSecur = TEXT("Security");
+static LPCTSTR const kAltStreams = TEXT("AltStreams");
+static LPCTSTR const kHardLinks = TEXT("HardLinks");
+static LPCTSTR const kSymLinks = TEXT("SymLinks");
+
+static void SetRegString(CKey &key, LPCWSTR name, const UString &value)
 {
   if (value.IsEmpty())
     key.DeleteValue(name);
@@ -106,24 +175,24 @@ static void SetRegString(CKey &key, const WCHAR *name, const UString &value)
     key.SetValue(name, value);
 }
 
-static void SetRegUInt32(CKey &key, const TCHAR *name, UInt32 value)
+static void SetRegUInt32(CKey &key, LPCTSTR name, UInt32 value)
 {
-  if (value == (UInt32)-1)
+  if (value == (UInt32)(Int32)-1)
     key.DeleteValue(name);
   else
     key.SetValue(name, value);
 }
 
-static void GetRegString(CKey &key, const WCHAR *name, UString &value)
+static void GetRegString(CKey &key, LPCWSTR name, UString &value)
 {
   if (key.QueryValue(name, value) != ERROR_SUCCESS)
     value.Empty();
 }
 
-static void GetRegUInt32(CKey &key, const TCHAR *name, UInt32 &value)
+static void GetRegUInt32(CKey &key, LPCTSTR name, UInt32 &value)
 {
   if (key.QueryValue(name, value) != ERROR_SUCCESS)
-    value = (UInt32)-1;
+    value = (UInt32)(Int32)-1;
 }
 
 void CInfo::Save() const
@@ -132,6 +201,13 @@ void CInfo::Save() const
 
   CKey key;
   CreateMainKey(key, kKeyName);
+
+  Key_Set_BoolPair(key, kNtSecur, NtSecurity);
+  Key_Set_BoolPair(key, kAltStreams, AltStreams);
+  Key_Set_BoolPair(key, kHardLinks, HardLinks);
+  Key_Set_BoolPair(key, kSymLinks, SymLinks);
+  
+  key.SetValue(kShowPassword, ShowPassword);
   key.SetValue(kLevel, (UInt32)Level);
   key.SetValue(kArchiver, ArcType);
   key.SetValue(kShowPassword, ShowPassword);
@@ -143,7 +219,7 @@ void CInfo::Save() const
   {
     CKey optionsKey;
     optionsKey.Create(key, kOptionsKeyName);
-    for (int i = 0; i < Formats.Size(); i++)
+    FOR_VECTOR (i, Formats)
     {
       const CFormatOptions &fo = Formats[i];
       CKey fk;
@@ -178,6 +254,11 @@ void CInfo::Load()
   if (OpenMainKey(key, kKeyName) != ERROR_SUCCESS)
     return;
 
+  Key_Get_BoolPair(key, kNtSecur, NtSecurity);
+  Key_Get_BoolPair(key, kAltStreams, AltStreams);
+  Key_Get_BoolPair(key, kHardLinks, HardLinks);
+  Key_Get_BoolPair(key, kSymLinks, SymLinks);
+
   key.GetValue_Strings(kArcHistory, ArcPaths);
   
   {
@@ -186,7 +267,7 @@ void CInfo::Load()
     {
       CSysStringVector formatIDs;
       optionsKey.EnumKeys(formatIDs);
-      for (int i = 0; i < formatIDs.Size(); i++)
+      FOR_VECTOR (i, formatIDs)
       {
         CKey fk;
         CFormatOptions fo;
@@ -219,13 +300,13 @@ void CInfo::Load()
 
 }
 
-static const TCHAR *kOptionsInfoKeyName = TEXT("Options");
+static LPCTSTR const kOptionsInfoKeyName = TEXT("Options");
 
 namespace NWorkDir
 {
-static const TCHAR *kWorkDirType = TEXT("WorkDirType");
-static const WCHAR *kWorkDirPath = L"WorkDirPath";
-static const TCHAR *kTempRemovableOnly = TEXT("TempRemovableOnly");
+static LPCTSTR const kWorkDirType = TEXT("WorkDirType");
+static LPCWSTR const kWorkDirPath = L"WorkDirPath";
+static LPCTSTR const kTempRemovableOnly = TEXT("TempRemovableOnly");
 
 
 void CInfo::Save()const
@@ -234,7 +315,7 @@ void CInfo::Save()const
   CKey key;
   CreateMainKey(key, kOptionsInfoKeyName);
   key.SetValue(kWorkDirType, (UInt32)Mode);
-  key.SetValue(kWorkDirPath, Path);
+  key.SetValue(kWorkDirPath, fs2us(Path));
   key.SetValue(kTempRemovableOnly, ForRemovableOnly);
 }
 
@@ -257,7 +338,10 @@ void CInfo::Load()
     case NMode::kSpecified:
       Mode = (NMode::EEnum)dirType;
   }
-  if (key.QueryValue(kWorkDirPath, Path) != ERROR_SUCCESS)
+  UString pathU;
+  if (key.QueryValue(kWorkDirPath, pathU) == ERROR_SUCCESS)
+    Path = us2fs(pathU);
+  else
   {
     Path.Empty();
     if (Mode == NMode::kSpecified)
@@ -268,26 +352,48 @@ void CInfo::Load()
 
 }
 
-static const TCHAR *kCascadedMenu = TEXT("CascadedMenu");
-static const TCHAR *kContextMenu = TEXT("ContextMenu");
+static LPCTSTR const kCascadedMenu = TEXT("CascadedMenu");
+static LPCTSTR const kContextMenu = TEXT("ContextMenu");
+static LPCTSTR const kMenuIcons = TEXT("MenuIcons");
+static LPCTSTR const kElimDup = TEXT("ElimDupExtract");
 
 void CContextMenuInfo::Save() const
 {
   CS_LOCK
   CKey key;
   CreateMainKey(key, kOptionsInfoKeyName);
-  key.SetValue(kCascadedMenu, Cascaded);
-  key.SetValue(kContextMenu, Flags);
+  
+  Key_Set_BoolPair(key, kCascadedMenu, Cascaded);
+  Key_Set_BoolPair(key, kMenuIcons, MenuIcons);
+  Key_Set_BoolPair(key, kElimDup, ElimDup);
+  
+  if (Flags_Def)
+    key.SetValue(kContextMenu, Flags);
 }
 
 void CContextMenuInfo::Load()
 {
-  Cascaded = true;
-  Flags = (UInt32)-1;
+  Cascaded.Val = true;
+  Cascaded.Def = false;
+
+  MenuIcons.Val = false;
+  MenuIcons.Def = false;
+
+  ElimDup.Val = true;
+  ElimDup.Def = false;
+
+  Flags = (UInt32)(Int32)-1;
+  Flags_Def = false;
+  
   CS_LOCK
+  
   CKey key;
   if (OpenMainKey(key, kOptionsInfoKeyName) != ERROR_SUCCESS)
     return;
-  key.GetValue_IfOk(kCascadedMenu, Cascaded);
-  key.GetValue_IfOk(kContextMenu, Flags);
+  
+  Key_Get_BoolPair_true(key, kCascadedMenu, Cascaded);
+  Key_Get_BoolPair_true(key, kElimDup, ElimDup);
+  Key_Get_BoolPair(key, kMenuIcons, MenuIcons);
+
+  Flags_Def = (key.GetValue_IfOk(kContextMenu, Flags) == ERROR_SUCCESS);
 }

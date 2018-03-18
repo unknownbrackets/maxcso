@@ -1,5 +1,7 @@
 /* SfxSetup.c - 7z SFX Setup
-2010-11-11 : Igor Pavlov : Public domain */
+2017-04-04 : Igor Pavlov : Public domain */
+
+#include "Precomp.h"
 
 #ifndef UNICODE
 #define UNICODE
@@ -18,28 +20,32 @@
 #include "../../7zCrc.h"
 #include "../../7zFile.h"
 #include "../../CpuArch.h"
+#include "../../DllSecur.h"
 
-#define k_EXE_ExtIndex 1
+#define k_EXE_ExtIndex 2
 
-static const char *kExts[] =
+#define kInputBufSize ((size_t)1 << 18)
+
+static const char * const kExts[] =
 {
-  "bat",
-  "exe",
-  "inf",
-  "msi",
+    "bat"
+  , "cmd"
+  , "exe"
+  , "inf"
+  , "msi"
   #ifdef UNDER_CE
-  "cab",
+  , "cab"
   #endif
-  "html",
-  "htm"
+  , "html"
+  , "htm"
 };
 
-static const char *kNames[] =
+static const char * const kNames[] =
 {
-  "setup",
-  "install",
-  "run",
-  "start"
+    "setup"
+  , "install"
+  , "run"
+  , "start"
 };
 
 static unsigned FindExt(const wchar_t *s, unsigned *extLen)
@@ -60,7 +66,7 @@ static unsigned FindExt(const wchar_t *s, unsigned *extLen)
 
 #define MAKE_CHAR_UPPER(c) ((((c) >= 'a' && (c) <= 'z') ? (c) -= 0x20 : (c)))
 
-static unsigned FindItem(const char **items, unsigned num, const wchar_t *s, unsigned len)
+static unsigned FindItem(const char * const *items, unsigned num, const wchar_t *s, unsigned len)
 {
   unsigned i;
   for (i = 0; i < num; i++)
@@ -72,7 +78,7 @@ static unsigned FindItem(const char **items, unsigned num, const wchar_t *s, uns
       continue;
     for (j = 0; j < len; j++)
     {
-      unsigned c = item[j];
+      unsigned c = (Byte)item[j];
       if (c != s[j] && MAKE_CHAR_UPPER(c) != s[j])
         break;
     }
@@ -85,7 +91,7 @@ static unsigned FindItem(const char **items, unsigned num, const wchar_t *s, uns
 #ifdef _CONSOLE
 static BOOL WINAPI HandlerRoutine(DWORD ctrlType)
 {
-  ctrlType = ctrlType;
+  UNUSED_VAR(ctrlType);
   return TRUE;
 }
 #endif
@@ -128,26 +134,21 @@ static Bool FindSignature(CSzFile *stream, UInt64 *resPos)
   *resPos = 0;
   for (;;)
   {
-    size_t numTests, pos;
+    size_t processed, pos;
     if (*resPos > kSignatureSearchLimit)
       return False;
-    
-    do
+    processed = kBufferSize - numPrevBytes;
+    if (File_Read(stream, buf + numPrevBytes, &processed) != 0)
+      return False;
+    processed += numPrevBytes;
+    if (processed < k7zStartHeaderSize ||
+        (processed == k7zStartHeaderSize && numPrevBytes != 0))
+      return False;
+    processed -= k7zStartHeaderSize;
+    for (pos = 0; pos <= processed; pos++)
     {
-      size_t processed = kBufferSize - numPrevBytes;
-      if (File_Read(stream, buf + numPrevBytes, &processed) != 0)
-        return False;
-      if (processed == 0)
-        return False;
-      numPrevBytes += processed;
-    }
-    while (numPrevBytes <= k7zStartHeaderSize);
-    
-    numTests = numPrevBytes - k7zStartHeaderSize;
-    for (pos = 0; pos < numTests; pos++)
-    {
-      for (; buf[pos] != '7' && pos < numTests; pos++);
-      if (pos == numTests)
+      for (; pos <= processed && buf[pos] != '7'; pos++);
+      if (pos > processed)
         break;
       if (memcmp(buf + pos, k7zSignature, k7zSignatureSize) == 0)
         if (CrcCalc(buf + pos + 12, 20) == GetUi32(buf + pos + 8))
@@ -156,9 +157,9 @@ static Bool FindSignature(CSzFile *stream, UInt64 *resPos)
           return True;
         }
     }
-    *resPos += numTests;
-    numPrevBytes -= numTests;
-    memmove(buf, buf + numTests, numPrevBytes);
+    *resPos += processed;
+    numPrevBytes = k7zStartHeaderSize;
+    memmove(buf, buf + processed, k7zStartHeaderSize);
   }
 }
 
@@ -184,6 +185,7 @@ static WRes RemoveDirWithSubItems(WCHAR *path)
   path[len] = L'\0';
   if (handle == INVALID_HANDLE_VALUE)
     return GetLastError();
+  
   for (;;)
   {
     if (wcscmp(fd.cFileName, L".") != 0 &&
@@ -192,7 +194,7 @@ static WRes RemoveDirWithSubItems(WCHAR *path)
       wcscpy(path + len, fd.cFileName);
       if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0)
       {
-        wcscat(path, L"\\");
+        wcscat(path, WSTRING_PATH_SEPARATOR);
         res = RemoveDirWithSubItems(path);
       }
       else
@@ -201,9 +203,11 @@ static WRes RemoveDirWithSubItems(WCHAR *path)
         if (DeleteFileW(path) == 0)
           res = GetLastError();
       }
+    
       if (res != 0)
         break;
     }
+  
     if (!FindNextFileW(handle, &fd))
     {
       res = GetLastError();
@@ -212,6 +216,7 @@ static WRes RemoveDirWithSubItems(WCHAR *path)
       break;
     }
   }
+  
   path[len] = L'\0';
   FindClose(handle);
   if (res == 0)
@@ -235,26 +240,32 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 #endif
 {
   CFileInStream archiveStream;
-  CLookToRead lookStream;
+  CLookToRead2 lookStream;
   CSzArEx db;
   SRes res = SZ_OK;
   ISzAlloc allocImp;
   ISzAlloc allocTempImp;
   WCHAR sfxPath[MAX_PATH + 2];
   WCHAR path[MAX_PATH * 3 + 2];
+  #ifndef UNDER_CE
+  WCHAR workCurDir[MAX_PATH + 32];
+  #endif
   size_t pathLen;
   DWORD winRes;
   const wchar_t *cmdLineParams;
   const char *errorMessage = NULL;
   Bool useShellExecute = True;
+  DWORD exitCode = 0;
+
+  LoadSecurityDlls();
 
   #ifdef _CONSOLE
   SetConsoleCtrlHandler(HandlerRoutine, TRUE);
   #else
-  hInstance = hInstance;
-  hPrevInstance = hPrevInstance;
-  lpCmdLine = lpCmdLine;
-  nCmdShow = nCmdShow;
+  UNUSED_VAR(hInstance);
+  UNUSED_VAR(hPrevInstance);
+  UNUSED_VAR(lpCmdLine);
+  UNUSED_VAR(nCmdShow);
   #endif
 
   CrcGenerateTable();
@@ -266,7 +277,8 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   allocTempImp.Free = SzFreeTemp;
 
   FileInStream_CreateVTable(&archiveStream);
-  LookToRead_CreateVTable(&lookStream, False);
+  LookToRead2_CreateVTable(&lookStream, False);
+  lookStream.buf = NULL;
  
   winRes = GetModuleFileNameW(NULL, sfxPath, MAX_PATH);
   if (winRes == 0 || winRes > MAX_PATH)
@@ -296,6 +308,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
       return 1;
     pathLen = wcslen(path);
     d = (GetTickCount() << 12) ^ (GetCurrentThreadId() << 14) ^ GetCurrentProcessId();
+    
     for (i = 0;; i++, d += GetTickCount())
     {
       if (i >= 100)
@@ -313,7 +326,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         {
           unsigned t = value & 0xF;
           value >>= 4;
-          s[7 - k] = (char)((t < 10) ? ('0' + t) : ('A' + (t - 10)));
+          s[7 - k] = (wchar_t)((t < 10) ? ('0' + t) : ('A' + (t - 10)));
         }
         s[k] = '\0';
       }
@@ -322,7 +335,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         continue;
       if (CreateDirectoryW(path, NULL))
       {
-        wcscat(path, L"\\");
+        wcscat(path, WSTRING_PATH_SEPARATOR);
         pathLen = wcslen(path);
         break;
       }
@@ -332,6 +345,10 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         break;
       }
     }
+    
+    #ifndef UNDER_CE
+    wcscpy(workCurDir, path);
+    #endif
     if (res != SZ_OK)
       errorMessage = "Can't create temp folder";
   }
@@ -362,15 +379,24 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
   if (res == SZ_OK)
   {
-    lookStream.realStream = &archiveStream.s;
-    LookToRead_Init(&lookStream);
+    lookStream.buf = ISzAlloc_Alloc(&allocImp, kInputBufSize);
+    if (!lookStream.buf)
+      res = SZ_ERROR_MEM;
+    else
+    {
+      lookStream.bufSize = kInputBufSize;
+      lookStream.realStream = &archiveStream.vt;
+      LookToRead2_Init(&lookStream);
+    }
   }
 
   SzArEx_Init(&db);
+  
   if (res == SZ_OK)
   {
-    res = SzArEx_Open(&db, &lookStream.s, &allocImp, &allocTempImp);
+    res = SzArEx_Open(&db, &lookStream.vt, &allocImp, &allocTempImp);
   }
+  
   if (res == SZ_OK)
   {
     UInt32 executeFileIndex = (UInt32)(Int32)-1;
@@ -380,16 +406,13 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     Byte *outBuffer = 0; /* it must be 0 before first call for each new archive. */
     size_t outBufferSize = 0;  /* it can have any value before first call (if outBuffer = 0) */
     
-    for (i = 0; i < db.db.NumFiles; i++)
+    for (i = 0; i < db.NumFiles; i++)
     {
       size_t offset = 0;
       size_t outSizeProcessed = 0;
-      const CSzFileItem *f = db.db.Files + i;
-      size_t len;
       WCHAR *temp;
-      len = SzArEx_GetFileNameUtf16(&db, i, NULL);
-      
-      if (len >= MAX_PATH)
+
+      if (SzArEx_GetFileNameUtf16(&db, i, NULL) >= MAX_PATH)
       {
         res = SZ_ERROR_FAIL;
         break;
@@ -399,7 +422,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
       
       SzArEx_GetFileNameUtf16(&db, i, temp);
       {
-        res = SzArEx_Extract(&db, &lookStream.s, i,
+        res = SzArEx_Extract(&db, &lookStream.vt, i,
           &blockIndex, &outBuffer, &outBufferSize,
           &offset, &outSizeProcessed,
           &allocImp, &allocTempImp);
@@ -422,7 +445,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
           }
         }
 
-        if (f->IsDir)
+        if (SzArEx_IsDir(&db, i))
         {
           MyCreateDir(path);
           continue;
@@ -457,6 +480,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
             break;
           }
         }
+  
         processedSize = outSizeProcessed;
         if (File_Write(&outFile, outBuffer + offset, &processedSize) != 0 || processedSize != outSizeProcessed)
         {
@@ -465,11 +489,12 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         }
         
         #ifdef USE_WINDOWS_FILE
-        if (f->MTimeDefined)
+        if (SzBitWithVals_Check(&db.MTime, i))
         {
+          const CNtfsFileTime *t = db.MTime.Vals + i;
           FILETIME mTime;
-          mTime.dwLowDateTime = f->MTime.Low;
-          mTime.dwHighDateTime = f->MTime.High;
+          mTime.dwLowDateTime = t->Low;
+          mTime.dwHighDateTime = t->High;
           SetFileTime(outFile.handle, NULL, NULL, &mTime);
         }
         #endif
@@ -485,8 +510,8 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
           }
         }
         #ifdef USE_WINDOWS_FILE
-        if (f->AttribDefined)
-          SetFileAttributesW(path, f->Attrib);
+        if (SzBitWithVals_Check(&db.Attribs, i))
+          SetFileAttributesW(path, db.Attribs.Vals[i]);
         #endif
       }
     }
@@ -508,15 +533,30 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
             temp[j] = CHAR_PATH_SEPARATOR;
       }
     }
-    IAlloc_Free(&allocImp, outBuffer);
+    ISzAlloc_Free(&allocImp, outBuffer);
   }
+
   SzArEx_Free(&db, &allocImp);
+
+  ISzAlloc_Free(&allocImp, lookStream.buf);
 
   File_Close(&archiveStream.file);
 
   if (res == SZ_OK)
   {
     HANDLE hProcess = 0;
+    
+    #ifndef UNDER_CE
+    WCHAR oldCurDir[MAX_PATH + 2];
+    oldCurDir[0] = 0;
+    {
+      DWORD needLen = GetCurrentDirectory(MAX_PATH + 1, oldCurDir);
+      if (needLen == 0 || needLen > MAX_PATH)
+        oldCurDir[0] = 0;
+      SetCurrentDirectory(workCurDir);
+    }
+    #endif
+    
     if (useShellExecute)
     {
       SHELLEXECUTEINFO ei;
@@ -560,18 +600,25 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         hProcess = pi.hProcess;
       }
     }
+    
     if (hProcess != 0)
     {
       WaitForSingleObject(hProcess, INFINITE);
+      if (!GetExitCodeProcess(hProcess, &exitCode))
+        exitCode = 1;
       CloseHandle(hProcess);
     }
+    
+    #ifndef UNDER_CE
+    SetCurrentDirectory(oldCurDir);
+    #endif
   }
 
   path[pathLen] = L'\0';
   RemoveDirWithSubItems(path);
 
   if (res == SZ_OK)
-    return 0;
+    return (int)exitCode;
   
   {
     if (res == SZ_ERROR_UNSUPPORTED)
@@ -585,6 +632,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
       if (!errorMessage)
         errorMessage = "ERROR";
     }
+ 
     if (errorMessage)
       PrintErrorMessage(errorMessage);
   }

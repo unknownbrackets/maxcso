@@ -18,10 +18,10 @@
 namespace NCompress {
 namespace NRar2 {
 
-const UInt32 kNumRepDists = 4;
-const UInt32 kDistTableSize = 48;
+const unsigned kNumRepDists = 4;
+const unsigned kDistTableSize = 48;
 
-const int kMMTableSize = 256 + 1;
+const unsigned kMMTableSize = 256 + 1;
 
 const UInt32 kMainTableSize = 298;
 const UInt32 kLenTableSize = 28;
@@ -53,10 +53,10 @@ const UInt32 kLen2NumNumbers = 8;
 const UInt32 kReadTableNumber = kLen2Number + kLen2NumNumbers;
 const UInt32 kMatchNumber = kReadTableNumber + 1;
 
-const Byte kLenStart[kLenTableSize]      = {0,1,2,3,4,5,6,7,8,10,12,14,16,20,24,28,32,40,48,56,64,80,96,112,128,160,192,224};
+const Byte kLenStart     [kLenTableSize] = {0,1,2,3,4,5,6,7,8,10,12,14,16,20,24,28,32,40,48,56,64,80,96,112,128,160,192,224};
 const Byte kLenDirectBits[kLenTableSize] = {0,0,0,0,0,0,0,0,1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4,  4,  5,  5,  5,  5};
 
-const UInt32 kDistStart[kDistTableSize]     = {0,1,2,3,4,6,8,12,16,24,32,48,64,96,128,192,256,384,512,768,1024,1536,2048,3072,4096,6144,8192,12288,16384,24576,32768U,49152U,65536,98304,131072,196608,262144,327680,393216,458752,524288,589824,655360,720896,786432,851968,917504,983040};
+const UInt32 kDistStart   [kDistTableSize] = {0,1,2,3,4,6,8,12,16,24,32,48,64,96,128,192,256,384,512,768,1024,1536,2048,3072,4096,6144,8192,12288,16384,24576,32768U,49152U,65536,98304,131072,196608,262144,327680,393216,458752,524288,589824,655360,720896,786432,851968,917504,983040};
 const Byte kDistDirectBits[kDistTableSize] = {0,0,0,0,1,1,2, 2, 3, 3, 4, 4, 5, 5,  6,  6,  7,  7,  8,  8,   9,   9,  10,  10,  11,  11,  12,   12,   13,   13,    14,    14,   15,   15,    16,    16,    16,    16,    16,    16,    16,    16,    16,    16,    16,    16,    16,    16};
 
 const Byte kLevelDirectBits[kLevelTableSize] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 3, 7};
@@ -89,14 +89,14 @@ struct CFilter
 
 };
 
-const int kNumChanelsMax = 4;
+const unsigned kNumChanelsMax = 4;
 
 class CFilter2
 {
 public:
   CFilter  m_Filters[kNumChanelsMax];
   int m_ChannelDelta;
-  int CurrentChannel;
+  unsigned CurrentChannel;
 
   void Init() { memset(this, 0, sizeof(*this)); }
   Byte Decode(Byte delta)
@@ -110,7 +110,7 @@ public:
 
 typedef NBitm::CDecoder<CInBuffer> CBitDecoder;
 
-const int kNumHuffmanBits = 15;
+const unsigned kNumHuffmanBits = 15;
 
 class CDecoder :
   public ICompressCoder,
@@ -119,29 +119,32 @@ class CDecoder :
 {
   CLzOutWindow m_OutWindowStream;
   CBitDecoder m_InBitStream;
+
+  UInt32 m_RepDistPtr;
+  UInt32 m_RepDists[kNumRepDists];
+
+  UInt32 m_LastLength;
+
+  bool m_IsSolid;
+  bool m_TablesOK;
+  bool m_AudioMode;
+
   NHuffman::CDecoder<kNumHuffmanBits, kMainTableSize> m_MainDecoder;
   NHuffman::CDecoder<kNumHuffmanBits, kDistTableSize> m_DistDecoder;
   NHuffman::CDecoder<kNumHuffmanBits, kLenTableSize> m_LenDecoder;
   NHuffman::CDecoder<kNumHuffmanBits, kMMTableSize> m_MMDecoders[NMultimedia::kNumChanelsMax];
   NHuffman::CDecoder<kNumHuffmanBits, kLevelTableSize> m_LevelDecoder;
 
-  bool m_AudioMode;
+  UInt64 m_PackSize;
 
+  unsigned m_NumChannels;
   NMultimedia::CFilter2 m_MmFilter;
-  int m_NumChannels;
 
-  UInt32 m_RepDists[kNumRepDists];
-  UInt32 m_RepDistPtr;
-
-  UInt32 m_LastLength;
-  
   Byte m_LastLevels[kMaxTableSize];
 
-  UInt64 m_PackSize;
-  bool m_IsSolid;
 
   void InitStructures();
-  UInt32 ReadBits(int numBits);
+  UInt32 ReadBits(unsigned numBits);
   bool ReadTables();
   bool ReadLastTables();
 
@@ -156,11 +159,13 @@ public:
 
   MY_UNKNOWN_IMP1(ICompressSetDecoderProperties2)
 
+  /*
   void ReleaseStreams()
   {
     m_OutWindowStream.ReleaseStream();
     m_InBitStream.ReleaseStream();
   }
+  */
 
   STDMETHOD(Code)(ISequentialInStream *inStream, ISequentialOutStream *outStream,
       const UInt64 *inSize, const UInt64 *outSize, ICompressProgressInfo *progress);

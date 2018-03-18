@@ -5,19 +5,17 @@
 
 #include "../../../C/CpuArch.h"
 
-#include "../../Common/Types.h"
-
 namespace NCompress {
 
 struct CMtf8Encoder
 {
   Byte Buf[256];
 
-  int FindAndMove(Byte v)
+  unsigned FindAndMove(Byte v) throw()
   {
-    int pos;
+    size_t pos;
     for (pos = 0; Buf[pos] != v; pos++);
-    int resPos = pos;
+    unsigned resPos = (unsigned)pos;
     for (; pos >= 8; pos -= 8)
     {
       Buf[pos] = Buf[pos - 1];
@@ -29,7 +27,7 @@ struct CMtf8Encoder
       Buf[pos - 6] = Buf[pos - 7];
       Buf[pos - 7] = Buf[pos - 8];
     }
-    for (; pos > 0; pos--)
+    for (; pos != 0; pos--)
       Buf[pos] = Buf[pos - 1];
     Buf[0] = v;
     return resPos;
@@ -41,9 +39,10 @@ struct CMtf8Decoder
 {
   Byte Buf[256];
 
-  void Init(int) {};
+  void StartInit() { memset(Buf, 0, sizeof(Buf)); }
+  void Add(unsigned pos, Byte val) { Buf[pos] = val;  }
   Byte GetHead() const { return Buf[0]; }
-  Byte GetAndMove(int pos)
+  Byte GetAndMove(unsigned pos)
   {
     Byte res = Buf[pos];
     for (; pos >= 8; pos -= 8)
@@ -66,11 +65,11 @@ struct CMtf8Decoder
 */
 
 #ifdef MY_CPU_64BIT
-typedef UInt64 CMtfVar;
-#define MTF_MOVS 3
+  typedef UInt64 CMtfVar;
+  #define MTF_MOVS 3
 #else
-typedef UInt32 CMtfVar;
-#define MTF_MOVS 2
+  typedef UInt32 CMtfVar;
+  #define MTF_MOVS 2
 #endif
 
 #define MTF_MASK ((1 << MTF_MOVS) - 1)
@@ -81,15 +80,20 @@ struct CMtf8Decoder
   CMtfVar Buf[256 >> MTF_MOVS];
 
   void StartInit() { memset(Buf, 0, sizeof(Buf)); }
-  void Add(unsigned int pos, Byte val) { Buf[pos >> MTF_MOVS] |= ((CMtfVar)val << ((pos & MTF_MASK) << 3));  }
+  void Add(unsigned pos, Byte val) { Buf[pos >> MTF_MOVS] |= ((CMtfVar)val << ((pos & MTF_MASK) << 3));  }
   Byte GetHead() const { return (Byte)Buf[0]; }
-  Byte GetAndMove(unsigned int pos)
+
+  MY_FORCE_INLINE
+  Byte GetAndMove(unsigned pos) throw()
   {
     UInt32 lim = ((UInt32)pos >> MTF_MOVS);
     pos = (pos & MTF_MASK) << 3;
     CMtfVar prev = (Buf[lim] >> pos) & 0xFF;
 
     UInt32 i = 0;
+    
+
+    /*
     if ((lim & 1) != 0)
     {
       CMtfVar next = Buf[0];
@@ -106,6 +110,16 @@ struct CMtf8Decoder
       Buf[i + 1] = (n1 << 8) | (n0 >> (MTF_MASK << 3));
       prev = (n1 >> (MTF_MASK << 3));
     }
+    */
+
+    for (; i < lim; i++)
+    {
+      CMtfVar n0 = Buf[i];
+      Buf[i    ] = (n0 << 8) | prev;
+      prev = (n0 >> (MTF_MASK << 3));
+    }
+
+
     CMtfVar next = Buf[i];
     CMtfVar mask = (((CMtfVar)0x100 << pos) - 1);
     Buf[i] = (next & ~mask) | (((next << 8) | prev) & mask);
@@ -119,7 +133,7 @@ class CMtf8Decoder
 {
   Byte SmallBuffer[kSmallSize];
   int SmallSize;
-  Byte Counts[16];
+  int Counts[16];
   int Size;
 public:
   Byte Buf[256];
@@ -140,6 +154,11 @@ public:
       Counts[i] = ((size >= 16) ? 16 : size);
       size -= Counts[i];
     }
+  }
+
+  void Add(unsigned pos, Byte val)
+  {
+    Buf[pos] = val;
   }
 
   Byte GetAndMove(int pos)
@@ -164,7 +183,7 @@ public:
         for (int t = Counts[g] - 1; t >= 0; t--, i--)
           Buf[i] = Buf[offset + t];
       }
-      while(g != 0);
+      while (g != 0);
       
       for (i = kSmallSize - 1; i >= 0; i--)
         Buf[i] = SmallBuffer[i];

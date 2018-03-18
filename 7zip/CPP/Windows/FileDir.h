@@ -1,174 +1,114 @@
 // Windows/FileDir.h
 
-#ifndef __WINDOWS_FILEDIR_H
-#define __WINDOWS_FILEDIR_H
+#ifndef __WINDOWS_FILE_DIR_H
+#define __WINDOWS_FILE_DIR_H
 
 #include "../Common/MyString.h"
-#include "Defs.h"
+
+#include "FileIO.h"
 
 namespace NWindows {
 namespace NFile {
-namespace NDirectory {
+namespace NDir {
 
-#ifdef WIN_LONG_PATH
-bool GetLongPaths(LPCWSTR s1, LPCWSTR s2, UString &d1, UString &d2);
+bool GetWindowsDir(FString &path);
+bool GetSystemDir(FString &path);
+
+bool SetDirTime(CFSTR path, const FILETIME *cTime, const FILETIME *aTime, const FILETIME *mTime);
+
+
+bool SetFileAttrib(CFSTR path, DWORD attrib);
+
+/*
+  Some programs store posix attributes in high 16 bits of windows attributes field.
+  Also some programs use additional flag markers: 0x8000 or 0x4000.
+  SetFileAttrib_PosixHighDetect() tries to detect posix field, and it extracts only attribute
+  bits that are related to current system only.
+*/
+
+bool SetFileAttrib_PosixHighDetect(CFSTR path, DWORD attrib);
+
+
+bool MyMoveFile(CFSTR existFileName, CFSTR newFileName);
+
+#ifndef UNDER_CE
+bool MyCreateHardLink(CFSTR newFileName, CFSTR existFileName);
 #endif
 
-bool MyGetWindowsDirectory(CSysString &path);
-bool MyGetSystemDirectory(CSysString &path);
-#ifndef _UNICODE
-bool MyGetWindowsDirectory(UString &path);
-bool MyGetSystemDirectory(UString &path);
-#endif
+bool RemoveDir(CFSTR path);
+bool CreateDir(CFSTR path);
 
-bool SetDirTime(LPCWSTR fileName, const FILETIME *cTime, const FILETIME *aTime, const FILETIME *mTime);
+/* CreateComplexDir returns true, if directory can contain files after the call (two cases):
+    1) the directory already exists (network shares and drive paths are supported)
+    2) the directory was created
+  path can be WITH or WITHOUT trailing path separator. */
 
-bool MySetFileAttributes(LPCTSTR fileName, DWORD fileAttributes);
-bool MyMoveFile(LPCTSTR existFileName, LPCTSTR newFileName);
-bool MyRemoveDirectory(LPCTSTR pathName);
-bool MyCreateDirectory(LPCTSTR pathName);
-bool CreateComplexDirectory(LPCTSTR pathName);
-bool DeleteFileAlways(LPCTSTR name);
-bool RemoveDirectoryWithSubItems(const CSysString &path);
+bool CreateComplexDir(CFSTR path);
 
-#ifndef _UNICODE
-bool MySetFileAttributes(LPCWSTR fileName, DWORD fileAttributes);
-bool MyMoveFile(LPCWSTR existFileName, LPCWSTR newFileName);
-bool MyRemoveDirectory(LPCWSTR pathName);
-bool MyCreateDirectory(LPCWSTR pathName);
-bool CreateComplexDirectory(LPCWSTR pathName);
-bool DeleteFileAlways(LPCWSTR name);
-bool RemoveDirectoryWithSubItems(const UString &path);
-#endif
+bool DeleteFileAlways(CFSTR name);
+bool RemoveDirWithSubItems(const FString &path);
 
-bool GetOnlyDirPrefix(LPCTSTR fileName, CSysString &resultName);
-bool GetOnlyName(LPCTSTR fileName, CSysString &resultName);
-#ifdef UNDER_CE
-bool MyGetFullPathName(LPCWSTR fileName, UString &resultPath);
-bool MyGetFullPathName(LPCWSTR fileName, UString &resultPath, int &fileNamePartStartIndex);
-#else
-bool MyGetShortPathName(LPCTSTR longPath, CSysString &shortPath);
+bool MyGetFullPathName(CFSTR path, FString &resFullPath);
+bool GetFullPathAndSplit(CFSTR path, FString &resDirPrefix, FString &resFileName);
+bool GetOnlyDirPrefix(CFSTR path, FString &resDirPrefix);
 
-bool MyGetFullPathName(LPCTSTR fileName, CSysString &resultPath, int &fileNamePartStartIndex);
-bool MyGetFullPathName(LPCTSTR fileName, CSysString &resultPath);
-#ifndef _UNICODE
-bool MyGetFullPathName(LPCWSTR fileName, UString &resultPath,
-    int &fileNamePartStartIndex);
-bool MyGetFullPathName(LPCWSTR fileName, UString &resultPath);
-bool GetOnlyName(LPCWSTR fileName, UString &resultName);
-bool GetOnlyDirPrefix(LPCWSTR fileName, UString &resultName);
-#endif
+#ifndef UNDER_CE
 
-inline bool MySetCurrentDirectory(LPCTSTR path)
-  { return BOOLToBool(::SetCurrentDirectory(path)); }
-bool MyGetCurrentDirectory(CSysString &resultPath);
-#ifndef _UNICODE
-bool MySetCurrentDirectory(LPCWSTR path);
-bool MyGetCurrentDirectory(UString &resultPath);
-#endif
-
-bool MySearchPath(LPCTSTR path, LPCTSTR fileName, LPCTSTR extension, CSysString &resultPath, UINT32 &filePart);
-#ifndef _UNICODE
-bool MySearchPath(LPCWSTR path, LPCWSTR fileName, LPCWSTR extension, UString &resultPath, UINT32 &filePart);
-#endif
-
-inline bool MySearchPath(LPCTSTR path, LPCTSTR fileName, LPCTSTR extension, CSysString &resultPath)
-{
-  UINT32 value;
-  return MySearchPath(path, fileName, extension, resultPath, value);
-}
-
-#ifndef _UNICODE
-inline bool MySearchPath(LPCWSTR path, LPCWSTR fileName, LPCWSTR extension, UString &resultPath)
-{
-  UINT32 value;
-  return MySearchPath(path, fileName, extension, resultPath, value);
-}
-#endif
+bool SetCurrentDir(CFSTR path);
+bool GetCurrentDir(FString &resultPath);
 
 #endif
 
-bool MyGetTempPath(CSysString &resultPath);
-#ifndef _UNICODE
-bool MyGetTempPath(UString &resultPath);
-#endif
-
-UINT MyGetTempFileName(LPCTSTR dirPath, LPCTSTR prefix, CSysString &resultPath);
-#ifndef _UNICODE
-UINT MyGetTempFileName(LPCWSTR dirPath, LPCWSTR prefix, UString &resultPath);
-#endif
+bool MyGetTempPath(FString &resultPath);
 
 class CTempFile
 {
   bool _mustBeDeleted;
-  CSysString _fileName;
+  FString _path;
+  void DisableDeleting() { _mustBeDeleted = false; }
 public:
   CTempFile(): _mustBeDeleted(false) {}
   ~CTempFile() { Remove(); }
+  const FString &GetPath() const { return _path; }
+  bool Create(CFSTR pathPrefix, NIO::COutFile *outFile); // pathPrefix is not folder prefix
+  bool CreateRandomInTempFolder(CFSTR namePrefix, NIO::COutFile *outFile);
+  bool Remove();
+  bool MoveTo(CFSTR name, bool deleteDestBefore);
+};
+
+class CTempDir
+{
+  bool _mustBeDeleted;
+  FString _path;
+public:
+  CTempDir(): _mustBeDeleted(false) {}
+  ~CTempDir() { Remove();  }
+  const FString &GetPath() const { return _path; }
   void DisableDeleting() { _mustBeDeleted = false; }
-  UINT Create(LPCTSTR dirPath, LPCTSTR prefix, CSysString &resultPath);
-  bool Create(LPCTSTR prefix, CSysString &resultPath);
+  bool Create(CFSTR namePrefix) ;
   bool Remove();
 };
 
-#ifdef _UNICODE
-typedef CTempFile CTempFileW;
-#else
-class CTempFileW
+#if !defined(UNDER_CE)
+class CCurrentDirRestorer
 {
-  bool _mustBeDeleted;
-  UString _fileName;
+  FString _path;
 public:
-  CTempFileW(): _mustBeDeleted(false) {}
-  ~CTempFileW() { Remove(); }
-  void DisableDeleting() { _mustBeDeleted = false; }
-  UINT Create(LPCWSTR dirPath, LPCWSTR prefix, UString &resultPath);
-  bool Create(LPCWSTR prefix, UString &resultPath);
-  bool Remove();
-};
-#endif
+  bool NeedRestore;
 
-bool CreateTempDirectory(LPCTSTR prefixChars, CSysString &dirName);
-
-class CTempDirectory
-{
-  bool _mustBeDeleted;
-  CSysString _tempDir;
-public:
-  const CSysString &GetPath() const { return _tempDir; }
-  CTempDirectory(): _mustBeDeleted(false) {}
-  ~CTempDirectory() { Remove();  }
-  bool Create(LPCTSTR prefix) ;
-  bool Remove()
+  CCurrentDirRestorer(): NeedRestore(true)
   {
-    if (!_mustBeDeleted)
-      return true;
-    _mustBeDeleted = !RemoveDirectoryWithSubItems(_tempDir);
-    return (!_mustBeDeleted);
+    GetCurrentDir(_path);
   }
-  void DisableDeleting() { _mustBeDeleted = false; }
-};
-
-#ifdef _UNICODE
-typedef CTempDirectory CTempDirectoryW;
-#else
-class CTempDirectoryW
-{
-  bool _mustBeDeleted;
-  UString _tempDir;
-public:
-  const UString &GetPath() const { return _tempDir; }
-  CTempDirectoryW(): _mustBeDeleted(false) {}
-  ~CTempDirectoryW() { Remove();  }
-  bool Create(LPCWSTR prefix) ;
-  bool Remove()
+  ~CCurrentDirRestorer()
   {
-    if (!_mustBeDeleted)
-      return true;
-    _mustBeDeleted = !RemoveDirectoryWithSubItems(_tempDir);
-    return (!_mustBeDeleted);
+    if (!NeedRestore)
+      return;
+    FString s;
+    if (GetCurrentDir(s))
+      if (s != _path)
+        SetCurrentDir(_path);
   }
-  void DisableDeleting() { _mustBeDeleted = false; }
 };
 #endif
 

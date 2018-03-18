@@ -13,133 +13,232 @@
 namespace NCompress {
 namespace NShrink {
 
-static const UInt32 kBufferSize = (1 << 20);
-static const int kNumMinBits = 9;
+static const UInt32 kEmpty = 256; // kNumItems;
+static const UInt32 kBufferSize = (1 << 18);
+static const unsigned kNumMinBits = 9;
 
 HRESULT CDecoder::CodeReal(ISequentialInStream *inStream, ISequentialOutStream *outStream,
-    const UInt64 * /* inSize */, const UInt64 * /* outSize */, ICompressProgressInfo *progress)
+    const UInt64 *inSize, const UInt64 *outSize, ICompressProgressInfo *progress)
 {
   NBitl::CBaseDecoder<CInBuffer> inBuffer;
   COutBuffer outBuffer;
 
   if (!inBuffer.Create(kBufferSize))
     return E_OUTOFMEMORY;
+  if (!outBuffer.Create(kBufferSize))
+    return E_OUTOFMEMORY;
+
   inBuffer.SetStream(inStream);
   inBuffer.Init();
 
-  if (!outBuffer.Create(kBufferSize))
-    return E_OUTOFMEMORY;
   outBuffer.SetStream(outStream);
   outBuffer.Init();
 
-  UInt64 prevPos = 0;
-  int numBits = kNumMinBits;
-  UInt32 head = 257;
-  bool needPrev = false;
-  UInt32 lastSymbol = 0;
+  {
+    for (unsigned i = 0; i < kNumItems; i++)
+      _parents[i] = kEmpty;
+  }
 
-  int i;
-  for (i = 0; i < kNumItems; i++)
-    _parents[i] = 0;
-  for (i = 0; i < kNumItems; i++)
-    _suffixes[i] = 0;
-  for (i = 0; i < 257; i++)
-    _isFree[i] = false;
-  for (; i < kNumItems; i++)
-    _isFree[i] = true;
+  UInt64 outPrev = 0, inPrev = 0;
+  unsigned numBits = kNumMinBits;
+  unsigned head = 257;
+  int lastSym = -1;
+  Byte lastChar = 0;
+  bool moreOut = false;
+
+  HRESULT res = S_FALSE;
 
   for (;;)
   {
-    UInt32 symbol = inBuffer.ReadBits(numBits);
-    if (inBuffer.ExtraBitsWereRead())
-      break;
-    if (_isFree[symbol])
-      return S_FALSE;
-    if (symbol == 256)
+    _inProcessed = inBuffer.GetProcessedSize();
+    const UInt64 nowPos = outBuffer.GetProcessedSize();
+
+    bool eofCheck = false;
+
+    if (outSize && nowPos >= *outSize)
     {
-      UInt32 symbol = inBuffer.ReadBits(numBits);
-      if (symbol == 1)
+      if (!_fullStreamMode || moreOut)
       {
-        if (numBits < kNumMaxBits)
-          numBits++;
+        res = S_OK;
+        break;
       }
-      else if (symbol == 2)
+      eofCheck = true;
+      // Is specSym(=256) allowed after end of stream ?
+      // Do we need to read it here ?
+    }
+
+    if (progress)
+    {
+      if (nowPos - outPrev >= (1 << 20) || _inProcessed - inPrev >= (1 << 20))
       {
-        if (needPrev)
-          _isFree[head - 1] = true;
-        for (i = 257; i < kNumItems; i++)
-          _isParent[i] = false;
-        for (i = 257; i < kNumItems; i++)
-          if (!_isFree[i])
-            _isParent[_parents[i]] = true;
-        for (i = 257; i < kNumItems; i++)
-          if (!_isParent[i])
-            _isFree[i] = true;
-        head = 257;
-        while (head < kNumItems && !_isFree[head])
-          head++;
-        if (head < kNumItems)
+        outPrev = nowPos;
+        inPrev = _inProcessed;
+        res = progress->SetRatioInfo(&_inProcessed, &nowPos);
+        if (res != SZ_OK)
         {
-          needPrev = true;
-          _isFree[head] = false;
-          _parents[head] = (UInt16)lastSymbol;
-          head++;
+          // break;
+          return res;
         }
       }
-      else
-        return S_FALSE;
-      continue;
     }
-    UInt32 cur = symbol;
-    i = 0;
-    int corectionIndex = -1;
+
+    UInt32 sym = inBuffer.ReadBits(numBits);
+
+    if (inBuffer.ExtraBitsWereRead())
+    {
+      res = S_OK;
+      break;
+    }
+    
+    if (sym == 256)
+    {
+      sym = inBuffer.ReadBits(numBits);
+
+      if (inBuffer.ExtraBitsWereRead())
+        break;
+
+      if (sym == 1)
+      {
+        if (numBits >= kNumMaxBits)
+          break;
+        numBits++;
+        continue;
+      }
+      if (sym != 2)
+      {
+        break;
+        // continue; // info-zip just ignores such code
+      }
+      {
+        /*
+        ---------- Free leaf nodes ----------
+        Note : that code can mark _parents[lastSym] as free, and next
+        inserted node will be Orphan in that case.
+        */
+
+        unsigned i;
+        for (i = 256; i < kNumItems; i++)
+          _stack[i] = 0;
+        for (i = 257; i < kNumItems; i++)
+        {
+          unsigned par = _parents[i];
+          if (par != kEmpty)
+            _stack[par] = 1;
+        }
+        for (i = 257; i < kNumItems; i++)
+          if (_stack[i] == 0)
+            _parents[i] = kEmpty;
+        head = 257;
+        continue;
+      }
+    }
+
+    if (eofCheck)
+    {
+      // It's can be error case.
+      // That error can be detected later in (*inSize != _inProcessed) check.
+      res = S_OK;
+      break;
+    }
+
+    bool needPrev = false;
+    if (head < kNumItems && lastSym >= 0)
+    {
+      while (head < kNumItems && _parents[head] != kEmpty)
+        head++;
+      if (head < kNumItems)
+      {
+        /*
+        if (head == lastSym), it updates Orphan to self-linked Orphan and creates two problems:
+            1) we must check _stack[i++] overflow in code that walks tree nodes.
+            2) self-linked node can not be removed. So such self-linked nodes can occupy all _parents items.
+        */
+        needPrev = true;
+        _parents[head] = (UInt16)lastSym;
+        _suffixes[head] = (Byte)lastChar;
+        head++;
+      }
+    }
+
+    lastSym = sym;
+    unsigned cur = sym;
+    unsigned i = 0;
+    
     while (cur >= 256)
     {
-      if (cur == head - 1)
-        corectionIndex = i;
       _stack[i++] = _suffixes[cur];
       cur = _parents[cur];
+      // don't change that code:
+      // Orphan Check and self-linked Orphan check (_stack overflow check);
+      if (cur == kEmpty || i >= kNumItems)
+        break;
     }
-    _stack[i++] = (Byte)cur;
-    if (needPrev)
-    {
-      _suffixes[head - 1] = (Byte)cur;
-      if (corectionIndex >= 0)
-        _stack[corectionIndex] = (Byte)cur;
-    }
-    while (i > 0)
-      outBuffer.WriteByte((_stack[--i]));
-    while (head < kNumItems && !_isFree[head])
-      head++;
-    if (head < kNumItems)
-    {
-      needPrev = true;
-      _isFree[head] = false;
-      _parents[head] = (UInt16)symbol;
-      head++;
-    }
-    else
-      needPrev = false;
-    lastSymbol = symbol;
+    
+    if (cur == kEmpty || i >= kNumItems)
+      break;
 
-    UInt64 nowPos = outBuffer.GetProcessedSize();
-    if (progress != NULL && nowPos - prevPos > (1 << 18))
+    _stack[i++] = (Byte)cur;
+    lastChar = (Byte)cur;
+
+    if (needPrev)
+      _suffixes[(size_t)head - 1] = (Byte)cur;
+
+    if (outSize)
     {
-      prevPos = nowPos;
-      UInt64 packSize = inBuffer.GetProcessedSize();
-      RINOK(progress->SetRatioInfo(&packSize, &nowPos));
+      const UInt64 limit = *outSize - nowPos;
+      if (i > limit)
+      {
+        moreOut = true;
+        i = (unsigned)limit;
+      }
     }
+
+    do
+      outBuffer.WriteByte(_stack[--i]);
+    while (i);
   }
-  return outBuffer.Flush();
+  
+  RINOK(outBuffer.Flush());
+
+  if (res == S_OK)
+    if (_fullStreamMode)
+    {
+      if (moreOut)
+        res = S_FALSE;
+      const UInt64 nowPos = outBuffer.GetProcessedSize();
+      if (outSize && *outSize != nowPos)
+        res = S_FALSE;
+      if (inSize && *inSize != _inProcessed)
+        res = S_FALSE;
+    }
+  
+  return res;
 }
 
-STDMETHODIMP CDecoder ::Code(ISequentialInStream *inStream, ISequentialOutStream *outStream,
-    const UInt64 *inSize, const UInt64 *outSize,    ICompressProgressInfo *progress)
+
+STDMETHODIMP CDecoder::Code(ISequentialInStream *inStream, ISequentialOutStream *outStream,
+    const UInt64 *inSize, const UInt64 *outSize, ICompressProgressInfo *progress)
 {
   try { return CodeReal(inStream, outStream, inSize, outSize, progress); }
-  catch(const CInBufferException &e) { return e.ErrorCode; }
-  catch(const COutBufferException &e) { return e.ErrorCode; }
+  // catch(const CInBufferException &e) { return e.ErrorCode; }
+  // catch(const COutBufferException &e) { return e.ErrorCode; }
+  catch(const CSystemException &e) { return e.ErrorCode; }
   catch(...) { return S_FALSE; }
 }
+
+
+STDMETHODIMP CDecoder::SetFinishMode(UInt32 finishMode)
+{
+  _fullStreamMode = (finishMode != 0);
+  return S_OK;
+}
+
+
+STDMETHODIMP CDecoder::GetInStreamProcessedSize(UInt64 *value)
+{
+  *value = _inProcessed;
+  return S_OK;
+}
+
 
 }}

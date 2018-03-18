@@ -1,14 +1,12 @@
 /* Lzma2Dec.h -- LZMA2 Decoder
-2009-05-03 : Igor Pavlov : Public domain */
+2017-04-03 : Igor Pavlov : Public domain */
 
 #ifndef __LZMA2_DEC_H
 #define __LZMA2_DEC_H
 
 #include "LzmaDec.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+EXTERN_C_BEGIN
 
 /* ---------- State Interface ---------- */
 
@@ -17,7 +15,7 @@ typedef struct
   CLzmaDec decoder;
   UInt32 packSize;
   UInt32 unpackSize;
-  int state;
+  unsigned state;
   Byte control;
   Bool needInitDic;
   Bool needInitState;
@@ -28,8 +26,8 @@ typedef struct
 #define Lzma2Dec_FreeProbs(p, alloc) LzmaDec_FreeProbs(&(p)->decoder, alloc);
 #define Lzma2Dec_Free(p, alloc) LzmaDec_Free(&(p)->decoder, alloc);
 
-SRes Lzma2Dec_AllocateProbs(CLzma2Dec *p, Byte prop, ISzAlloc *alloc);
-SRes Lzma2Dec_Allocate(CLzma2Dec *p, Byte prop, ISzAlloc *alloc);
+SRes Lzma2Dec_AllocateProbs(CLzma2Dec *p, Byte prop, ISzAllocPtr alloc);
+SRes Lzma2Dec_Allocate(CLzma2Dec *p, Byte prop, ISzAllocPtr alloc);
 void Lzma2Dec_Init(CLzma2Dec *p);
 
 
@@ -75,10 +73,8 @@ Returns:
 */
 
 SRes Lzma2Decode(Byte *dest, SizeT *destLen, const Byte *src, SizeT *srcLen,
-    Byte prop, ELzmaFinishMode finishMode, ELzmaStatus *status, ISzAlloc *alloc);
+    Byte prop, ELzmaFinishMode finishMode, ELzmaStatus *status, ISzAllocPtr alloc);
 
-#ifdef __cplusplus
-}
-#endif
+EXTERN_C_END
 
 #endif

@@ -46,18 +46,30 @@ struct CTables: public CLevels
   void InitStructures();
 };
 
-typedef struct _CSeqInStream
+
+struct CEncProps
 {
-  ISeqInStream SeqInStream;
-  CMyComPtr<ISequentialInStream> RealStream;
-} CSeqInStream;
+  int Level;
+  int algo;
+  int fb;
+  int btMode;
+  UInt32 mc;
+  UInt32 numPasses;
+
+  CEncProps()
+  {
+    Level = -1;
+    mc = 0;
+    algo = fb = btMode = -1;
+    numPasses = (UInt32)(Int32)-1;
+  }
+  void Normalize();
+};
 
 class CCoder
 {
   CMatchFinder _lzInWindow;
   CBitlEncoder m_OutStream;
-
-  CSeqInStream _seqInStream;
 
 public:
   CCodeValue *m_Values;
@@ -72,8 +84,8 @@ public:
 
   UInt32 m_Pos;
 
-  int m_NumPasses;
-  int m_NumDivPasses;
+  unsigned m_NumPasses;
+  unsigned m_NumDivPasses;
   bool m_CheckStatic;
   bool m_IsMultiPass;
   UInt32 m_ValueBlockSize;
@@ -87,8 +99,8 @@ public:
   bool m_Deflate64Mode;
 
   Byte m_LevelLevels[kLevelTableSize];
-  int m_NumLitLenLevels;
-  int m_NumDistLevels;
+  unsigned m_NumLitLenLevels;
+  unsigned m_NumDistLevels;
   UInt32 m_NumLevelCodes;
   UInt32 m_ValueIndex;
 
@@ -116,7 +128,6 @@ public:
   COptimal m_Optimum[kNumOpts];
 
   UInt32 m_MatchFinderCycles;
-  // IMatchFinderSetNumPasses *m_SetMfPasses;
 
   void GetMatches();
   void MovePos(UInt32 num);
@@ -124,17 +135,17 @@ public:
   UInt32 GetOptimal(UInt32 &backRes);
   UInt32 GetOptimalFast(UInt32 &backRes);
 
-  void LevelTableDummy(const Byte *levels, int numLevels, UInt32 *freqs);
+  void LevelTableDummy(const Byte *levels, unsigned numLevels, UInt32 *freqs);
 
-  void WriteBits(UInt32 value, int numBits);
-  void LevelTableCode(const Byte *levels, int numLevels, const Byte *lens, const UInt32 *codes);
+  void WriteBits(UInt32 value, unsigned numBits);
+  void LevelTableCode(const Byte *levels, unsigned numLevels, const Byte *lens, const UInt32 *codes);
 
   void MakeTables(unsigned maxHuffLen);
   UInt32 GetLzBlockPrice() const;
   void TryBlock();
-  UInt32 TryDynBlock(int tableIndex, UInt32 numPasses);
+  UInt32 TryDynBlock(unsigned tableIndex, UInt32 numPasses);
 
-  UInt32 TryFixedBlock(int tableIndex);
+  UInt32 TryFixedBlock(unsigned tableIndex);
 
   void SetPrices(const CLevels &levels);
   void WriteBlock();
@@ -147,23 +158,10 @@ public:
   
   void WriteBlockData(bool writeMode, bool finalBlock);
 
-  void ReleaseStreams()
-  {
-    _seqInStream.RealStream.Release();
-    m_OutStream.ReleaseStream();
-  }
-  class CCoderReleaser
-  {
-    CCoder *m_Coder;
-  public:
-    CCoderReleaser(CCoder *coder): m_Coder(coder) {}
-    ~CCoderReleaser() { m_Coder->ReleaseStreams(); }
-  };
-  friend class CCoderReleaser;
+  UInt32 GetBlockPrice(unsigned tableIndex, unsigned numDivPasses);
+  void CodeBlock(unsigned tableIndex, bool finalBlock);
 
-  UInt32 GetBlockPrice(int tableIndex, int numDivPasses);
-  void CodeBlock(int tableIndex, bool finalBlock);
-
+  void SetProps(const CEncProps *props2);
 public:
   CCoder(bool deflate64Mode = false);
   ~CCoder();
@@ -185,7 +183,7 @@ class CCOMCoder :
   public CCoder
 {
 public:
-  MY_UNKNOWN_IMP1(ICompressSetCoderProperties)
+  MY_UNKNOWN_IMP2(ICompressCoder, ICompressSetCoderProperties)
   CCOMCoder(): CCoder(false) {};
   STDMETHOD(Code)(ISequentialInStream *inStream, ISequentialOutStream *outStream,
       const UInt64 *inSize, const UInt64 *outSize, ICompressProgressInfo *progress);
@@ -199,7 +197,7 @@ class CCOMCoder64 :
   public CCoder
 {
 public:
-  MY_UNKNOWN_IMP1(ICompressSetCoderProperties)
+  MY_UNKNOWN_IMP2(ICompressCoder, ICompressSetCoderProperties)
   CCOMCoder64(): CCoder(true) {};
   STDMETHOD(Code)(ISequentialInStream *inStream, ISequentialOutStream *outStream,
       const UInt64 *inSize, const UInt64 *outSize, ICompressProgressInfo *progress);

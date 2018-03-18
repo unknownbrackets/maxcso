@@ -2,13 +2,13 @@
 
 #include "StdAfx.h"
 
-#include "Common/MyCom.h"
+#include "../Common/MyCom.h"
 #ifndef _UNICODE
-#include "Common/StringConvert.h"
+#include "../Common/StringConvert.h"
 #endif
 
-#include "Windows/COM.h"
-#include "Windows/Shell.h"
+#include "COM.h"
+#include "Shell.h"
 
 #ifndef _UNICODE
 extern bool g_IsNT;
@@ -95,34 +95,36 @@ UString CDrop::QueryFileName(UINT fileIndex)
   {
     AString fileNameA;
     UINT bufferSize = QueryFile(fileIndex, (LPTSTR)NULL, 0);
-    QueryFile(fileIndex, fileNameA.GetBuffer(bufferSize + 2), bufferSize + 1);
-    fileNameA.ReleaseBuffer();
+    const unsigned len = bufferSize + 2;
+    QueryFile(fileIndex, fileNameA.GetBuf(len), bufferSize + 1);
+    fileNameA.ReleaseBuf_CalcLen(len);
     fileName = GetUnicodeString(fileNameA);
   }
   else
   #endif
   {
     UINT bufferSize = QueryFile(fileIndex, (LPWSTR)NULL, 0);
-    QueryFile(fileIndex, fileName.GetBuffer(bufferSize + 2), bufferSize + 1);
-    fileName.ReleaseBuffer();
+    const unsigned len = bufferSize + 2;
+    QueryFile(fileIndex, fileName.GetBuf(len), bufferSize + 1);
+    fileName.ReleaseBuf_CalcLen(len);
   }
   return fileName;
 }
 
 void CDrop::QueryFileNames(UStringVector &fileNames)
 {
-  fileNames.Clear();
   UINT numFiles = QueryCountOfFiles();
-  fileNames.Reserve(numFiles);
+  fileNames.ClearAndReserve(numFiles);
   for (UINT i = 0; i < numFiles; i++)
-    fileNames.Add(QueryFileName(i));
+    fileNames.AddInReserved(QueryFileName(i));
 }
 
 
 bool GetPathFromIDList(LPCITEMIDLIST itemIDList, CSysString &path)
 {
-  bool result = BOOLToBool(::SHGetPathFromIDList(itemIDList, path.GetBuffer(MAX_PATH * 2)));
-  path.ReleaseBuffer();
+  const unsigned len = MAX_PATH * 2;
+  bool result = BOOLToBool(::SHGetPathFromIDList(itemIDList, path.GetBuf(len)));
+  path.ReleaseBuf_CalcLen(len);
   return result;
 }
 
@@ -140,8 +142,8 @@ bool BrowseForFolder(HWND, LPCTSTR, UINT, LPCTSTR, CSysString &)
   return false;
 }
 
-bool BrowseForFolder(HWND owner, LPCTSTR title,
-    LPCTSTR initialFolder, CSysString &resultPath)
+bool BrowseForFolder(HWND /* owner */, LPCTSTR /* title */,
+    LPCTSTR /* initialFolder */, CSysString & /* resultPath */)
 {
   /*
   // SHBrowseForFolder doesn't work before CE 6.0 ?
@@ -151,8 +153,8 @@ bool BrowseForFolder(HWND owner, LPCTSTR title,
     MessageBoxW(0, L"yes", L"", 0);
   */
   /*
-  UString s = L"all files";
-  s += L" (*.*)";
+  UString s = "all files";
+  s += " (*.*)";
   return MyGetOpenFileName(owner, title, initialFolder, s, resultPath, true);
   */
   return false;
@@ -175,7 +177,7 @@ bool BrowseForFolder(LPBROWSEINFO browseInfo, CSysString &resultPath)
 int CALLBACK BrowseCallbackProc(HWND hwnd, UINT uMsg, LPARAM /* lp */, LPARAM data)
 {
   #ifndef UNDER_CE
-  switch(uMsg)
+  switch (uMsg)
   {
     case BFFM_INITIALIZED:
     {
@@ -209,14 +211,16 @@ bool BrowseForFolder(HWND owner, LPCTSTR title, UINT ulFlags,
   browseInfo.hwndOwner = owner;
   browseInfo.pidlRoot = NULL;
 
-  // there are Unicode/astring problems in WinCE SDK!!!
+  // there are Unicode/Astring problems in some WinCE SDK ?
+  /*
   #ifdef UNDER_CE
-  browseInfo.pszDisplayName = (LPSTR)displayName.GetBuffer(MAX_PATH);
+  browseInfo.pszDisplayName = (LPSTR)displayName.GetBuf(MAX_PATH);
   browseInfo.lpszTitle = (LPCSTR)title;
   #else
-  browseInfo.pszDisplayName = displayName.GetBuffer(MAX_PATH);
+  */
+  browseInfo.pszDisplayName = displayName.GetBuf(MAX_PATH);
   browseInfo.lpszTitle = title;
-  #endif
+  // #endif
   browseInfo.ulFlags = ulFlags;
   browseInfo.lpfn = (initialFolder != NULL) ? BrowseCallbackProc : NULL;
   browseInfo.lParam = (LPARAM)initialFolder;
@@ -245,8 +249,9 @@ bool GetPathFromIDList(LPCITEMIDLIST itemIDList, UString &path)
     ::GetProcAddress(::GetModuleHandleW(L"shell32.dll"), "SHGetPathFromIDListW");
   if (shGetPathFromIDListW == 0)
     return false;
-  bool result = BOOLToBool(shGetPathFromIDListW(itemIDList, path.GetBuffer(MAX_PATH * 2)));
-  path.ReleaseBuffer();
+  const unsigned len = MAX_PATH * 2;
+  bool result = BOOLToBool(shGetPathFromIDListW(itemIDList, path.GetBuf(len)));
+  path.ReleaseBuf_CalcLen(len);
   return result;
 }
 
@@ -270,7 +275,7 @@ bool BrowseForFolder(LPBROWSEINFOW browseInfo, UString &resultPath)
 
 int CALLBACK BrowseCallbackProc2(HWND hwnd, UINT uMsg, LPARAM /* lp */, LPARAM data)
 {
-  switch(uMsg)
+  switch (uMsg)
   {
     case BFFM_INITIALIZED:
     {
@@ -303,7 +308,7 @@ static bool BrowseForFolder(HWND owner, LPCWSTR title, UINT ulFlags,
   BROWSEINFOW browseInfo;
   browseInfo.hwndOwner = owner;
   browseInfo.pidlRoot = NULL;
-  browseInfo.pszDisplayName = displayName.GetBuffer(MAX_PATH);
+  browseInfo.pszDisplayName = displayName.GetBuf(MAX_PATH);
   browseInfo.lpszTitle = title;
   browseInfo.ulFlags = ulFlags;
   browseInfo.lpfn = (initialFolder != NULL) ? BrowseCallbackProc2 : NULL;

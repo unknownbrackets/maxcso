@@ -9,11 +9,11 @@
 #include "Rar20Crypto.h"
 
 namespace NCrypto {
-namespace NRar20 {
+namespace NRar2 {
 
-static const int kNumRounds = 32;
+static const unsigned kNumRounds = 32;
 
-static const Byte InitSubstTable[256] = {
+static const Byte g_InitSubstTable[256] = {
   215, 19,149, 35, 73,197,192,205,249, 28, 16,119, 48,221,  2, 42,
   232,  1,177,233, 14, 88,219, 25,223,195,244, 90, 87,239,153,137,
   255,199,147, 70, 92, 66,246, 13,216, 40, 62, 29,217,230, 86,  6,
@@ -34,46 +34,53 @@ static const Byte InitSubstTable[256] = {
 
 void CData::UpdateKeys(const Byte *data)
 {
-  for (int i = 0; i < 16; i += 4)
-    for (int j = 0; j < 4; j++)
+  for (unsigned i = 0; i < 16; i += 4)
+    for (unsigned j = 0; j < 4; j++)
       Keys[j] ^= g_CrcTable[data[i + j]];
 }
 
-static void Swap(Byte *b1, Byte *b2)
+static inline void Swap(Byte &b1, Byte &b2)
 {
-  Byte b = *b1;
-  *b1 = *b2;
-  *b2 = b;
+  Byte b = b1;
+  b1 = b2;
+  b2 = b;
 }
 
-void CData::SetPassword(const Byte *password, UInt32 passwordLen)
+void CData::SetPassword(const Byte *data, unsigned size)
 {
   Keys[0] = 0xD3A3B879L;
   Keys[1] = 0x3F6D12F7L;
   Keys[2] = 0x7515A235L;
   Keys[3] = 0xA4E7F123L;
   
-  Byte psw[256];
+  Byte psw[128];
   memset(psw, 0, sizeof(psw));
-  memcpy(psw, password, passwordLen);
-  memcpy(SubstTable, InitSubstTable, sizeof(SubstTable));
+  if (size != 0)
+  {
+    if (size >= sizeof(psw))
+      size = sizeof(psw) - 1;
+    memcpy(psw, data, size);
+  }
 
-  for (UInt32 j = 0; j < 256; j++)
-    for (UInt32 i = 0; i < passwordLen; i += 2)
+  memcpy(SubstTable, g_InitSubstTable, sizeof(SubstTable));
+
+  for (unsigned j = 0; j < 256; j++)
+    for (unsigned i = 0; i < size; i += 2)
     {
-      UInt32 n2 = (Byte)g_CrcTable[(psw[i + 1] + j) & 0xFF];
-      UInt32 n1 = (Byte)g_CrcTable[(psw[i] - j) & 0xFF];
-      for (UInt32 k = 1; (n1 & 0xFF) != n2; n1++, k++)
-        Swap(&SubstTable[n1 & 0xFF], &SubstTable[(n1 + i + k) & 0xFF]);
+      unsigned n1 = (Byte)g_CrcTable[(psw[i] - j) & 0xFF];
+      unsigned n2 = (Byte)g_CrcTable[(psw[(size_t)i + 1] + j) & 0xFF];
+      for (unsigned k = 1; (n1 & 0xFF) != n2; n1++, k++)
+        Swap(SubstTable[n1 & 0xFF], SubstTable[(n1 + i + k) & 0xFF]);
     }
-  for (UInt32 i = 0; i < passwordLen; i+= 16)
-    EncryptBlock(&psw[i]);
+  
+  for (unsigned i = 0; i < size; i += 16)
+    EncryptBlock(psw + i);
 }
 
 void CData::CryptBlock(Byte *buf, bool encrypt)
 {
   Byte inBuf[16];
-  UInt32 A, B, C, D, T, TA, TB;
+  UInt32 A, B, C, D;
 
   A = GetUi32(buf +  0) ^ Keys[0];
   B = GetUi32(buf +  4) ^ Keys[1];
@@ -83,17 +90,13 @@ void CData::CryptBlock(Byte *buf, bool encrypt)
   if (!encrypt)
     memcpy(inBuf, buf, sizeof(inBuf));
   
-  for (int i = 0; i < kNumRounds; i++)
+  for (unsigned i = 0; i < kNumRounds; i++)
   {
     UInt32 key = Keys[(encrypt ? i : (kNumRounds - 1 - i)) & 3];
-    T = ((C + rotlFixed(D, 11)) ^ key);
-    TA = A ^ SubstLong(T);
-    T = ((D ^ rotlFixed(C, 17)) + key);
-    TB = B ^ SubstLong(T);
-    A = C;
-    B = D;
-    C = TA;
-    D = TB;
+    UInt32 TA = A ^ SubstLong((C + rotlFixed(D, 11)) ^ key);
+    UInt32 TB = B ^ SubstLong((D ^ rotlFixed(C, 17)) + key);
+    A = C; C = TA;
+    B = D; D = TB;
   }
 
   SetUi32(buf +  0, C ^ Keys[0]);
@@ -102,12 +105,6 @@ void CData::CryptBlock(Byte *buf, bool encrypt)
   SetUi32(buf + 12, B ^ Keys[3]);
 
   UpdateKeys(encrypt ? buf : inBuf);
-}
-
-STDMETHODIMP CDecoder::CryptoSetPassword(const Byte *data, UInt32 size)
-{
-  _cipher.SetPassword(data, size);
-  return S_OK;
 }
 
 STDMETHODIMP CDecoder::Init()
@@ -123,10 +120,10 @@ STDMETHODIMP_(UInt32) CDecoder::Filter(Byte *data, UInt32 size)
     return 0;
   if (size < kBlockSize)
     return kBlockSize;
-  UInt32 i;
   size -= kBlockSize;
+  UInt32 i;
   for (i = 0; i <= size; i += kBlockSize)
-    _cipher.DecryptBlock(data + i);
+    DecryptBlock(data + i);
   return i;
 }
 

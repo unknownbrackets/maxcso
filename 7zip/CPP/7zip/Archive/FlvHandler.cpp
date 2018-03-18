@@ -2,15 +2,17 @@
 
 #include "StdAfx.h"
 
+// #include <stdio.h>
+
 #include "../../../C/CpuArch.h"
 
-#include "Common/Buffer.h"
-#include "Common/ComTry.h"
-// #include "Common/Defs.h"
-#include "Common/MyString.h"
+#include "../../Common/ComTry.h"
+#include "../../Common/MyBuffer.h"
+#include "../../Common/MyString.h"
 
-#include "Windows/PropVariant.h"
+#include "../../Windows/PropVariant.h"
 
+#include "../Common/InBuffer.h"
 #include "../Common/ProgressUtils.h"
 #include "../Common/RegisterArc.h"
 #include "../Common/StreamObjects.h"
@@ -29,9 +31,9 @@ namespace NArchive {
 namespace NFlv {
 
 static const UInt32 kFileSizeMax = (UInt32)1 << 30;
-static const int kNumChunksMax = (UInt32)1 << 23;
+static const UInt32 kNumChunksMax = (UInt32)1 << 23;
 
-const UInt32 kTagHeaderSize = 11;
+static const UInt32 kTagHeaderSize = 11;
 
 static const Byte kFlag_Video = 1;
 static const Byte kFlag_Audio = 4;
@@ -39,13 +41,11 @@ static const Byte kFlag_Audio = 4;
 static const Byte kType_Audio = 8;
 static const Byte kType_Video = 9;
 static const Byte kType_Meta = 18;
-static const int kNumTypes = 19;
+static const unsigned kNumTypes = 19;
 
 struct CItem
 {
-  UInt32 Offset;
-  UInt32 Size;
-  // UInt32 Time;
+  CByteBuffer Data;
   Byte Type;
 };
 
@@ -55,7 +55,7 @@ struct CItem2
   Byte SubType;
   Byte Props;
   bool SameSubTypes;
-  int NumChunks;
+  unsigned NumChunks;
   size_t Size;
 
   CReferenceBuf *BufSpec;
@@ -69,93 +69,83 @@ class CHandler:
   public IInArchiveGetStream,
   public CMyUnknownImp
 {
-  int _isRaw;
   CMyComPtr<IInStream> _stream;
   CObjectVector<CItem2> _items2;
-  // CByteBuffer _metadata;
+  CByteBuffer _metadata;
+  bool _isRaw;
+  UInt64 _phySize;
+
   HRESULT Open2(IInStream *stream, IArchiveOpenCallback *callback);
-  AString GetComment();
+  // AString GetComment();
 public:
   MY_UNKNOWN_IMP2(IInArchive, IInArchiveGetStream)
   INTERFACE_IInArchive(;)
   STDMETHOD(GetStream)(UInt32 index, ISequentialInStream **stream);
 };
 
-STATPROPSTG kProps[] =
+static const Byte kProps[] =
 {
-  { NULL, kpidSize, VT_UI8},
-  { NULL, kpidNumBlocks, VT_UI4},
-  { NULL, kpidComment, VT_BSTR}
+  kpidSize,
+  kpidNumBlocks,
+  kpidComment
 };
-
-/*
-STATPROPSTG kArcProps[] =
-{
-  { NULL, kpidComment, VT_BSTR}
-};
-*/
 
 IMP_IInArchive_Props
-IMP_IInArchive_ArcProps_NO
+IMP_IInArchive_ArcProps_NO_Table
 
-static const char *g_AudioTypes[16] =
+static const char * const g_AudioTypes[16] =
 {
-  "pcm",
-  "adpcm",
-  "mp3",
-  "pcm_le",
-  "nellymoser16",
-  "nellymoser8",
-  "nellymoser",
-  "g711a",
-  "g711m",
-  "audio9",
-  "aac",
-  "speex",
-  "audio12",
-  "audio13",
-  "mp3",
-  "audio15"
+    "pcm"
+  , "adpcm"
+  , "mp3"
+  , "pcm_le"
+  , "nellymoser16"
+  , "nellymoser8"
+  , "nellymoser"
+  , "g711a"
+  , "g711m"
+  , "audio9"
+  , "aac"
+  , "speex"
+  , "audio12"
+  , "audio13"
+  , "mp3"
+  , "audio15"
 };
 
-static const char *g_VideoTypes[16] =
+static const char * const g_VideoTypes[16] =
 {
-  "video0",
-  "jpeg",
-  "h263",
-  "screen",
-  "vp6",
-  "vp6alpha",
-  "screen2",
-  "avc",
-  "video8",
-  "video9",
-  "video10",
-  "video11",
-  "video12",
-  "video13",
-  "video14",
-  "video15"
+    "video0"
+  , "jpeg"
+  , "h263"
+  , "screen"
+  , "vp6"
+  , "vp6alpha"
+  , "screen2"
+  , "avc"
+  , "video8"
+  , "video9"
+  , "video10"
+  , "video11"
+  , "video12"
+  , "video13"
+  , "video14"
+  , "video15"
 };
 
-static const char *g_Rates[4] =
+static const char * const g_Rates[4] =
 {
-  "5.5 kHz",
-  "11 kHz",
-  "22 kHz",
-  "44 kHz"
+    "5.5 kHz"
+  , "11 kHz"
+  , "22 kHz"
+  , "44 kHz"
 };
-
-static void MyStrCat(char *d, const char *s)
-{
-  MyStringCopy(d + MyStringLen(d), s);
-}
 
 STDMETHODIMP CHandler::GetProperty(UInt32 index, PROPID propID, PROPVARIANT *value)
 {
   NWindows::NCOM::CPropVariant prop;
   const CItem2 &item = _items2[index];
-  switch(propID)
+  switch (propID)
   {
     case kpidExtension:
       prop = _isRaw ?
@@ -170,13 +160,13 @@ STDMETHODIMP CHandler::GetProperty(UInt32 index, PROPID propID, PROPVARIANT *val
     case kpidComment:
     {
       char sz[64];
-      MyStringCopy(sz, (item.IsAudio() ? g_AudioTypes[item.SubType] : g_VideoTypes[item.SubType]) );
+      char *s = MyStpCpy(sz, (item.IsAudio() ? g_AudioTypes[item.SubType] : g_VideoTypes[item.SubType]) );
       if (item.IsAudio())
       {
-        MyStrCat(sz, " ");
-        MyStrCat(sz, g_Rates[(item.Props >> 2) & 3]);
-        MyStrCat(sz, (item.Props & 2) ? " 16-bit" : " 8-bit");
-        MyStrCat(sz, (item.Props & 1) ? " stereo" : " mono");
+        *s++ = ' ';
+        s = MyStpCpy(s, g_Rates[(item.Props >> 2) & 3]);
+        s = MyStpCpy(s, (item.Props & 2) ? " 16-bit" : " 8-bit");
+        s = MyStpCpy(s, (item.Props & 1) ? " stereo" : " mono");
       }
       prop = sz;
       break;
@@ -190,7 +180,7 @@ STDMETHODIMP CHandler::GetProperty(UInt32 index, PROPID propID, PROPVARIANT *val
 AString CHandler::GetComment()
 {
   const Byte *p = _metadata;
-  size_t size = _metadata.GetCapacity();
+  size_t size = _metadata.Size();
   AString res;
   if (size > 0)
   {
@@ -207,10 +197,7 @@ AString CHandler::GetComment()
         break;
       {
         AString temp;
-        char *sz = temp.GetBuffer(len);
-        memcpy(sz, p, len);
-        sz[len] = 0;
-        temp.ReleaseBuffer();
+        temp.SetFrom_CalcLen((const char *)p, len);
         if (!res.IsEmpty())
           res += '\n';
         res += temp;
@@ -222,7 +209,7 @@ AString CHandler::GetComment()
       Byte type = *p++;
       size--;
       bool ok = false;
-      switch(type)
+      switch (type)
       {
         case 0:
         {
@@ -263,25 +250,25 @@ AString CHandler::GetComment()
   }
   return res;
 }
+*/
 
 STDMETHODIMP CHandler::GetArchiveProperty(PROPID propID, PROPVARIANT *value)
 {
-  COM_TRY_BEGIN
+  // COM_TRY_BEGIN
   NWindows::NCOM::CPropVariant prop;
-  switch(propID)
+  switch (propID)
   {
-    case kpidComment: prop = GetComment(); break;
+    // case kpidComment: prop = GetComment(); break;
+    case kpidPhySize: prop = (UInt64)_phySize; break;
+    case kpidIsNotArcType: prop = true; break;
   }
   prop.Detach(value);
   return S_OK;
-  COM_TRY_END
+  // COM_TRY_END
 }
-*/
 
 HRESULT CHandler::Open2(IInStream *stream, IArchiveOpenCallback *callback)
 {
-  CRecordVector<CItem> items;
-
   const UInt32 kHeaderSize = 13;
   Byte header[kHeaderSize];
   RINOK(ReadStream_FALSE(stream, header, kHeaderSize));
@@ -291,69 +278,51 @@ HRESULT CHandler::Open2(IInStream *stream, IArchiveOpenCallback *callback)
       header[3] != 1 ||
       (header[4] & 0xFA) != 0)
     return S_FALSE;
-  UInt32 offset = Get32(header + 5);
+  UInt64 offset = Get32(header + 5);
   if (offset != 9 || Get32(header + 9) != 0)
     return S_FALSE;
-  offset += 4;
+  offset = kHeaderSize;
  
-  CByteBuffer inBuf;
-  size_t fileSize;
-  {
-    UInt64 fileSize64;
-    RINOK(stream->Seek(0, STREAM_SEEK_END, &fileSize64));
-    if (fileSize64 > kFileSizeMax)
-      return S_FALSE;
+  CInBuffer inBuf;
+  if (!inBuf.Create(1 << 15))
+    return E_OUTOFMEMORY;
+  inBuf.SetStream(stream);
 
-    if (callback)
-      RINOK(callback->SetTotal(NULL, &fileSize64))
-
-    RINOK(stream->Seek(0, STREAM_SEEK_SET, NULL));
-    fileSize = (size_t)fileSize64;
-    inBuf.SetCapacity(fileSize);
-    for (size_t pos = 0; pos < fileSize;)
-    {
-      UInt64 offset64 = pos;
-      if (callback)
-        RINOK(callback->SetCompleted(NULL, &offset64))
-      size_t rem = MyMin(fileSize - pos, (size_t)(1 << 20));
-      RINOK(ReadStream_FALSE(stream, inBuf + pos, rem));
-      pos += rem;
-    }
-  }
-
+  CObjectVector<CItem> items;
   int lasts[kNumTypes];
-  int i;
+  unsigned i;
   for (i = 0; i < kNumTypes; i++)
     lasts[i] = -1;
 
-  while (offset < fileSize)
+  _phySize = offset;
+  for (;;)
   {
+    Byte buf[kTagHeaderSize];
     CItem item;
-    item.Offset = offset;
-    const Byte *buf = inBuf + offset;
-    offset += kTagHeaderSize;
-    if (offset > fileSize)
-      return S_FALSE;
-
+    if (inBuf.ReadBytes(buf, kTagHeaderSize) != kTagHeaderSize)
+      break;
     item.Type = buf[0];
     UInt32 size = Get24(buf + 1);
     if (size < 1)
-      return S_FALSE;
+      break;
     // item.Time = Get24(buf + 4);
     // item.Time |= (UInt32)buf[7] << 24;
     if (Get24(buf + 8) != 0) // streamID
-      return S_FALSE;
+      break;
 
     UInt32 curSize = kTagHeaderSize + size + 4;
-    item.Size = curSize;
-    
-    offset += curSize - kTagHeaderSize;
-    if (offset > fileSize)
-      return S_FALSE;
-    
-    if (Get32(buf + kTagHeaderSize + size) != kTagHeaderSize + size)
-      return S_FALSE;
+    item.Data.Alloc(curSize);
+    memcpy(item.Data, buf, kTagHeaderSize);
+    if (inBuf.ReadBytes(item.Data + kTagHeaderSize, size) != size)
+      break;
+    if (inBuf.ReadBytes(item.Data + kTagHeaderSize + size, 4) != 4)
+      break;
 
+    if (Get32(item.Data + kTagHeaderSize + size) != kTagHeaderSize + size)
+      break;
+
+    offset += curSize;
+    
     // printf("\noffset = %6X type = %2d time = %6d size = %6d", (UInt32)offset, item.Type, item.Time, item.Size);
 
     if (item.Type == kType_Meta)
@@ -363,20 +332,20 @@ HRESULT CHandler::Open2(IInStream *stream, IArchiveOpenCallback *callback)
     else
     {
       if (item.Type != kType_Audio && item.Type != kType_Video)
-        return S_FALSE;
+        break;
       if (items.Size() >= kNumChunksMax)
         return S_FALSE;
-      Byte firstByte = buf[kTagHeaderSize];
+      Byte firstByte = item.Data[kTagHeaderSize];
       Byte subType, props;
       if (item.Type == kType_Audio)
       {
-        subType = firstByte >> 4;
-        props = firstByte & 0xF;
+        subType = (Byte)(firstByte >> 4);
+        props = (Byte)(firstByte & 0xF);
       }
       else
       {
-        subType = firstByte & 0xF;
-        props = firstByte >> 4;
+        subType = (Byte)(firstByte & 0xF);
+        props = (Byte)(firstByte >> 4);
       }
       int last = lasts[item.Type];
       if (last < 0)
@@ -401,7 +370,14 @@ HRESULT CHandler::Open2(IInStream *stream, IArchiveOpenCallback *callback)
       }
       items.Add(item);
     }
+    _phySize = offset;
+    if (callback && (items.Size() & 0xFF) == 0)
+    {
+      RINOK(callback->SetCompleted(NULL, &offset))
+    }
   }
+  if (items.IsEmpty())
+    return S_FALSE;
 
   _isRaw = (_items2.Size() == 1);
   for (i = 0; i < _items2.Size(); i++)
@@ -412,12 +388,12 @@ HRESULT CHandler::Open2(IInStream *stream, IArchiveOpenCallback *callback)
     {
       if (!item2.SameSubTypes)
         return S_FALSE;
-      itemBuf.SetCapacity((size_t)item2.Size - (kTagHeaderSize + 4 + 1) * item2.NumChunks);
+      itemBuf.Alloc((size_t)item2.Size - (size_t)(kTagHeaderSize + 4 + 1) * item2.NumChunks);
       item2.Size = 0;
     }
     else
     {
-      itemBuf.SetCapacity(kHeaderSize + (size_t)item2.Size);
+      itemBuf.Alloc(kHeaderSize + (size_t)item2.Size);
       memcpy(itemBuf, header, kHeaderSize);
       itemBuf[4] = item2.IsAudio() ? kFlag_Audio : kFlag_Video;
       item2.Size = kHeaderSize;
@@ -428,15 +404,18 @@ HRESULT CHandler::Open2(IInStream *stream, IArchiveOpenCallback *callback)
   {
     const CItem &item = items[i];
     CItem2 &item2 = _items2[lasts[item.Type]];
-    size_t size = item.Size;
-    const Byte *src = inBuf + item.Offset;
+    size_t size = item.Data.Size();
+    const Byte *src = item.Data;
     if (_isRaw)
     {
       src += kTagHeaderSize + 1;
       size -= (kTagHeaderSize + 4 + 1);
     }
-    memcpy(item2.BufSpec->Buf + item2.Size, src, size);
-    item2.Size += size;
+    if (size != 0)
+    {
+      memcpy(item2.BufSpec->Buf + item2.Size, src, size);
+      item2.Size += size;
+    }
   }
   return S_OK;
 }
@@ -464,6 +443,7 @@ STDMETHODIMP CHandler::Open(IInStream *inStream, const UInt64 *, IArchiveOpenCal
 
 STDMETHODIMP CHandler::Close()
 {
+  _phySize = 0;
   _stream.Release();
   _items2.Clear();
   // _metadata.SetCapacity(0);
@@ -480,7 +460,7 @@ STDMETHODIMP CHandler::Extract(const UInt32 *indices, UInt32 numItems,
     Int32 testMode, IArchiveExtractCallback *extractCallback)
 {
   COM_TRY_BEGIN
-  bool allFilesMode = (numItems == (UInt32)-1);
+  bool allFilesMode = (numItems == (UInt32)(Int32)-1);
   if (allFilesMode)
     numItems = _items2.Size();
   if (numItems == 0)
@@ -514,7 +494,7 @@ STDMETHODIMP CHandler::Extract(const UInt32 *indices, UInt32 numItems,
     RINOK(extractCallback->PrepareOperation(askMode));
     if (outStream)
     {
-      RINOK(WriteStream(outStream, item.BufSpec->Buf, item.BufSpec->Buf.GetCapacity()));
+      RINOK(WriteStream(outStream, item.BufSpec->Buf, item.BufSpec->Buf.Size()));
     }
     RINOK(extractCallback->SetOperationResult(NExtract::NOperationResult::kOK));
   }
@@ -534,11 +514,13 @@ STDMETHODIMP CHandler::GetStream(UInt32 index, ISequentialInStream **stream)
   COM_TRY_END
 }
 
-static IInArchive *CreateArc() { return new CHandler; }
+static const Byte k_Signature[] = { 'F', 'L', 'V', 1, };
 
-static CArcInfo g_ArcInfo =
-  { L"FLV", L"flv", 0, 0xD6, { 'F', 'L', 'V' }, 3, false, CreateArc, 0 };
-
-REGISTER_ARC(Flv)
+REGISTER_ARC_I(
+  "FLV", "flv", 0, 0xD6,
+  k_Signature,
+  0,
+  0,
+  NULL)
 
 }}

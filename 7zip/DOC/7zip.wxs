@@ -1,10 +1,10 @@
 <?xml version="1.0"?>
 
-<?define VerMajor = "9" ?>
-<?define VerMinor = "20" ?>
+<?define VerMajor = "18" ?>
+<?define VerMinor = "01" ?>
 <?define VerBuild = "00" ?>
 <?define MmVer = "$(var.VerMajor).$(var.VerMinor)" ?>
-<?define MmHex = "0$(var.VerMajor)$(var.VerMinor)" ?>
+<?define MmHex = "$(var.VerMajor)$(var.VerMinor)" ?>
 <?define MmmmVer = "$(var.MmVer).$(var.VerBuild).0" ?>
 <?define UpgradeMinVer = "4.38" ?>
 
@@ -20,18 +20,21 @@
   <?define Platforms = "x64" ?>
   <?define CpuPostfix = " (x64 edition)" ?>
   <?define Is64 = "yes" ?>
+  <?define NumBits = "64" ?>
 <?elseif $(var.MyCPU) = "ia64" ?>
   <?define CpuId = "3" ?>
   <?define PFilesFolder = "ProgramFiles64Folder" ?>
   <?define Platforms = "Intel64" ?>
   <?define CpuPostfix = " (ia64 edition)" ?>
   <?define Is64 = "yes" ?>
+  <?define NumBits = "64" ?>
 <?else ?>
   <?define CpuId = "1" ?>
   <?define PFilesFolder = "ProgramFilesFolder" ?>
   <?define Platforms = "Intel" ?>
   <?define CpuPostfix = "" ?>
   <?define Is64 = "no" ?>
+  <?define NumBits = "32" ?>
 <?endif ?>
 
 
@@ -56,6 +59,7 @@
 <?define CompFormats  = "$(var.CompId)10" ?>
 <?define CompCodecs   = "$(var.CompId)11" ?>
 <?define CompLang     = "$(var.CompId)12" ?>
+<?define CompShellExt2 = "$(var.CompId)13" ?>
 <?define CompInstallRegCU         = "$(var.CompId)80" ?>
 <?define CompInstallRegLM         = "$(var.CompId)81" ?>
 <?define CompInstallRegWild       = "$(var.CompId)82" ?>
@@ -64,6 +68,7 @@
 <?define CompInstallRegDriveDD    = "$(var.CompId)85" ?>
 <?define CompInstallRegApproved   = "$(var.CompId)86" ?>
 <?define CompInstallRegAppPath    = "$(var.CompId)87" ?>
+<?define CompInstallRegFolder     = "$(var.CompId)88" ?>
 
 
 <?define Manufacturer = "Igor Pavlov" ?>
@@ -100,11 +105,15 @@
     <Media Id="1" Cabinet="product.cab" EmbedCab="yes" CompressionLevel="high" />
 
     <Property Id="INSTALLDIR">
-      <RegistrySearch Id="My7zipPath" Type="raw" Root="HKCU" Key="Software\7-Zip" Name="Path" />
+      <RegistrySearch Id="My7zipPathLM"  Type="raw" Root="HKLM" Key="Software\7-Zip" Name="Path" />
+      <RegistrySearch Id="My7zipPathLM2" Type="raw" Root="HKLM" Key="Software\7-Zip" Name="Path$(var.NumBits)" />
+      <RegistrySearch Id="My7zipPath"    Type="raw" Root="HKCU" Key="Software\7-Zip" Name="Path" />
+      <RegistrySearch Id="My7zipPath2"   Type="raw" Root="HKCU" Key="Software\7-Zip" Name="Path$(var.NumBits)" />
     </Property>
 
     <Property Id="ALLUSERS">2</Property>
 
+    <Property Id="LicenseAccepted">1</Property>
 
     <Property Id="ARPURLINFOABOUT" Value="$(var.AboutURL)" />
     <Property Id="ARPHELPLINK" Value="$(var.SupportURL)" />
@@ -116,13 +125,13 @@
         <Directory Id="INSTALLDIR" Name="7-Zip">
 
           <Component Id="InstallRegCU" Guid="$(var.CompInstallRegCU)" DiskId="1" Win64="$(var.Is64)">
-            <Registry Id="MyInstallRegCU" Root="HKCU" Key="Software\7-Zip" Name="Path"
-               Action="write" Type="string" Value="[INSTALLDIR]" />
+            <Registry Id="MyInstallRegCU"  Root="HKCU" Key="Software\7-Zip" Name="Path" Action="write" Type="string" Value="[INSTALLDIR]" />
+            <Registry Id="MyInstallRegCU2" Root="HKCU" Key="Software\7-Zip" Name="Path$(var.NumBits)" Action="write" Type="string" Value="[INSTALLDIR]" />
           </Component>
           <Component Id="InstallRegLM" Guid="$(var.CompInstallRegLM)" DiskId="1" Win64="$(var.Is64)">
             <Condition>Privileged</Condition>
-            <Registry Id="MyInstallRegLM" Root="HKLM" Key="Software\7-Zip" Name="Path"
-               Action="write" Type="string" Value="[INSTALLDIR]" />
+            <Registry Id="MyInstallRegLM"  Root="HKLM" Key="Software\7-Zip" Name="Path" Action="write" Type="string" Value="[INSTALLDIR]" />
+            <Registry Id="MyInstallRegLM2" Root="HKLM" Key="Software\7-Zip" Name="Path$(var.NumBits)" Action="write" Type="string" Value="[INSTALLDIR]" />
           </Component>
           
 
@@ -135,6 +144,12 @@
           <Component Id="InstallRegDirectory" Guid="$(var.CompInstallRegDirectory)" DiskId="1" Win64="$(var.Is64)">
             <Registry Id="MyInstallRegDirectory" Action="write" Type="string"
                Root="HKCR" Key="Directory\shellex\ContextMenuHandlers\7-Zip"
+               Value="$(var.ShellExtId)" />
+          </Component>
+
+          <Component Id="InstallRegFolder" Guid="$(var.CompInstallRegFolder)" DiskId="1" Win64="$(var.Is64)">
+            <Registry Id="MyInstallRegFolder" Action="write" Type="string"
+               Root="HKCR" Key="Folder\shellex\ContextMenuHandlers\7-Zip"
                Value="$(var.ShellExtId)" />
           </Component>
 
@@ -174,6 +189,21 @@
             </File>
           </Component>
 
+          <?if $(var.MyCPU) = "x64" ?>
+
+          <Component Id="ShellExt32" Guid="$(var.CompShellExt2)" DiskId="1" Win64="no">
+            <File Id="_7zip32.dll" Name="7-zip32.dll" />
+            <Registry Id="shellReg0_32" Action="write" Type="string" Root="HKCR"
+               Key="CLSID\$(var.ShellExtId)\InprocServer32"
+               Value="[INSTALLDIR]7-zip32.dll" />
+            <Registry Id="shellReg1_32" Action="write" Type="string" Root="HKCR"
+               Key="CLSID\$(var.ShellExtId)\InprocServer32"
+               Name="ThreadingModel"
+               Value="Apartment" />
+          </Component>
+
+          <?endif ?>
+
           <Component Id="ShellExt" Guid="$(var.CompShellExt)" DiskId="1" Win64="$(var.Is64)">
             <File Id="_7zip.dll" Name="7-zip.dll" />
             <Registry Id="shellReg0" Action="write" Type="string" Root="HKCR"
@@ -185,16 +215,16 @@
                Value="Apartment" />
           </Component>
 
-          <Component Id="CmdLine" Guid="$(var.CompCmdLine)" DiskId="1" Win64="$(var.Is64)">
-            <File Id="_7z.exe" Name="7z.exe" />
-          </Component>
-
           <Component Id="Gui" Guid="$(var.CompGui)" DiskId="1" Win64="$(var.Is64)">
             <File Id="_7zG.exe" Name="7zG.exe" />
           </Component>
 
           <Component Id="Formats" Guid="$(var.CompFormats)" DiskId="1" Win64="$(var.Is64)">
               <File Id="_7z.dll" Name="7z.dll" />
+          </Component>
+
+          <Component Id="CmdLine" Guid="$(var.CompCmdLine)" DiskId="1" Win64="$(var.Is64)">
+            <File Id="_7z.exe" Name="7z.exe" />
           </Component>
 
           <Component Id="GuiSfx" Guid="$(var.CompGuiSfx)" DiskId="1" Win64="$(var.Is64)">
@@ -223,6 +253,7 @@
             <Component Id="Lang" Guid="$(var.CompLang)" DiskId="1" Win64="$(var.Is64)">
               <File Id="en.ttt" Name="en.ttt" />
               <File Id="af.txt" Name="af.txt" />
+              <File Id="an.txt" Name="an.txt" />
               <File Id="ar.txt" Name="ar.txt" />
               <File Id="ast.txt" Name="ast.txt" />
               <File Id="az.txt" Name="az.txt" />
@@ -232,6 +263,7 @@
               <File Id="bn.txt" Name="bn.txt" />
               <File Id="br.txt" Name="br.txt" />
               <File Id="ca.txt" Name="ca.txt" />
+              <File Id="co.txt" Name="co.txt" />
               <File Id="cs.txt" Name="cs.txt" />
               <File Id="cy.txt" Name="cy.txt" />
               <File Id="da.txt" Name="da.txt" />
@@ -247,6 +279,7 @@
               <File Id="fr.txt" Name="fr.txt" />
               <File Id="fur.txt" Name="fur.txt" />
               <File Id="fy.txt" Name="fy.txt" />
+              <File Id="ga.txt" Name="ga.txt" />
               <File Id="gl.txt" Name="gl.txt" />
               <File Id="gu.txt" Name="gu.txt" />
               <File Id="he.txt" Name="he.txt" />
@@ -260,14 +293,19 @@
               <File Id="it.txt" Name="it.txt" />
               <File Id="ja.txt" Name="ja.txt" />
               <File Id="ka.txt" Name="ka.txt" />
+              <File Id="kaa.txt" Name="kaa.txt" />
               <File Id="kk.txt" Name="kk.txt" />
               <File Id="ko.txt" Name="ko.txt" />
               <File Id="ku.txt" Name="ku.txt" />
               <File Id="ku_ckb.txt" Name="ku-ckb.txt" />
+              <File Id="ky.txt" Name="ky.txt" />
+              <File Id="lij.txt" Name="lij.txt" />
               <File Id="lt.txt" Name="lt.txt" />
               <File Id="lv.txt" Name="lv.txt" />
               <File Id="mk.txt" Name="mk.txt" />
               <File Id="mn.txt" Name="mn.txt" />
+              <File Id="mng.txt" Name="mng.txt" />
+              <File Id="mng2.txt" Name="mng2.txt" />
               <File Id="mr.txt" Name="mr.txt" />
               <File Id="ms.txt" Name="ms.txt" />
               <File Id="ne.txt" Name="ne.txt" />
@@ -298,6 +336,7 @@
               <File Id="uz.txt" Name="uz.txt" />
               <File Id="va.txt" Name="va.txt" />
               <File Id="vi.txt" Name="vi.txt" />
+              <File Id="yo.txt" Name="yo.txt" />
               <File Id="zh_cn.txt" Name="zh-cn.txt" />
               <File Id="zh_tw.txt" Name="zh-tw.txt" />
             </Component>
@@ -319,6 +358,9 @@
          Absent="disallow" AllowAdvertise="no">
         <ComponentRef Id="Fm" />
         <ComponentRef Id="ShellExt" />
+        <?if $(var.MyCPU) = "x64" ?>
+        <ComponentRef Id="ShellExt32" />
+        <?endif ?>
         <ComponentRef Id="CmdLine" />
         <ComponentRef Id="Gui" />
         <ComponentRef Id="GuiSfx" />
@@ -334,6 +376,7 @@
         <ComponentRef Id="InstallRegDriveDD" />
         <ComponentRef Id="InstallRegApproved" />
         <ComponentRef Id="InstallRegAppPath" />
+        <ComponentRef Id="InstallRegFolder" />
 
       </Feature>
       <Feature Id="LanguageFiles" Title="Localization files" Description="Localization files for 71 languages."

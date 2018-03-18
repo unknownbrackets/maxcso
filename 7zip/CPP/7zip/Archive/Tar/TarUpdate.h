@@ -4,6 +4,7 @@
 #define __TAR_UPDATE_H
 
 #include "../IArchive.h"
+
 #include "TarItem.h"
 
 namespace NArchive {
@@ -11,22 +12,25 @@ namespace NTar {
 
 struct CUpdateItem
 {
-  int IndexInArchive;
+  int IndexInArc;
   int IndexInClient;
-  UInt32 Time;
-  UInt32 Mode;
   UInt64 Size;
-  AString Name;
-  AString User;
-  AString Group;
+  Int64 MTime;
+  UInt32 Mode;
   bool NewData;
   bool NewProps;
   bool IsDir;
+  AString Name;
+  AString User;
+  AString Group;
+
+  CUpdateItem(): Size(0), IsDir(false) {}
 };
 
 HRESULT UpdateArchive(IInStream *inStream, ISequentialOutStream *outStream,
     const CObjectVector<CItemEx> &inputItems,
     const CObjectVector<CUpdateItem> &updateItems,
+    UINT codePage,
     IArchiveUpdateCallback *updateCallback);
 
 }}

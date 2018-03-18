@@ -2,8 +2,10 @@
 
 #include "StdAfx.h"
 
-#include "Windows/COM.h"
-#include "Common/StringConvert.h"
+/*
+
+#include "COM.h"
+#include "../Common/StringConvert.h"
 
 namespace NWindows {
 namespace NCOM {
@@ -12,11 +14,11 @@ namespace NCOM {
 
 UString GUIDToStringW(REFGUID guid)
 {
-  UString string;
-  const int kStringSize = 48;
-  StringFromGUID2(guid, string.GetBuffer(kStringSize), kStringSize);
-  string.ReleaseBuffer();
-  return string;
+  UString s;
+  const unsigned kSize = 48;
+  StringFromGUID2(guid, s.GetBuf(kSize), kSize);
+  s.ReleaseBuf_CalcLen(kSize);
+  return s;
 }
 
 AString GUIDToStringA(REFGUID guid)
@@ -35,3 +37,5 @@ HRESULT StringToGUIDA(const char *string, GUID &classID)
 }
 
 }}
+
+*/

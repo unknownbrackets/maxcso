@@ -3,35 +3,33 @@
 #ifndef __REGISTRY_UTILS_H
 #define __REGISTRY_UTILS_H
 
-#include "Common/MyString.h"
-#include "Common/Types.h"
+#include "../../../Common/MyTypes.h"
+#include "../../../Common/MyString.h"
 
 void SaveRegLang(const UString &path);
 void ReadRegLang(UString &path);
 
-void SaveRegEditor(const UString &path);
-void ReadRegEditor(UString &path);
+void SaveRegEditor(bool useEditor, const UString &path);
+void ReadRegEditor(bool useEditor, UString &path);
 
 void SaveRegDiff(const UString &path);
 void ReadRegDiff(UString &path);
 
-void SaveShowDots(bool showDots);
-bool ReadShowDots();
+struct CFmSettings
+{
+  bool ShowDots;
+  bool ShowRealFileIcons;
+  bool FullRow;
+  bool ShowGrid;
+  bool SingleClick;
+  bool AlternativeSelection;
+  // bool Underline;
 
-void SaveShowRealFileIcons(bool show);
-bool ReadShowRealFileIcons();
+  bool ShowSystemMenu;
 
-void SaveShowSystemMenu(bool showSystemMenu);
-bool ReadShowSystemMenu();
-
-void SaveFullRow(bool enable);
-bool ReadFullRow();
-
-void SaveShowGrid(bool enable);
-bool ReadShowGrid();
-
-void SaveAlternativeSelection(bool enable);
-bool ReadAlternativeSelection();
+  void Save() const;
+  void Load();
+};
 
 // void SaveLockMemoryAdd(bool enable);
 // bool ReadLockMemoryAdd();
@@ -39,15 +37,12 @@ bool ReadAlternativeSelection();
 bool ReadLockMemoryEnable();
 void SaveLockMemoryEnable(bool enable);
 
-void SaveSingleClick(bool enable);
-bool ReadSingleClick();
-
-/*
-void SaveUnderline(bool enable);
-bool ReadUnderline();
-*/
-
 void SaveFlatView(UInt32 panelIndex, bool enable);
 bool ReadFlatView(UInt32 panelIndex);
+
+/*
+void Save_ShowDeleted(bool enable);
+bool Read_ShowDeleted();
+*/
 
 #endif

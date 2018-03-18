@@ -1,5 +1,7 @@
 /* XzDec.c -- Xz Decode
-2010-04-16 : Igor Pavlov : Public domain */
+2018-01-21 : Igor Pavlov : Public domain */
+
+#include "Precomp.h"
 
 /* #define XZ_DUMP */
 
@@ -18,20 +20,21 @@
 #include "Lzma2Dec.h"
 
 #ifdef USE_SUBBLOCK
-#include "SbDec.h"
+#include "Bcj3Dec.c"
+#include "SbDec.c"
 #endif
 
 #include "Xz.h"
 
 #define XZ_CHECK_SIZE_MAX 64
 
-#define CODER_BUF_SIZE (1 << 17)
+#define CODER_BUF_SIZE ((size_t)1 << 17)
 
 unsigned Xz_ReadVarInt(const Byte *p, size_t maxSize, UInt64 *value)
 {
-  int i, limit;
+  unsigned i, limit;
   *value = 0;
-  limit = (maxSize > 9) ? 9 : (int)maxSize;
+  limit = (maxSize > 9) ? 9 : (unsigned)maxSize;
 
   for (i = 0; i < limit;)
   {
@@ -63,16 +66,15 @@ typedef struct
   Byte buf[BRA_BUF_SIZE];
 } CBraState;
 
-void BraState_Free(void *pp, ISzAlloc *alloc)
+static void BraState_Free(void *pp, ISzAllocPtr alloc)
 {
-  alloc->Free(alloc, pp);
+  ISzAlloc_Free(alloc, pp);
 }
 
-SRes BraState_SetProps(void *pp, const Byte *props, size_t propSize, ISzAlloc *alloc)
+static SRes BraState_SetProps(void *pp, const Byte *props, size_t propSize, ISzAllocPtr alloc)
 {
   CBraState *p = ((CBraState *)pp);
-  alloc = alloc;
-  p->encodeMode = 0;
+  UNUSED_VAR(alloc);
   p->ip = 0;
   if (p->methodId == XZ_ID_Delta)
   {
@@ -85,7 +87,7 @@ SRes BraState_SetProps(void *pp, const Byte *props, size_t propSize, ISzAlloc *a
     if (propSize == 4)
     {
       UInt32 v = GetUi32(props);
-      switch(p->methodId)
+      switch (p->methodId)
       {
         case XZ_ID_PPC:
         case XZ_ID_ARM:
@@ -110,7 +112,7 @@ SRes BraState_SetProps(void *pp, const Byte *props, size_t propSize, ISzAlloc *a
   return SZ_OK;
 }
 
-void BraState_Init(void *pp)
+static void BraState_Init(void *pp)
 {
   CBraState *p = ((CBraState *)pp);
   p->bufPos = p->bufConv = p->bufTotal = 0;
@@ -127,9 +129,9 @@ static SRes BraState_Code(void *pp, Byte *dest, SizeT *destLen, const Byte *src,
   CBraState *p = ((CBraState *)pp);
   SizeT destLenOrig = *destLen;
   SizeT srcLenOrig = *srcLen;
+  UNUSED_VAR(finishMode);
   *destLen = 0;
   *srcLen = 0;
-  finishMode = finishMode;
   *wasFinished = 0;
   while (destLenOrig > 0)
   {
@@ -161,7 +163,7 @@ static SRes BraState_Code(void *pp, Byte *dest, SizeT *destLen, const Byte *src,
     }
     if (p->bufTotal == 0)
       break;
-    switch(p->methodId)
+    switch (p->methodId)
     {
       case XZ_ID_Delta:
         if (p->encodeMode)
@@ -195,7 +197,7 @@ static SRes BraState_Code(void *pp, Byte *dest, SizeT *destLen, const Byte *src,
   return SZ_OK;
 }
 
-SRes BraState_SetFromMethod(IStateCoder *p, UInt64 id, ISzAlloc *alloc)
+SRes BraState_SetFromMethod(IStateCoder *p, UInt64 id, int encodeMode, ISzAllocPtr alloc)
 {
   CBraState *decoder;
   if (id != XZ_ID_Delta &&
@@ -207,10 +209,11 @@ SRes BraState_SetFromMethod(IStateCoder *p, UInt64 id, ISzAlloc *alloc)
       id != XZ_ID_SPARC)
     return SZ_ERROR_UNSUPPORTED;
   p->p = 0;
-  decoder = alloc->Alloc(alloc, sizeof(CBraState));
-  if (decoder == 0)
+  decoder = (CBraState *)ISzAlloc_Alloc(alloc, sizeof(CBraState));
+  if (!decoder)
     return SZ_ERROR_MEM;
   decoder->methodId = (UInt32)id;
+  decoder->encodeMode = encodeMode;
   p->p = decoder;
   p->Free = BraState_Free;
   p->SetProps = BraState_SetProps;
@@ -223,62 +226,71 @@ SRes BraState_SetFromMethod(IStateCoder *p, UInt64 id, ISzAlloc *alloc)
 
 #ifdef USE_SUBBLOCK
 
-static void SbState_Free(void *pp, ISzAlloc *alloc)
+static void SbState_Free(void *pp, ISzAllocPtr alloc)
 {
-  CSubblockDec *p = (CSubblockDec *)pp;
-  SubblockDec_Free(p, alloc);
-  alloc->Free(alloc, pp);
+  CSbDec *p = (CSbDec *)pp;
+  SbDec_Free(p);
+  ISzAlloc_Free(alloc, pp);
 }
 
-static SRes SbState_SetProps(void *pp, const Byte *props, size_t propSize, ISzAlloc *alloc)
+static SRes SbState_SetProps(void *pp, const Byte *props, size_t propSize, ISzAllocPtr alloc)
 {
-  pp = pp;
-  props = props;
-  alloc = alloc;
+  UNUSED_VAR(pp);
+  UNUSED_VAR(props);
+  UNUSED_VAR(alloc);
   return (propSize == 0) ? SZ_OK : SZ_ERROR_UNSUPPORTED;
 }
 
 static void SbState_Init(void *pp)
 {
-  SubblockDec_Init((CSubblockDec *)pp);
+  SbDec_Init((CSbDec *)pp);
 }
 
 static SRes SbState_Code(void *pp, Byte *dest, SizeT *destLen, const Byte *src, SizeT *srcLen,
     int srcWasFinished, ECoderFinishMode finishMode, int *wasFinished)
 {
-  ECoderStatus status;
-  SRes res = SubblockDec_Decode((CSubblockDec *)pp, dest, destLen, src, srcLen, finishMode, &status);
-  srcWasFinished = srcWasFinished;
-  *wasFinished = (status == LZMA_STATUS_FINISHED_WITH_MARK);
+  CSbDec *p = (CSbDec *)pp;
+  SRes res;
+  UNUSED_VAR(srcWasFinished);
+  p->dest = dest;
+  p->destLen = *destLen;
+  p->src = src;
+  p->srcLen = *srcLen;
+  p->finish = finishMode; /* change it */
+  res = SbDec_Decode((CSbDec *)pp);
+  *destLen -= p->destLen;
+  *srcLen -= p->srcLen;
+  *wasFinished = (*destLen == 0 && *srcLen == 0); /* change it */
   return res;
 }
 
-SRes SbState_SetFromMethod(IStateCoder *p, ISzAlloc *alloc)
+SRes SbState_SetFromMethod(IStateCoder *p, ISzAllocPtr alloc)
 {
-  CSubblockDec *decoder;
+  CSbDec *decoder;
   p->p = 0;
-  decoder = alloc->Alloc(alloc, sizeof(CSubblockDec));
-  if (decoder == 0)
+  decoder = ISzAlloc_Alloc(alloc, sizeof(CSbDec));
+  if (!decoder)
     return SZ_ERROR_MEM;
   p->p = decoder;
   p->Free = SbState_Free;
   p->SetProps = SbState_SetProps;
   p->Init = SbState_Init;
   p->Code = SbState_Code;
-  SubblockDec_Construct(decoder);
+  SbDec_Construct(decoder);
+  SbDec_SetAlloc(decoder, alloc);
   return SZ_OK;
 }
 #endif
 
 /* ---------- Lzma2State ---------- */
 
-static void Lzma2State_Free(void *pp, ISzAlloc *alloc)
+static void Lzma2State_Free(void *pp, ISzAllocPtr alloc)
 {
   Lzma2Dec_Free((CLzma2Dec *)pp, alloc);
-  alloc->Free(alloc, pp);
+  ISzAlloc_Free(alloc, pp);
 }
 
-static SRes Lzma2State_SetProps(void *pp, const Byte *props, size_t propSize, ISzAlloc *alloc)
+static SRes Lzma2State_SetProps(void *pp, const Byte *props, size_t propSize, ISzAllocPtr alloc)
 {
   if (propSize != 1)
     return SZ_ERROR_UNSUPPORTED;
@@ -295,17 +307,17 @@ static SRes Lzma2State_Code(void *pp, Byte *dest, SizeT *destLen, const Byte *sr
 {
   ELzmaStatus status;
   /* ELzmaFinishMode fm = (finishMode == LZMA_FINISH_ANY) ? LZMA_FINISH_ANY : LZMA_FINISH_END; */
-  SRes res = Lzma2Dec_DecodeToBuf((CLzma2Dec *)pp, dest, destLen, src, srcLen, finishMode, &status);
-  srcWasFinished = srcWasFinished;
+  SRes res = Lzma2Dec_DecodeToBuf((CLzma2Dec *)pp, dest, destLen, src, srcLen, (ELzmaFinishMode)finishMode, &status);
+  UNUSED_VAR(srcWasFinished);
   *wasFinished = (status == LZMA_STATUS_FINISHED_WITH_MARK);
   return res;
 }
 
-static SRes Lzma2State_SetFromMethod(IStateCoder *p, ISzAlloc *alloc)
+static SRes Lzma2State_SetFromMethod(IStateCoder *p, ISzAllocPtr alloc)
 {
-  CLzma2Dec *decoder = alloc->Alloc(alloc, sizeof(CLzma2Dec));
+  CLzma2Dec *decoder = (CLzma2Dec *)ISzAlloc_Alloc(alloc, sizeof(CLzma2Dec));
   p->p = decoder;
-  if (decoder == 0)
+  if (!decoder)
     return SZ_ERROR_MEM;
   p->Free = Lzma2State_Free;
   p->SetProps = Lzma2State_SetProps;
@@ -316,11 +328,11 @@ static SRes Lzma2State_SetFromMethod(IStateCoder *p, ISzAlloc *alloc)
 }
 
 
-void MixCoder_Construct(CMixCoder *p, ISzAlloc *alloc)
+void MixCoder_Construct(CMixCoder *p, ISzAllocPtr alloc)
 {
-  int i;
+  unsigned i;
   p->alloc = alloc;
-  p->buf = 0;
+  p->buf = NULL;
   p->numCoders = 0;
   for (i = 0; i < MIXCODER_NUM_FILTERS_MAX; i++)
     p->coders[i].p = NULL;
@@ -328,7 +340,7 @@ void MixCoder_Construct(CMixCoder *p, ISzAlloc *alloc)
 
 void MixCoder_Free(CMixCoder *p)
 {
-  int i;
+  unsigned i;
   for (i = 0; i < p->numCoders; i++)
   {
     IStateCoder *sc = &p->coders[i];
@@ -337,13 +349,16 @@ void MixCoder_Free(CMixCoder *p)
   }
   p->numCoders = 0;
   if (p->buf)
-    p->alloc->Free(p->alloc, p->buf);
+  {
+    ISzAlloc_Free(p->alloc, p->buf);
+    p->buf = NULL; /* 9.31: the BUG was fixed */
+  }
 }
 
 void MixCoder_Init(CMixCoder *p)
 {
-  int i;
-  for (i = 0; i < p->numCoders - 1; i++)
+  unsigned i;
+  for (i = 0; i < MIXCODER_NUM_FILTERS_MAX - 1; i++)
   {
     p->size[i] = 0;
     p->pos[i] = 0;
@@ -356,11 +371,11 @@ void MixCoder_Init(CMixCoder *p)
   }
 }
 
-SRes MixCoder_SetFromMethod(CMixCoder *p, int coderIndex, UInt64 methodId)
+SRes MixCoder_SetFromMethod(CMixCoder *p, unsigned coderIndex, UInt64 methodId)
 {
   IStateCoder *sc = &p->coders[coderIndex];
   p->ids[coderIndex] = methodId;
-  switch(methodId)
+  switch (methodId)
   {
     case XZ_ID_LZMA2: return Lzma2State_SetFromMethod(sc, p->alloc);
     #ifdef USE_SUBBLOCK
@@ -369,7 +384,7 @@ SRes MixCoder_SetFromMethod(CMixCoder *p, int coderIndex, UInt64 methodId)
   }
   if (coderIndex == 0)
     return SZ_ERROR_UNSUPPORTED;
-  return BraState_SetFromMethod(sc, methodId, p->alloc);
+  return BraState_SetFromMethod(sc, methodId, 0, p->alloc);
 }
 
 SRes MixCoder_Code(CMixCoder *p, Byte *dest, SizeT *destLen,
@@ -378,15 +393,15 @@ SRes MixCoder_Code(CMixCoder *p, Byte *dest, SizeT *destLen,
 {
   SizeT destLenOrig = *destLen;
   SizeT srcLenOrig = *srcLen;
-  Bool allFinished = True;
+
   *destLen = 0;
   *srcLen = 0;
   *status = CODER_STATUS_NOT_FINISHED;
 
-  if (p->buf == 0)
+  if (!p->buf)
   {
-    p->buf = p->alloc->Alloc(p->alloc, CODER_BUF_SIZE * (MIXCODER_NUM_FILTERS_MAX - 1));
-    if (p->buf == 0)
+    p->buf = (Byte *)ISzAlloc_Alloc(p->alloc, CODER_BUF_SIZE * (MIXCODER_NUM_FILTERS_MAX - 1));
+    if (!p->buf)
       return SZ_ERROR_MEM;
   }
 
@@ -396,7 +411,8 @@ SRes MixCoder_Code(CMixCoder *p, Byte *dest, SizeT *destLen,
   for (;;)
   {
     Bool processed = False;
-    int i;
+    Bool allFinished = True;
+    unsigned i;
     /*
     if (p->numCoders == 1 && *destLen == destLenOrig && finishMode == LZMA_FINISH_ANY)
       break;
@@ -420,9 +436,10 @@ SRes MixCoder_Code(CMixCoder *p, Byte *dest, SizeT *destLen,
       }
       else
       {
-        srcCur = p->buf + (CODER_BUF_SIZE * (i - 1)) + p->pos[i - 1];
-        srcLenCur = p->size[i - 1] - p->pos[i - 1];
-        srcFinishedCur = p->finished[i - 1];
+        size_t k = i - 1;
+        srcCur = p->buf + (CODER_BUF_SIZE * k) + p->pos[k];
+        srcLenCur = p->size[k] - p->pos[k];
+        srcFinishedCur = p->finished[k];
       }
       
       if (i == p->numCoders - 1)
@@ -450,7 +467,7 @@ SRes MixCoder_Code(CMixCoder *p, Byte *dest, SizeT *destLen,
       }
       else
       {
-        p->pos[i - 1] += srcLenCur;
+        p->pos[(size_t)i - 1] += srcLenCur;
       }
 
       if (i == p->numCoders - 1)
@@ -471,13 +488,16 @@ SRes MixCoder_Code(CMixCoder *p, Byte *dest, SizeT *destLen,
       if (destLenCur != 0 || srcLenCur != 0)
         processed = True;
     }
+    
     if (!processed)
-      break;
+    {
+      if (allFinished)
+        *status = CODER_STATUS_FINISHED_WITH_MARK;
+      return SZ_OK;
+    }
   }
-  if (allFinished)
-    *status = CODER_STATUS_FINISHED_WITH_MARK;
-  return SZ_OK;
 }
+
 
 SRes Xz_ParseHeader(CXzStreamFlags *p, const Byte *buf)
 {
@@ -490,11 +510,11 @@ SRes Xz_ParseHeader(CXzStreamFlags *p, const Byte *buf)
 
 static Bool Xz_CheckFooter(CXzStreamFlags flags, UInt64 indexSize, const Byte *buf)
 {
-  return
-      indexSize == (((UInt64)GetUi32(buf + 4) + 1) << 2) &&
-      (GetUi32(buf) == CrcCalc(buf + 4, 6) &&
-      flags == GetBe16(buf + 8) &&
-      memcmp(buf + 10, XZ_FOOTER_SIG, XZ_FOOTER_SIG_SIZE) == 0);
+  return indexSize == (((UInt64)GetUi32(buf + 4) + 1) << 2)
+      && GetUi32(buf) == CrcCalc(buf + 4, 6)
+      && flags == GetBe16(buf + 8)
+      && buf[10] == XZ_FOOTER_SIG_0
+      && buf[11] == XZ_FOOTER_SIG_1;
 }
 
 #define READ_VARINT_AND_CHECK(buf, pos, size, res) \
@@ -505,17 +525,18 @@ static Bool Xz_CheckFooter(CXzStreamFlags flags, UInt64 indexSize, const Byte *b
 SRes XzBlock_Parse(CXzBlock *p, const Byte *header)
 {
   unsigned pos;
-  int numFilters, i;
-  UInt32 headerSize = (UInt32)header[0] << 2;
+  unsigned numFilters, i;
+  unsigned headerSize = (unsigned)header[0] << 2;
+
+  /* (headerSize != 0) : another code checks */
 
   if (CrcCalc(header, headerSize) != GetUi32(header + headerSize))
     return SZ_ERROR_ARCHIVE;
 
   pos = 1;
-  if (pos == headerSize)
-    return SZ_ERROR_ARCHIVE;
   p->flags = header[pos++];
 
+  p->packSize = (UInt64)(Int64)-1;
   if (XzBlock_HasPackSize(p))
   {
     READ_VARINT_AND_CHECK(header, pos, headerSize, &p->packSize);
@@ -523,6 +544,7 @@ SRes XzBlock_Parse(CXzBlock *p, const Byte *header)
       return SZ_ERROR_ARCHIVE;
   }
 
+  p->unpackSize = (UInt64)(Int64)-1;
   if (XzBlock_HasUnpackSize(p))
     READ_VARINT_AND_CHECK(header, pos, headerSize, &p->unpackSize);
 
@@ -540,14 +562,17 @@ SRes XzBlock_Parse(CXzBlock *p, const Byte *header)
     pos += (unsigned)size;
 
     #ifdef XZ_DUMP
-    printf("\nf[%d] = %2X: ", i, filter->id);
+    printf("\nf[%u] = %2X: ", i, (unsigned)filter->id);
     {
-      int i;
+      unsigned i;
       for (i = 0; i < size; i++)
         printf(" %2X", filter->props[i]);
     }
     #endif
   }
+
+  if (XzBlock_HasUnsupportedFlags(p))
+    return SZ_ERROR_UNSUPPORTED;
 
   while (pos < headerSize)
     if (header[pos++] != 0)
@@ -557,9 +582,10 @@ SRes XzBlock_Parse(CXzBlock *p, const Byte *header)
 
 SRes XzDec_Init(CMixCoder *p, const CXzBlock *block)
 {
-  int i;
+  unsigned i;
   Bool needReInit = True;
-  int numFilters = XzBlock_GetNumFilters(block);
+  unsigned numFilters = XzBlock_GetNumFilters(block);
+  
   if (numFilters == p->numCoders)
   {
     for (i = 0; i < numFilters; i++)
@@ -567,6 +593,7 @@ SRes XzDec_Init(CMixCoder *p, const CXzBlock *block)
         break;
     needReInit = (i != numFilters);
   }
+  
   if (needReInit)
   {
     MixCoder_Free(p);
@@ -577,23 +604,33 @@ SRes XzDec_Init(CMixCoder *p, const CXzBlock *block)
       RINOK(MixCoder_SetFromMethod(p, i, f->id));
     }
   }
+  
   for (i = 0; i < numFilters; i++)
   {
     const CXzFilter *f = &block->filters[numFilters - 1 - i];
     IStateCoder *sc = &p->coders[i];
     RINOK(sc->SetProps(sc->p, f->props, f->propsSize, p->alloc));
   }
+  
   MixCoder_Init(p);
   return SZ_OK;
 }
 
-SRes XzUnpacker_Create(CXzUnpacker *p, ISzAlloc *alloc)
+void XzUnpacker_Init(CXzUnpacker *p)
 {
-  MixCoder_Construct(&p->decoder, alloc);
   p->state = XZ_STATE_STREAM_HEADER;
   p->pos = 0;
-  p->numStreams = 0;
-  return SZ_OK;
+  p->numStartedStreams = 0;
+  p->numFinishedStreams = 0;
+  p->numTotalBlocks = 0;
+  p->padSize = 0;
+  p->decodeOnlyOneBlock = 0;
+}
+
+void XzUnpacker_Construct(CXzUnpacker *p, ISzAllocPtr alloc)
+{
+  MixCoder_Construct(&p->decoder, alloc);
+  XzUnpacker_Init(p);
 }
 
 void XzUnpacker_Free(CXzUnpacker *p)
@@ -601,8 +638,20 @@ void XzUnpacker_Free(CXzUnpacker *p)
   MixCoder_Free(&p->decoder);
 }
 
+
+void XzUnpacker_PrepareToRandomBlockDecoding(CXzUnpacker *p)
+{
+  p->indexSize = 0;
+  p->numBlocks = 0;
+  Sha256_Init(&p->sha);
+  p->state = XZ_STATE_BLOCK_HEADER;
+  p->pos = 0;
+  p->decodeOnlyOneBlock = 1;
+}
+
+
 SRes XzUnpacker_Code(CXzUnpacker *p, Byte *dest, SizeT *destLen,
-    const Byte *src, SizeT *srcLen, int finishMode, ECoderStatus *status)
+    const Byte *src, SizeT *srcLen, ECoderFinishMode finishMode, ECoderStatus *status)
 {
   SizeT destLenOrig = *destLen;
   SizeT srcLenOrig = *srcLen;
@@ -611,20 +660,44 @@ SRes XzUnpacker_Code(CXzUnpacker *p, Byte *dest, SizeT *destLen,
   *status = CODER_STATUS_NOT_SPECIFIED;
   for (;;)
   {
-    SizeT srcRem = srcLenOrig - *srcLen;
+    SizeT srcRem;
 
     if (p->state == XZ_STATE_BLOCK)
     {
       SizeT destLen2 = destLenOrig - *destLen;
       SizeT srcLen2 = srcLenOrig - *srcLen;
       SRes res;
+
+      ECoderFinishMode finishMode2 = finishMode;
+
+      if (p->block.packSize != (UInt64)(Int64)-1)
+      {
+        UInt64 rem = p->block.packSize - p->packSize;
+        if (srcLen2 > rem)
+          srcLen2 = (SizeT)rem;
+        if (rem == 0 && p->block.unpackSize == p->unpackSize)
+          return SZ_ERROR_DATA;
+      }
+
+      if (p->block.unpackSize != (UInt64)(Int64)-1)
+      {
+        UInt64 rem = p->block.unpackSize - p->unpackSize;
+        if (destLen2 >= rem)
+        {
+          finishMode2 = CODER_FINISH_END;
+          destLen2 = (SizeT)rem;
+        }
+      }
+
+      /*
       if (srcLen2 == 0 && destLen2 == 0)
       {
         *status = CODER_STATUS_NOT_FINISHED;
         return SZ_OK;
       }
+      */
       
-      res = MixCoder_Code(&p->decoder, dest, &destLen2, src, &srcLen2, False, finishMode, status);
+      res = MixCoder_Code(&p->decoder, dest, &destLen2, src, &srcLen2, False, finishMode2, status);
       XzCheck_Update(&p->check, dest, destLen2);
       
       (*srcLen) += srcLen2;
@@ -634,35 +707,49 @@ SRes XzUnpacker_Code(CXzUnpacker *p, Byte *dest, SizeT *destLen,
       (*destLen) += destLen2;
       dest += destLen2;
       p->unpackSize += destLen2;
-      
+
       RINOK(res);
-      
-      if (*status == CODER_STATUS_FINISHED_WITH_MARK)
+
+      if (*status != CODER_STATUS_FINISHED_WITH_MARK)
+      {
+        if (p->block.packSize == p->packSize
+            && *status == CODER_STATUS_NEEDS_MORE_INPUT)
+        {
+          *status = CODER_STATUS_NOT_SPECIFIED;
+          return SZ_ERROR_DATA;
+        }
+        
+        // if (srcLen2 == 0 && destLen2 == 0)
+        return SZ_OK;
+      }
       {
         Byte temp[32];
-        unsigned num = Xz_WriteVarInt(temp, p->packSize + p->blockHeaderSize + XzFlags_GetCheckSize(p->streamFlags));
+        unsigned num = Xz_WriteVarInt(temp, XzUnpacker_GetPackSizeForIndex(p));
         num += Xz_WriteVarInt(temp + num, p->unpackSize);
         Sha256_Update(&p->sha, temp, num);
         p->indexSize += num;
         p->numBlocks++;
-        
         p->state = XZ_STATE_BLOCK_FOOTER;
         p->pos = 0;
         p->alignPos = 0;
+        
+        if (p->block.unpackSize != (UInt64)(Int64)-1)
+          if (p->block.unpackSize != p->unpackSize)
+            return SZ_ERROR_DATA;
       }
-      else if (srcLen2 == 0 && destLen2 == 0)
-        return SZ_OK;
-      
-      continue;
+      // continue;
     }
 
-    if (srcRem == 0)
+    srcRem = srcLenOrig - *srcLen;
+
+    // XZ_STATE_BLOCK_FOOTER can transit to XZ_STATE_BLOCK_HEADER without input bytes
+    if (srcRem == 0 && p->state != XZ_STATE_BLOCK_FOOTER)
     {
       *status = CODER_STATUS_NEEDS_MORE_INPUT;
       return SZ_OK;
     }
 
-    switch(p->state)
+    switch (p->state)
     {
       case XZ_STATE_STREAM_HEADER:
       {
@@ -676,10 +763,11 @@ SRes XzUnpacker_Code(CXzUnpacker *p, Byte *dest, SizeT *destLen,
         else
         {
           RINOK(Xz_ParseHeader(&p->streamFlags, p->buf));
-          p->state = XZ_STATE_BLOCK_HEADER;
-          Sha256_Init(&p->sha);
+          p->numStartedStreams++;
           p->indexSize = 0;
           p->numBlocks = 0;
+          Sha256_Init(&p->sha);
+          p->state = XZ_STATE_BLOCK_HEADER;
           p->pos = 0;
         }
         break;
@@ -693,6 +781,8 @@ SRes XzUnpacker_Code(CXzUnpacker *p, Byte *dest, SizeT *destLen,
           (*srcLen)++;
           if (p->buf[0] == 0)
           {
+            if (p->decodeOnlyOneBlock)
+              return SZ_ERROR_DATA;
             p->indexPreSize = 1 + Xz_WriteVarInt(p->buf + 1, p->numBlocks);
             p->indexPos = p->indexPreSize;
             p->indexSize += p->indexPreSize;
@@ -700,10 +790,13 @@ SRes XzUnpacker_Code(CXzUnpacker *p, Byte *dest, SizeT *destLen,
             Sha256_Init(&p->sha);
             p->crc = CrcUpdate(CRC_INIT_VAL, p->buf, p->indexPreSize);
             p->state = XZ_STATE_STREAM_INDEX;
+            break;
           }
           p->blockHeaderSize = ((UInt32)p->buf[0] << 2) + 4;
+          break;
         }
-        else if (p->pos != p->blockHeaderSize)
+        
+        if (p->pos != p->blockHeaderSize)
         {
           UInt32 cur = p->blockHeaderSize - p->pos;
           if (cur > srcRem)
@@ -716,6 +809,7 @@ SRes XzUnpacker_Code(CXzUnpacker *p, Byte *dest, SizeT *destLen,
         else
         {
           RINOK(XzBlock_Parse(&p->block, p->buf));
+          p->numTotalBlocks++;
           p->state = XZ_STATE_BLOCK;
           p->packSize = 0;
           p->unpackSize = 0;
@@ -727,8 +821,13 @@ SRes XzUnpacker_Code(CXzUnpacker *p, Byte *dest, SizeT *destLen,
 
       case XZ_STATE_BLOCK_FOOTER:
       {
-        if (((p->packSize + p->alignPos) & 3) != 0)
+        if ((((unsigned)p->packSize + p->alignPos) & 3) != 0)
         {
+          if (srcRem == 0)
+          {
+            *status = CODER_STATUS_NEEDS_MORE_INPUT;
+            return SZ_OK;
+          }
           (*srcLen)++;
           p->alignPos++;
           if (*src++ != 0)
@@ -740,20 +839,31 @@ SRes XzUnpacker_Code(CXzUnpacker *p, Byte *dest, SizeT *destLen,
           UInt32 cur = checkSize - p->pos;
           if (cur != 0)
           {
+            if (srcRem == 0)
+            {
+              *status = CODER_STATUS_NEEDS_MORE_INPUT;
+              return SZ_OK;
+            }
             if (cur > srcRem)
               cur = (UInt32)srcRem;
             memcpy(p->buf + p->pos, src, cur);
             p->pos += cur;
             (*srcLen) += cur;
             src += cur;
+            if (checkSize != p->pos)
+              break;
           }
-          else
           {
             Byte digest[XZ_CHECK_SIZE_MAX];
             p->state = XZ_STATE_BLOCK_HEADER;
             p->pos = 0;
             if (XzCheck_Final(&p->check, digest) && memcmp(digest, p->buf, checkSize) != 0)
               return SZ_ERROR_CRC;
+            if (p->decodeOnlyOneBlock)
+            {
+              *status = CODER_STATUS_FINISHED_WITH_MARK;
+              return SZ_OK;
+            }
           }
         }
         break;
@@ -833,7 +943,7 @@ SRes XzUnpacker_Code(CXzUnpacker *p, Byte *dest, SizeT *destLen,
         if (p->pos == XZ_STREAM_FOOTER_SIZE)
         {
           p->state = XZ_STATE_STREAM_PADDING;
-          p->numStreams++;
+          p->numFinishedStreams++;
           p->padSize = 0;
           if (!Xz_CheckFooter(p->streamFlags, p->indexSize, p->buf))
             return SZ_ERROR_CRC;
@@ -869,7 +979,23 @@ SRes XzUnpacker_Code(CXzUnpacker *p, Byte *dest, SizeT *destLen,
   */
 }
 
-Bool XzUnpacker_IsStreamWasFinished(CXzUnpacker *p)
+
+Bool XzUnpacker_IsBlockFinished(const CXzUnpacker *p)
+{
+  return (p->state == XZ_STATE_BLOCK_HEADER) && (p->pos == 0);
+}
+
+Bool XzUnpacker_IsStreamWasFinished(const CXzUnpacker *p)
 {
   return (p->state == XZ_STATE_STREAM_PADDING) && (((UInt32)p->padSize & 3) == 0);
+}
+
+UInt64 XzUnpacker_GetExtraSize(const CXzUnpacker *p)
+{
+  UInt64 num = 0;
+  if (p->state == XZ_STATE_STREAM_PADDING)
+    num += p->padSize;
+  else if (p->state == XZ_STATE_STREAM_HEADER)
+    num += p->padSize + p->pos;
+  return num;
 }

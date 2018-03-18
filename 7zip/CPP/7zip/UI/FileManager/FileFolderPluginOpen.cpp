@@ -4,18 +4,17 @@
 
 #include "resource.h"
 
-#include "Windows/Thread.h"
+#include "../../../Windows/FileName.h"
+#include "../../../Windows/Thread.h"
 
 #include "../Agent/Agent.h"
 
 #include "LangUtils.h"
 #include "OpenCallback.h"
 #include "PluginLoader.h"
-#include "RegistryAssociations.h"
 #include "RegistryPlugins.h"
 
 using namespace NWindows;
-using namespace NRegistryAssociations;
 
 struct CThreadArchiveOpen
 {
@@ -56,9 +55,27 @@ static int FindPlugin(const CObjectVector<CPluginInfo> &plugins, const UString &
 }
 */
 
+static void SplitNameToPureNameAndExtension(const FString &fullName,
+    FString &pureName, FString &extensionDelimiter, FString &extension)
+{
+  int index = fullName.ReverseFind_Dot();
+  if (index < 0)
+  {
+    pureName = fullName;
+    extensionDelimiter.Empty();
+    extension.Empty();
+  }
+  else
+  {
+    pureName.SetFrom(fullName, index);
+    extensionDelimiter = '.';
+    extension = fullName.Ptr(index + 1);
+  }
+}
+
 HRESULT OpenFileFolderPlugin(
     IInStream *inStream,
-    const UString &path,
+    const FString &path,
     const UString &arcFormat,
     HMODULE *module,
     IFolderFolder **resultFolder,
@@ -68,20 +85,20 @@ HRESULT OpenFileFolderPlugin(
   CObjectVector<CPluginInfo> plugins;
   ReadFileFolderPluginInfoList(plugins);
 
-  UString extension, name, pureName, dot;
+  FString extension, name, pureName, dot;
 
-  int slashPos = path.ReverseFind(WCHAR_PATH_SEPARATOR);
-  UString dirPrefix;
-  UString fileName;
+  int slashPos = path.ReverseFind_PathSepar();
+  FString dirPrefix;
+  FString fileName;
   if (slashPos >= 0)
   {
-    dirPrefix = path.Left(slashPos + 1);
-    fileName = path.Mid(slashPos + 1);
+    dirPrefix.SetFrom(path, slashPos + 1);
+    fileName = path.Ptr(slashPos + 1);
   }
   else
     fileName = path;
 
-  NFile::NName::SplitNameToPureNameAndExtension(fileName, pureName, dot, extension);
+  SplitNameToPureNameAndExtension(fileName, pureName, dot, extension);
 
   /*
   if (!extension.IsEmpty())
@@ -103,7 +120,7 @@ HRESULT OpenFileFolderPlugin(
   }
   */
 
-  for (int i = 0; i < plugins.Size(); i++)
+  FOR_VECTOR (i, plugins)
   {
     const CPluginInfo &plugin = plugins[i];
     if (!plugin.ClassIDDefined)
@@ -124,18 +141,18 @@ HRESULT OpenFileFolderPlugin(
     t.OpenCallbackSpec->ParentWindow = parentWindow;
 
     if (inStream)
-      t.OpenCallbackSpec->SetSubArchiveName(fileName);
+      t.OpenCallbackSpec->SetSubArchiveName(fs2us(fileName));
     else
       t.OpenCallbackSpec->LoadFileInfo(dirPrefix, fileName);
 
     t.InStream = inStream;
-    t.Path = path;
+    t.Path = fs2us(path);
     t.ArcFormat = arcFormat;
 
-    UString progressTitle = LangString(IDS_OPENNING, 0x03020283);
+    UString progressTitle = LangString(IDS_OPENNING);
     t.OpenCallbackSpec->ProgressDialog.MainWindow = parentWindow;
-    t.OpenCallbackSpec->ProgressDialog.MainTitle = LangString(IDS_APP_TITLE, 0x03000000);
-    t.OpenCallbackSpec->ProgressDialog.MainAddTitle = progressTitle + UString(L" ");
+    t.OpenCallbackSpec->ProgressDialog.MainTitle = "7-Zip"; // LangString(IDS_APP_TITLE);
+    t.OpenCallbackSpec->ProgressDialog.MainAddTitle = progressTitle + L' ';
     t.OpenCallbackSpec->ProgressDialog.WaitMode = true;
 
     {
@@ -147,11 +164,11 @@ HRESULT OpenFileFolderPlugin(
     if (t.Result == E_ABORT)
       return t.Result;
 
+    encrypted = t.OpenCallbackSpec->PasswordIsDefined;
     if (t.Result == S_OK)
     {
       // if (openCallbackSpec->PasswordWasAsked)
       {
-        encrypted = t.OpenCallbackSpec->PasswordIsDefined;
         password = t.OpenCallbackSpec->Password;
       }
       *module = library.Detach();
