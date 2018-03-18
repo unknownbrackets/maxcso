@@ -34,13 +34,8 @@
 
 void uv_update_time(uv_loop_t* loop) {
   uint64_t new_time = uv__hrtime(UV__MILLISEC);
-  if (new_time > loop->time) {
-    loop->time = new_time;
-  }
-}
-
-void uv__time_forward(uv_loop_t* loop, uint64_t msecs) {
-  loop->time += msecs;
+  assert(new_time >= loop->time);
+  loop->time = new_time;
 }
 
 
@@ -61,7 +56,7 @@ static int uv_timer_compare(uv_timer_t* a, uv_timer_t* b) {
 }
 
 
-RB_GENERATE_STATIC(uv_timer_tree_s, uv_timer_s, tree_entry, uv_timer_compare);
+RB_GENERATE_STATIC(uv_timer_tree_s, uv_timer_s, tree_entry, uv_timer_compare)
 
 
 int uv_timer_init(uv_loop_t* loop, uv_timer_t* handle) {
