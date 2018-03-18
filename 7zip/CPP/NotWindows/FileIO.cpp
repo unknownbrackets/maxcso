@@ -99,7 +99,7 @@ bool CFileBase::Create(LPCSTR filename, DWORD dwDesiredAccess,
     UString ustr = MultiByteToUnicodeString(AString(name), 0);
     AString resultString;
     int is_good = 1;
-    for (int i = 0; i < ustr.Length(); i++)
+    for (int i = 0; i < ustr.Len(); i++)
     {
       if (ustr[i] >= 256) {
         is_good = 0;
