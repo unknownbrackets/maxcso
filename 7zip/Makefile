@@ -1,5 +1,6 @@
 CC ?= gcc
 CXX ?= g++
+AR ?= ar
 
 CFLAGS += -W -Wall -Wextra -O2
 CXXFLAGS += -W -Wall -Wextra -std=c++11 -O2 -ICPP
@@ -32,7 +33,7 @@ CXXFLAGS += -W -Wall -Wextra -std=c++11 -O2 -ICPP
 	$(CC) -c $(CFLAGS) -o $@ $<
 
 7zip.a: $(7ZIP_CXX_OBJ) $(7ZIP_C_OBJ)
-	ar rcs $@ $^
+	$(AR) rcs $@ $^
 
 clean:
 	rm -f $(7ZIP_CXX_OBJ) $(7ZIP_C_OBJ) 7zip.a
