@@ -55,6 +55,21 @@
     <ClInclude Include="CPP\7zip\Common\StreamUtils.h">
       <Filter>7zip</Filter>
     </ClInclude>
+    <ClInclude Include="CPP\7zip\Compress\ZlibEncoder.h">
+      <Filter>7zip</Filter>
+    </ClInclude>
+    <ClInclude Include="CPP\7zip\Compress\ZlibDecoder.h">
+      <Filter>7zip</Filter>
+    </ClInclude>
+    <ClInclude Include="CPP\7zip\Compress\DeflateDecoder.h">
+      <Filter>7zip</Filter>
+    </ClInclude>
+    <ClInclude Include="CPP\7zip\Compress\LzOutWindow.h">
+      <Filter>7zip</Filter>
+    </ClInclude>
+    <ClInclude Include="CPP\7zip\Common\InBuffer.h">
+      <Filter>7zip</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="CPP\7zip\Archive\DeflateProps.cpp">
@@ -106,5 +121,26 @@
     <ClCompile Include="CPP\7zip\Common\StreamUtils.cpp">
       <Filter>7zip</Filter>
     </ClCompile>
+    <ClCompile Include="CPP\7zip\Compress\ZlibEncoder.cpp">
+      <Filter>7zip</Filter>
+    </ClCompile>
+    <ClCompile Include="CPP\7zip\Compress\ZlibDecoder.cpp">
+      <Filter>7zip</Filter>
+    </ClCompile>
+    <ClCompile Include="CPP\7zip\Compress\DeflateDecoder.cpp">
+      <Filter>7zip</Filter>
+    </ClCompile>
+    <ClCompile Include="CPP\7zip\Compress\LzOutWindow.cpp">
+      <Filter>7zip</Filter>
+    </ClCompile>
+    <ClCompile Include="CPP\7zip\Common\InBuffer.cpp">
+      <Filter>7zip</Filter>
+    </ClCompile>
+    <ClCompile Include="CPP\7zip\Compress\BitlDecoder.cpp">
+      <Filter>7zip</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Makefile" />
   </ItemGroup>
 </Project>

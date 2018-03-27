@@ -9,9 +9,15 @@ CXXFLAGS += -W -Wall -Wextra -std=c++11 -O2 -ICPP
                CPP/7zip/Archive/DeflateProps.cpp \
                CPP/7zip/Common/CWrappers.cpp \
                CPP/7zip/Common/FileStreams.cpp \
+               CPP/7zip/Common/InBuffer.cpp \
                CPP/7zip/Common/OutBuffer.cpp \
                CPP/7zip/Common/StreamUtils.cpp \
+               CPP/7zip/Compress/BitlDecoder.cpp \
+               CPP/7zip/Compress/DeflateDecoder.cpp \
                CPP/7zip/Compress/DeflateEncoder.cpp \
+               CPP/7zip/Compress/LzOutWindow.cpp \
+               CPP/7zip/Compress/ZlibDecoder.cpp \
+               CPP/7zip/Compress/ZlibEncoder.cpp \
                CPP/Common/MyString.cpp \
                CPP/Common/StringConvert.cpp \
                CPP/Common/StringToInt.cpp \
