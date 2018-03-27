@@ -47,6 +47,7 @@ enum TaskFlags {
 	TASKFLAG_NO_ALL = TASKFLAG_NO_ZLIB | TASKFLAG_NO_ZOPFLI | TASKFLAG_NO_7ZIP | TASKFLAG_NO_LZ4,
 
 	TASKFLAG_DECOMPRESS = 0x400,
+	TASKFLAG_FMT_DAX = 0x800,
 };
 
 typedef std::function<void (const Task *, TaskStatus status, int64_t pos, int64_t total, int64_t written)> ProgressCallback;

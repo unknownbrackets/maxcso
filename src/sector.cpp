@@ -14,9 +14,9 @@
 
 namespace maxcso {
 
-static int InitZlib(z_stream *&z, int strategy) {
+static int InitZlib(z_stream *&z, int strategy, bool withHeader) {
 	z = reinterpret_cast<z_stream *>(calloc(1, sizeof(z_stream)));
-	return deflateInit2(z, 9, Z_DEFLATED, -15, 9, strategy);
+	return deflateInit2(z, 9, Z_DEFLATED, withHeader ? 15 : -15, 9, strategy);
 }
 
 static void EndZlib(z_stream *&z) {
@@ -30,12 +30,12 @@ Sector::Sector(uint32_t flags)
 	compress_(true), readySize_(0), buffer_(nullptr), best_(nullptr) {
 	// Set up the zlib streams, which we will reuse each time we hit this sector.
 	if (!(flags_ & TASKFLAG_NO_ZLIB_DEFAULT)) {
-		InitZlib(zDefault_, Z_DEFAULT_STRATEGY);
+		InitZlib(zDefault_, Z_DEFAULT_STRATEGY, (flags_ & TASKFLAG_FMT_DAX) != 0);
 	}
 	if (!(flags_ & TASKFLAG_NO_ZLIB_BRUTE)) {
-		InitZlib(zFiltered_, Z_FILTERED);
-		InitZlib(zHuffman_, Z_HUFFMAN_ONLY);
-		InitZlib(zRLE_, Z_RLE);
+		InitZlib(zFiltered_, Z_FILTERED, (flags_ & TASKFLAG_FMT_DAX) != 0);
+		InitZlib(zHuffman_, Z_HUFFMAN_ONLY, (flags_ & TASKFLAG_FMT_DAX) != 0);
+		InitZlib(zRLE_, Z_RLE, (flags_ & TASKFLAG_FMT_DAX) != 0);
 	}
 
 #ifndef NO_DEFLATE7Z
@@ -47,6 +47,7 @@ Sector::Sector(uint32_t flags)
 		opts.fastbytes = 64;
 		opts.matchcycles = 32;
 		opts.algo = 1;
+		opts.useZlib = (flags_ & TASKFLAG_FMT_DAX) != 0;
 		Deflate7z::Alloc(&deflate7z_, &opts);
 	}
 #endif
@@ -128,10 +129,13 @@ void Sector::FinalizeBest(uint32_t align) {
 	// If bestSize_ wouldn't be smaller after alignment, we should not compress.
 	// It won't save space, and it'll waste CPU on the decompression side.
 	if (AlignedBestSize(align) >= blockSize_ && best_ != nullptr) {
-		pool.Release(best_);
-		best_ = nullptr;
-		bestSize_ = blockSize_;
-		bestFmt_ = SECTOR_FMT_ORIG;
+		// TODO: For DAX, we allow this, since we don't support NC areas yet.
+		if (!(flags_ & TASKFLAG_FMT_DAX)) {
+			pool.Release(best_);
+			best_ = nullptr;
+			bestSize_ = blockSize_;
+			bestFmt_ = SECTOR_FMT_ORIG;
+		}
 	}
 }
 
@@ -206,9 +210,10 @@ void Sector::ZopfliTrial() {
 	// Also doesn't return failure?
 	unsigned char *out = nullptr;
 	size_t outsize = 0;
-	ZopfliCompress(&opt, ZOPFLI_FORMAT_DEFLATE, buffer_, blockSize_, &out, &outsize);
+	ZopfliFormat fmt = (flags_ & TASKFLAG_FMT_DAX) != 0 ? ZOPFLI_FORMAT_ZLIB : ZOPFLI_FORMAT_DEFLATE;
+	ZopfliCompress(&opt, fmt, buffer_, blockSize_, &out, &outsize);
 	if (out != nullptr) {
-		if (outsize > 0 && outsize < static_cast<size_t>(bestSize_)) {
+		if (outsize > 0 && outsize < static_cast<size_t>(pool.bufferSize)) {
 			// So that we have proper release semantics, we copy to our buffer.
 			uint8_t *result = pool.Alloc();
 			memcpy(result, out, outsize);
@@ -257,6 +262,13 @@ void Sector::LZ4Trial() {
 // Frees result if it's not better (takes ownership.)
 bool Sector::SubmitTrial(uint8_t *result, uint32_t size, SectorFormat fmt) {
 	bool better = size + origMaxCost_ < bestSize_;
+
+	if (flags_ & TASKFLAG_FMT_DAX) {
+		// TODO: Until we support NC areas (but that means we have to rebuild output or compress all blocks first?)
+		if (!better && bestFmt_ == SECTOR_FMT_ORIG) {
+			better = true;
+		}
+	}
 
 	// Based on the old and new format, we may want to apply some fuzzing for lz4.
 	if (fmt == SECTOR_FMT_LZ4 && bestFmt_ == SECTOR_FMT_DEFLATE) {
