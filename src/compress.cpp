@@ -3,6 +3,7 @@
 #include "compress.h"
 #include "uv_helper.h"
 #include "cso.h"
+#include "dax.h"
 #include "input.h"
 #include "output.h"
 #include "buffer_pool.h"
@@ -62,9 +63,13 @@ private:
 
 void CompressionTask::Enqueue() {
 	if (task_.block_size == DEFAULT_BLOCK_SIZE) {
-		// Start with a small block size.
-		// We'll re-evaluate later.
-		blockSize_ = SMALL_BLOCK_SIZE;
+		if (task_.flags & TASKFLAG_FMT_DAX) {
+			blockSize_ = DAX_FRAME_SIZE;
+		} else {
+			// Start with a small block size.
+			// We'll re-evaluate later.
+			blockSize_ = SMALL_BLOCK_SIZE;
+		}
 	} else {
 		if (task_.block_size > MAX_BLOCK_SIZE) {
 			Notify(TASK_INVALID_OPTION, "Block size too large");
@@ -148,6 +153,8 @@ void CompressionTask::BeginProcessing() {
 			fmt = CSO_FMT_CSO2;
 		} else if (task_.flags & TASKFLAG_FMT_ZSO) {
 			fmt = CSO_FMT_ZSO;
+		} else if (task_.flags & TASKFLAG_FMT_DAX) {
+			fmt = CSO_FMT_DAX;
 		}
 
 		// Now that we know the file size, check if we should resize the blockSize_.

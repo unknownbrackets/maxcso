@@ -17,6 +17,7 @@ enum CSOFormat {
 	CSO_FMT_CSO1,
 	CSO_FMT_CSO2,
 	CSO_FMT_ZSO,
+	CSO_FMT_DAX,
 };
 
 #ifdef _MSC_VER

@@ -14,6 +14,7 @@
 #include "CPP/7zip/IStream.h"
 #include "CPP/7zip/Archive/DeflateProps.h"
 #include "CPP/7zip/Compress/DeflateEncoder.h"
+#include "CPP/7zip/Compress/ZlibEncoder.h"
 
 #ifdef _WIN32
 #include <propvarutil.h>
@@ -118,7 +119,7 @@ HRESULT COutBlockStream::Write(const void *data, UInt32 size, UInt32 *processedS
 struct Context {
 	CInBlockStream *in;
 	COutBlockStream *out;
-	NCompress::NDeflate::NEncoder::CCOMCoder *coder;
+	ICompressCoder *coder;
 };
 
 void SetDefaults(Options *opts) {
@@ -127,6 +128,7 @@ void SetDefaults(Options *opts) {
 	opts->fastbytes = 0xFFFFFFFF;
 	opts->algo = 0xFFFFFFFF;
 	opts->matchcycles = 0xFFFFFFFF;
+	opts->useZlib = false;
 }
 
 static void SetupProperties(const Options *opts, NCompress::NDeflate::NEncoder::CCOMCoder *coder) {
@@ -149,8 +151,16 @@ void Alloc(Context **ctx, const Options *opts) {
 	c->in->AddRef();
 	c->out->AddRef();
 
-	c->coder = new NCompress::NDeflate::NEncoder::CCOMCoder();
-	SetupProperties(opts, c->coder);
+	if (opts->useZlib) {
+		NCompress::NZlib::CEncoder *coder = new NCompress::NZlib::CEncoder();
+		coder->Create();
+		SetupProperties(opts, coder->DeflateEncoderSpec);
+		c->coder = coder;
+	} else {
+		NCompress::NDeflate::NEncoder::CCOMCoder *coder = new NCompress::NDeflate::NEncoder::CCOMCoder();
+		SetupProperties(opts, coder);
+		c->coder = coder;
+	}
 }
 
 void Release(Context **ctx) {

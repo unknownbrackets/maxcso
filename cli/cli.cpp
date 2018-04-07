@@ -27,7 +27,7 @@ void show_help(const char *arg0) {
 	fprintf(stderr, "   --decompress    Write out to raw ISO, decompressing as needed\n");
 	fprintf(stderr, "   --block=N       Specify a block size (default depends on iso size)\n");
 	fprintf(stderr, "                   Many readers only support the 2048 size\n");
-	fprintf(stderr, "   --format=VER    Specify cso version (options: cso1, cso2, zso)\n");
+	fprintf(stderr, "   --format=VER    Specify cso version (options: cso1, cso2, zso, dax)\n");
 	fprintf(stderr, "                   These are experimental, default is cso1\n");
 	// TODO: Bring this back once it's functional.
 	//fprintf(stderr, "   --smallest      Force compression of all sectors for smallest result\n");
@@ -173,6 +173,8 @@ int parse_args(Arguments &args, int argc, char *argv[]) {
 					args.flags_fmt = maxcso::TASKFLAG_FMT_CSO_2;
 				} else if (strcmp(val, "zso") == 0) {
 					args.flags_fmt = maxcso::TASKFLAG_FMT_ZSO;
+				} else if (strcmp(val, "dax") == 0) {
+					args.flags_fmt = maxcso::TASKFLAG_FMT_DAX;
 				} else {
 					show_help(argv[0]);
 					fprintf(stderr, "\nERROR: Unknown format %s, expecting cso1, cso2, or zso.\n", val);
@@ -231,11 +233,18 @@ int validate_args(const char *arg0, Arguments &args) {
 
 	if (args.crc) {
 		if (args.outputs.size()) {
-		show_help(arg0);
-		fprintf(stderr, "\nERROR: Output files not used with --crc.\n");
-		return 1;
+			show_help(arg0);
+			fprintf(stderr, "\nERROR: Output files not used with --crc.\n");
+			return 1;
 		}
 	} else {
+		std::string outputExt = ".cso";
+		if (args.flags_fmt & maxcso::TASKFLAG_FMT_DAX) {
+			outputExt = ".dax";
+		} else if (args.flags_fmt & maxcso::TASKFLAG_FMT_ZSO) {
+			outputExt = ".zso";
+		}
+
 		// Automatically write to .cso files if not specified.
 		for (size_t i = args.outputs.size(); i < args.inputs.size(); ++i) {
 			if (args.inputs[i].size() <= 4) {
@@ -244,10 +253,13 @@ int validate_args(const char *arg0, Arguments &args) {
 
 			std::string ext = args.inputs[i].substr(args.inputs[i].size() - 4);
 			std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+			const bool inputRawExt = ext == ".iso";
+			const bool inputCompressedExt = ext == ".cso" || ext == ".zso" || ext == ".dax";
 
-			if (!args.decompress && ext == ".iso") {
-				args.outputs.push_back(args.inputs[i].substr(0, args.inputs[i].size() - 4) + ".cso");
-			} else if (args.decompress && (ext == ".cso" || ext == ".zso")) {
+			// Automatically switch extensions for convenience.
+			if (!args.decompress && (inputRawExt || inputCompressedExt) && ext != outputExt) {
+				args.outputs.push_back(args.inputs[i].substr(0, args.inputs[i].size() - 4) + outputExt);
+			} else if (args.decompress && inputCompressedExt) {
 				args.outputs.push_back(args.inputs[i].substr(0, args.inputs[i].size() - 4) + ".iso");
 			}
 		}
@@ -271,7 +283,7 @@ int validate_args(const char *arg0, Arguments &args) {
 	} else if (args.flags_fmt & maxcso::TASKFLAG_FMT_ZSO) {
 		args.flags_final = maxcso::TASKFLAG_NO_ZLIB | maxcso::TASKFLAG_NO_7ZIP | maxcso::TASKFLAG_NO_ZOPFLI | maxcso::TASKFLAG_NO_LZ4_HC_BRUTE;
 	} else {
-		// CSO v1, just disable lz4.
+		// CSO v1 or DAX, just disable lz4.
 		args.flags_final = maxcso::TASKFLAG_NO_ZOPFLI | maxcso::TASKFLAG_NO_LZ4;
 	}
 
@@ -296,6 +308,23 @@ int validate_args(const char *arg0, Arguments &args) {
 		args.flags_final |= maxcso::TASKFLAG_DECOMPRESS;
 	}
 	args.flags_final |= args.flags_fmt;
+
+	if (args.flags_fmt & maxcso::TASKFLAG_FMT_DAX) {
+		// DAX has a fixed block size.
+		if (args.block_size != maxcso::DEFAULT_BLOCK_SIZE) {
+			show_help(arg0);
+			fprintf(stderr, "\nERROR: Block size must be default for DAX.\n");
+			return 1;
+		}
+
+		// Currently, compression will fail if no DEFLATE format is enabled for DAX.
+		uint32_t deflateFlags = maxcso::TASKFLAG_NO_ZLIB | maxcso::TASKFLAG_NO_ZLIB_DEFAULT | maxcso::TASKFLAG_NO_ZLIB_BRUTE | maxcso::TASKFLAG_NO_ZOPFLI | maxcso::TASKFLAG_NO_7ZIP;
+		if ((args.flags_final & deflateFlags) == deflateFlags) {
+			show_help(arg0);
+			fprintf(stderr, "\nERROR: DAX must use some kind of DEFLATE.\n");
+			return 1;
+		}
+	}
 
 	return 0;
 }

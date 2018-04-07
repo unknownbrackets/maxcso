@@ -28,10 +28,16 @@ public:
 private:
 	void CheckFinish();
 	void Flush();
-	int32_t Align(int64_t &pos);
+	void WriteCSOIndex();
+	void WriteDAXIndex();
 	void HandleReadySector(Sector *sector);
 	bool ShouldCompress(int64_t pos, uint8_t *buffer);
+
+	int32_t Align(int64_t &pos);
 	inline int64_t SrcSizeAligned();
+	int64_t DstFirstSectorPos(uint32_t totalSectors);
+
+	bool UpdateIndex(int64_t srcPos, int64_t dstPos, uint32_t compressedSize, SectorFormat compressedFmt);
 
 	enum State {
 		STATE_INIT = 0x00,

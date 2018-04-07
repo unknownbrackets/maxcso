@@ -10,6 +10,7 @@ namespace Deflate7z {
 		uint32_t fastbytes;
 		uint32_t algo;
 		uint32_t matchcycles;
+		bool useZlib;
 	};
 
 	struct Context;

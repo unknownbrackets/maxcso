@@ -108,6 +108,7 @@ void Input::DetectFormat() {
 				finish_(false, "DAX uncompressed size not aligned to sector size");
 			} else {
 				size_ = header->uncompressed_size;
+				csoBlockSize_ = DAX_FRAME_SIZE;
 
 				const uint32_t frames = static_cast<uint32_t>((size_ + DAX_FRAME_SIZE - 1) >> DAX_FRAME_SHIFT);
 				daxIndex_ = new uint32_t[frames];
@@ -323,22 +324,39 @@ void Input::EnqueueDecompressSector(uint8_t *src, uint32_t len, uint32_t offset,
 			}
 		}
 	}, [this, actualBuf, offset](uv_work_t *req, int status) {
-		if (offset != 0) {
-			memmove(actualBuf, actualBuf + offset, SECTOR_SIZE);
-		}
-
 		if (!decompressError_.empty()) {
 			finish_(false, decompressError_.c_str());
 			pool.Release(actualBuf);
+			return;
 		} else if (status == -1) {
 			finish_(false, "Decompression work failed");
 			pool.Release(actualBuf);
-		} else {
-			callback_(pos_, actualBuf);
-
-			pos_ += SECTOR_SIZE;
-			ReadSector();
+			return;
 		}
+
+		// If the input has a larger block size than SECTOR_SIZE, queue each up here.
+		// Prevents double decompression of input blocks.
+		for (uint32_t suboffset = offset; suboffset < csoBlockSize_; suboffset += SECTOR_SIZE) {
+			const bool lastSubBlock = suboffset + SECTOR_SIZE >= csoBlockSize_;
+			uint8_t *const subBuf = lastSubBlock ? actualBuf : pool.Alloc();
+			if (lastSubBlock) {
+				memmove(actualBuf, actualBuf + suboffset, SECTOR_SIZE);
+			} else {
+				memmove(subBuf, actualBuf + suboffset, SECTOR_SIZE);
+			}
+
+			callback_(pos_, subBuf);
+			pos_ += SECTOR_SIZE;
+
+			// We may have filled early.  In this case, we have to bail and re-decompress part of this block.
+			// Luckily, this isn't common.
+			if (paused_ && !lastSubBlock) {
+				pool.Release(actualBuf);
+				break;
+			}
+		}
+
+		ReadSector();
 	});
 }
 

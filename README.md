@@ -48,6 +48,8 @@ Larger block sizes than the default will help compression, in the range of 2-3%.
 files may not be compatible with some software.  For example, [PPSSPP][] versions released
 after 2014-10-26 will support larger block sizes.
 
+Avoid DAX where CSOs using larger block sizes are supported, since DAX is less efficient.
+
 LZ4 support is mostly for experimentation.
 
 
@@ -79,7 +81,7 @@ Multiple files may be specified.  Inputs can be iso or cso files.
    --decompress    Write out to raw ISO, decompressing as needed
    --block=N       Specify a block size (default depends on iso size)
                    Many readers only support the 2048 size
-   --format=VER    Specify cso version (options: cso1, cso2, zso)
+   --format=VER    Specify cso version (options: cso1, cso2, zso, dax)
                    These are experimental, default is cso1
    --use-zlib      Enable trials with zlib for deflate compression
    --use-zopfli    Enable trials with Zopfli for deflate compression
