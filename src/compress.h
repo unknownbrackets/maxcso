@@ -7,7 +7,7 @@
 
 namespace maxcso {
 
-static const char *VERSION = "1.9.1";
+static const char *VERSION = "1.10.0";
 
 static const uint32_t DEFAULT_BLOCK_SIZE = 0xFFFFFFFF;
 
