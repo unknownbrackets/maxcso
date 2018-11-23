@@ -1,3 +1,6 @@
+PREFIX ?= /usr/local
+BINDIR ?= $(PREFIX)/bin
+
 CC ?= gcc
 CXX ?= g++
 
@@ -28,6 +31,14 @@ maxcso: $(SRC_CXX_OBJ) $(CLI_CXX_OBJ) $(ZOPFLI_C_OBJ) 7zip/7zip.a
 
 7zip/7zip.a:
 	$(MAKE) -C 7zip 7zip.a
+
+install:
+	mkdir -p $(DESTDIR)$(BINDIR)
+	cp maxcso $(DESTDIR)$(BINDIR)
+	chmod 0755 $(DESTDIR)$(BINDIR)/maxcso
+
+uninstall:
+	rm -f $(DESTDIR)$(BINDIR)/maxcso
 
 clean:
 	rm -f $(SRC_CXX_OBJ) $(CLI_CXX_OBJ) $(ZOPFLI_C_OBJ) maxcso
