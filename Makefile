@@ -1,5 +1,6 @@
 PREFIX ?= /usr/local
 BINDIR ?= $(PREFIX)/bin
+MANDIR ?= $(PREFIX)/share/man
 
 CC ?= gcc
 CXX ?= g++
@@ -34,11 +35,15 @@ maxcso: $(SRC_CXX_OBJ) $(CLI_CXX_OBJ) $(ZOPFLI_C_OBJ) 7zip/7zip.a
 
 install:
 	mkdir -p $(DESTDIR)$(BINDIR)
+	mkdir -p $(DESTDIR)$(MANDIR)/man1
 	cp maxcso $(DESTDIR)$(BINDIR)
+	cp maxcso.1 $(DESTDIR)$(MANDIR)/man1
 	chmod 0755 $(DESTDIR)$(BINDIR)/maxcso
+	chmod 0644 $(DESTDIR)$(MANDIR)/man1/maxcso.1
 
 uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/maxcso
+	rm -f $(DESTDIR)$(MANDIR)/man1/maxcso.1
 
 clean:
 	rm -f $(SRC_CXX_OBJ) $(CLI_CXX_OBJ) $(ZOPFLI_C_OBJ) maxcso
