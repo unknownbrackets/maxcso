@@ -2,8 +2,11 @@ CC ?= gcc
 CXX ?= g++
 AR ?= ar
 
-CFLAGS += -W -Wall -Wextra -O2
-CXXFLAGS += -W -Wall -Wextra -std=c++11 -O2 -ICPP
+SRC_CFLAGS = -W -Wall -Wextra
+SRC_CXXFLAGS = -W -Wall -Wextra -std=c++11 -ICPP
+
+CFLAGS ?= -O2
+CXXFLAGS ?= $(CFLAGS)
 
 7ZIP_CXX_SRC = CPP/7zip/Archive/Common/ParseProperties.cpp \
                CPP/7zip/Archive/DeflateProps.cpp \
@@ -33,10 +36,10 @@ CXXFLAGS += -W -Wall -Wextra -std=c++11 -O2 -ICPP
 7ZIP_C_OBJ =   $(7ZIP_C_SRC:.c=.o)
 
 %.o: %.cpp
-	$(CXX) -c $(CXXFLAGS) -o $@ $<
+	$(CXX) -c $(SRC_CXXFLAGS) $(CXXFLAGS) -o $@ $<
 
 %.o: %.c
-	$(CC) -c $(CFLAGS) -o $@ $<
+	$(CC) -c $(SRC_CFLAGS) $(CFLAGS) -o $@ $<
 
 7zip.a: $(7ZIP_CXX_OBJ) $(7ZIP_C_OBJ)
 	$(AR) rcs $@ $^

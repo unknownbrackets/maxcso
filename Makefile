@@ -5,8 +5,11 @@ MANDIR ?= $(PREFIX)/share/man
 CC ?= gcc
 CXX ?= g++
 
-CFLAGS += -W -Wall -Wextra -O2 -Wno-implicit-function-declaration -DNDEBUG=1
-CXXFLAGS += -W -Wall -Wextra -std=c++11 -O2 -Izopfli/src -I7zip -DNDEBUG=1 \
+CFLAGS ?= -O2
+CXXFLAGS ?= $(CFLAGS)
+
+SRC_CFLAGS += -W -Wall -Wextra -Wno-implicit-function-declaration -DNDEBUG=1
+SRC_CXXFLAGS += -W -Wall -Wextra -std=c++11 -Izopfli/src -I7zip -DNDEBUG=1 \
 	-Wno-unused-parameter -pthread
 
 SRC_CXX_SRC = $(wildcard src/*.cpp)
@@ -22,13 +25,13 @@ ZOPFLI_C_SRC = zopfli/src/zopfli/blocksplitter.c zopfli/src/zopfli/cache.c \
 ZOPFLI_C_OBJ = $(ZOPFLI_C_SRC:.c=.o)
 
 %.o: %.cpp
-	$(CXX) -c $(CXXFLAGS) -o $@ $<
+	$(CXX) -c $(SRC_CXXFLAGS) $(CXXFLAGS) -o $@ $<
 
 %.o: %.c
-	$(CC) -c $(CFLAGS) -o $@ $<
+	$(CC) -c $(SRC_CFLAGS) $(CFLAGS) -o $@ $<
 
 maxcso: $(SRC_CXX_OBJ) $(CLI_CXX_OBJ) $(ZOPFLI_C_OBJ) 7zip/7zip.a
-	$(CXX) -o $@ $(CXXFLAGS) $^ -luv -llz4 -lz
+	$(CXX) -o $@ $(SRC_CXXFLAGS) $(CXXFLAGS) $^ -luv -llz4 -lz
 
 7zip/7zip.a:
 	$(MAKE) -C 7zip 7zip.a
