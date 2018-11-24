@@ -1,0 +1,160 @@
+.\" maxcso.1
+.\"
+.Dd November 22, 2018
+.Dt MAXCSO 1
+.Os
+.Sh NAME
+.Nm MAXCSO
+.Nd Fast cso compressor
+.Sh SYNOPSIS
+.Nm maxcso
+.Op Fl -args
+.Op Ar input.iso
+.Op Fl o Ar output.cso
+.Sh DESCRIPTION
+A fast ISO to CSO compression program for use with PSP and PS2 emulators, which
+uses multiple algorithms for best compression ratio.
+.Ss FEATURES
+.Bl -bullet -offset <TAB> -compact
+.It
+Can use as many CPU cores as you want.
+.It
+Can use
+.Xr zlib 3 ,
+7-zip's deflate, and Zopfli.
+.It
+Processes multiple files in one command.
+.It
+Can take a CSO or DAX file as a source.
+.It
+Able to output at larger block sizes.
+.It
+Support for experimental CSO v2 and ZSO formats using
+.Xr lz4 1
+(faster decompression).
+.It
+Tuning of deflate or
+.Xr lz4 1
+compression threshold.
+.It
+Decompression of all supported inputs (including DAX and CSO v2).
+.El
+.Ss Compression
+.Nm maxcso
+always uses compression level 9.
+Decompression speed is about the same regardless of level, and disk access is
+faster with smaller files.
+.Pp
+Using 7-zip's deflate and Zopfli improves compression ratios, but don't expect a
+lot.
+Usual results are between 0.5% to 1.0% smaller.
+.Pp
+Larger block sizes than the default will help compression, in the range of 2-3%.
+However, the files may not be compatible with some software.
+For example,
+.Nm ppsspp
+versions released after 2014-10-26 will support larger block
+sizes.
+.Pp
+Avoid DAX where CSOs using larger block sizes are supported, since DAX is less
+efficient.
+.Pp
+.Xr lz4 1
+support is mostly for experimentation.
+.Ss Speed
+Compared to other tools like ciso and CisoPlus,
+.Nm maxcso
+can run much faster and achieve the same compression.
+Use
+.Fl -fast
+to get the fastest compression, which matches level 9 in other tools.
+.Pp
+Additionally, if you have better than a dual core processor,
+.Nm maxcso
+will use all
+of your cores, and perform even better.
+.Pp
+In usage, CSOs typically perform well in all known emulators.
+Some versions of PSP firmware with
+support for CSOs have bugs in their CSO support, but this doesn't affect
+emulators.
+.Sh OPTIONS
+Multiple files may be specified.
+Inputs can be iso or cso files.
+.Bl -tag -width indent
+.It Fl -threads=N
+Specify N threads for I/O and compression.
+.It Fl -quiet
+Suppress status output.
+.It Fl -crc
+Log CRC32 checksums, ignore output files and methods.
+.It Fl -fast
+Use only basic
+.Xr zlib 3
+or lz4 for fastest result.
+.It Fl -decompress
+Write out to raw ISO, decompressing as needed.
+.It Fl -block=N
+Specify a block size (default depends on iso size).
+Many readers only support the 2048 size.
+.It Fl -format=VER Ar cso1 , cso2 , zso , dax
+Specify cso version.
+These are experimental, default is
+.Ar cso1 .
+.It Fl -usr-zlib
+Enable trials with
+.Xr zlib 3
+for deflate compression.
+.It Fl -use-zopli
+Enable trials with Zopfli for deflate compression.
+Because Zopfli is significantly slower than the other methods and uses a lot
+more memory, it is disabled by default.
+Use for maximum compression.
+.It Fl -use-7zdeflate
+Enable trials with 7-zip's deflate compression.
+.It Fl -use-lz4
+Enable trials with lz4hc for
+.Xr lz4 1
+compression.
+.It Fl -use-lz4brute
+Enable bruteforce trials with lz4hc for
+.Xr lz4 1
+compression.
+.It Fl -only-METHOD
+Only allow a certain compression method (
+.Xr zlib 3 ,
+etc. above).
+.It Fl -no-METHOD
+Disable a certain compression method (
+.Xr zlib 3 ,
+etc. above).
+.It Fl -lz4-cost=N
+Allow
+.Xr lz4 1
+to increase block size by N% at most (cso2 only).
+.It Fl -orig-cost=N
+Allow uncompressed to increase block size by N% at most.
+.El
+.Pp
+The cost arguments allow you to allow each block to be N% bigger by using
+.Xr lz4 1
+or no compression.
+This makes the file read faster (less cpu power), but take more space.
+.Sh EXAMPLES
+.Bl -tag -width indent
+.It Nm maxcso Ar myfile.iso
+Compress
+.Ar myfile.iso
+and create myfile.cso.
+.It Nm maxcso Ar myfile.iso Fl o Ar output.cso
+Compress
+.Ar myfile.iso
+and create
+.Ar output.cso .
+.El
+.Sh SEE ALSO
+.Xr lz4 1 ,
+.Xr PCSX2 1 ,
+.Xr zlib 3
+.Sh BUGS
+.Lk https://github.com/unknownbrackets/maxcso/issues "Issue tracker"
