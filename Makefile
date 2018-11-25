@@ -36,7 +36,7 @@ maxcso: $(SRC_CXX_OBJ) $(CLI_CXX_OBJ) $(ZOPFLI_C_OBJ) 7zip/7zip.a
 7zip/7zip.a:
 	$(MAKE) -C 7zip 7zip.a
 
-install:
+install: all
 	mkdir -p $(DESTDIR)$(BINDIR)
 	mkdir -p $(DESTDIR)$(MANDIR)/man1
 	cp maxcso $(DESTDIR)$(BINDIR)
