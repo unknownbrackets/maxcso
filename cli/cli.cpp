@@ -4,6 +4,9 @@
 #include <cstdlib>
 #include <string>
 #include <vector>
+#ifndef _WIN32
+#include <libgen.h>
+#endif
 #include "winargs.h"
 #include "winglob.h"
 #include "../src/compress.h"
@@ -43,6 +46,7 @@ void show_help(const char *arg0) {
 	fprintf(stderr, "                   The default is to use zlib and 7zdeflate only\n");
 	fprintf(stderr, "   --lz4-cost=N    Allow lz4 to increase block size by N%% at most (cso2 only)\n");
 	fprintf(stderr, "   --orig-cost=N   Allow uncompressed to increase block size by N%% at most\n");
+	fprintf(stderr, "   --output-path=X Output to path X/, use basename for default outputs\n");
 }
 
 bool has_arg_value(int &i, char *argv[], const std::string &arg, const char *&val) {
@@ -96,6 +100,7 @@ bool has_arg(int &i, char *argv[], const std::string &arg) {
 struct Arguments {
 	std::vector<std::string> inputs;
 	std::vector<std::string> outputs;
+	std::string output_path;
 	int threads;
 	uint32_t block_size;
 
@@ -196,8 +201,14 @@ int parse_args(Arguments &args, int argc, char *argv[]) {
 				args.flags_no |= method;
 			} else if (has_arg_method(i, argv, "--only-", method)) {
 				args.flags_only |= method;
+			} else if (has_arg_value(i, argv, "--output-path", val)) {
+				args.output_path = val;
+				// Don't treat this as just a prefix, it's confusing with the basename behavior.
+				if (strlen(val) >= 1 && val[strlen(val) - 1] != '/') {
+					args.output_path += "/";
+				}
 			} else if (has_arg_value(i, argv, "--out", val) || has_arg_value(i, argv, "-o", val)) {
-				args.outputs.push_back(val);
+				args.outputs.push_back(args.output_path + val);
 			} else if (has_arg(i, argv, "--")) {
 				break;
 			} else {
@@ -216,6 +227,21 @@ int parse_args(Arguments &args, int argc, char *argv[]) {
 	}
 
 	return 0;
+}
+
+static std::string get_basename(std::string &filename) {
+#ifdef _WIN32
+	char name[MAX_PATH];
+	char ext[MAX_PATH];
+	// We want the ext because it might be "foo.bar.baz".
+	if (_splitpath_s(filename.c_str(), nullptr, 0, nullptr, 0, name, MAX_PATH, ext, MAX_PATH) == 0) {
+		return std::string(name) + "." + ext;
+	}
+	return filename;
+#else
+	filename.resize(filename.size() + 1, '\0');
+	return basename(&filename[0]);
+#endif
 }
 
 int validate_args(const char *arg0, Arguments &args) {
@@ -256,11 +282,16 @@ int validate_args(const char *arg0, Arguments &args) {
 			const bool inputRawExt = ext == ".iso";
 			const bool inputCompressedExt = ext == ".cso" || ext == ".zso" || ext == ".dax";
 
+			std::string without_ext = args.inputs[i].substr(0, args.inputs[i].size() - 4);
+			if (!args.output_path.empty()) {
+				without_ext = args.output_path + get_basename(without_ext);
+			}
+
 			// Automatically switch extensions for convenience.
 			if (!args.decompress && (inputRawExt || inputCompressedExt) && ext != outputExt) {
-				args.outputs.push_back(args.inputs[i].substr(0, args.inputs[i].size() - 4) + outputExt);
+				args.outputs.push_back(without_ext + outputExt);
 			} else if (args.decompress && inputCompressedExt) {
-				args.outputs.push_back(args.inputs[i].substr(0, args.inputs[i].size() - 4) + ".iso");
+				args.outputs.push_back(without_ext + ".iso");
 			}
 		}
 

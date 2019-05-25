@@ -93,6 +93,7 @@ Multiple files may be specified.  Inputs can be iso or cso files.
                    The default is to use zlib and 7zdeflate only
    --lz4-cost=N    Allow lz4 to increase block size by N% at most (cso2 only)
    --orig-cost=N   Allow uncompressed to increase block size by N% at most
+   --output-path=X Output to path X/, use basename for default outputs
 ```
 
 Because Zopfli is significantly slower than the other methods, and uses a lot more memory, it
