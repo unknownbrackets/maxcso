@@ -1,6 +1,6 @@
 /*
     datagen.c - compressible data generator test tool
-    Copyright (C) Yann Collet 2012-2015
+    Copyright (C) Yann Collet 2012-2016
 
     GPL v2 License
 
@@ -19,47 +19,19 @@
     51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
     You can contact the author at :
-   - ZSTD source repository : https://github.com/Cyan4973/zstd
+   - LZ4 source repository : https://github.com/lz4/lz4
    - Public forum : https://groups.google.com/forum/#!forum/lz4c
 */
 
 /**************************************
 *  Includes
 **************************************/
+#include "platform.h"  /* Compiler options, SET_BINARY_MODE */
+#include "util.h"      /* U32 */
 #include <stdlib.h>    /* malloc */
 #include <stdio.h>     /* FILE, fwrite */
 #include <string.h>    /* memcpy */
-
-
-/**************************************
-*  Basic Types
-**************************************/
-#if defined (__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L)   /* C99 */
-# include <stdint.h>
-  typedef  uint8_t BYTE;
-  typedef uint16_t U16;
-  typedef uint32_t U32;
-  typedef  int32_t S32;
-  typedef uint64_t U64;
-#else
-  typedef unsigned char       BYTE;
-  typedef unsigned short      U16;
-  typedef unsigned int        U32;
-  typedef   signed int        S32;
-  typedef unsigned long long  U64;
-#endif
-
-
-/**************************************
-*  OS-specific Includes
-**************************************/
-#if defined(MSDOS) || defined(OS2) || defined(WIN32) || defined(_WIN32) || defined(__CYGWIN__)
-#  include <fcntl.h>   /* _O_BINARY */
-#  include <io.h>      /* _setmode, _isatty */
-#  define SET_BINARY_MODE(file) _setmode(_fileno(file), _O_BINARY)
-#else
-#  define SET_BINARY_MODE(file)
-#endif
+#include <assert.h>
 
 
 /**************************************
@@ -81,10 +53,10 @@ typedef BYTE litDistribTable[LTSIZE];
 
 
 
-
 /*********************************************************
 *  Local Functions
 *********************************************************/
+#define MIN(a,b)   ( (a) < (b) ? (a) :(b) )
 #define RDG_rotl32(x,r) ((x << r) | (x >> (32 - r)))
 static unsigned int RDG_rand(U32* src)
 {
@@ -99,24 +71,18 @@ static unsigned int RDG_rand(U32* src)
 
 static void RDG_fillLiteralDistrib(litDistribTable lt, double ld)
 {
-    U32 i = 0;
-    BYTE character = '0';
-    BYTE firstChar = '(';
-    BYTE lastChar = '}';
+    BYTE const firstChar = ld <= 0.0 ? 0 : '(';
+    BYTE const lastChar  = ld <= 0.0 ? 255 : '}';
+    BYTE character = ld <= 0.0 ? 0 : '0';
+    U32 u = 0;
 
-    if (ld==0.0)
-    {
-        character = 0;
-        firstChar = 0;
-        lastChar =255;
-    }
-    while (i<LTSIZE)
-    {
-        U32 weight = (U32)((double)(LTSIZE - i) * ld) + 1;
-        U32 end;
-        if (weight + i > LTSIZE) weight = LTSIZE-i;
-        end = i + weight;
-        while (i < end) lt[i++] = character;
+    while (u<LTSIZE) {
+        U32 const weight = (U32)((double)(LTSIZE - u) * ld) + 1;
+        U32 const end = MIN(u+weight, LTSIZE);
+        while (u < end) {
+            assert(u<LTSIZE);  /* try to ease static analyzer. u < end <= LTSIZE */
+            lt[u++] = character;
+        }
         character++;
         if (character > lastChar) character = firstChar;
     }
@@ -141,13 +107,11 @@ void RDG_genBlock(void* buffer, size_t buffSize, size_t prefixSize, double match
     U32* seed = seedPtr;
 
     /* special case */
-    while (matchProba >= 1.0)
-    {
+    while (matchProba >= 1.0) {
         size_t size0 = RDG_rand(seed) & 3;
         size0  = (size_t)1 << (16 + size0 * 2);
         size0 += RDG_rand(seed) & (size0-1);   /* because size0 is power of 2*/
-        if (buffSize < pos + size0)
-        {
+        if (buffSize < pos + size0) {
             memset(buffPtr+pos, 0, buffSize-pos);
             return;
         }
@@ -157,14 +121,15 @@ void RDG_genBlock(void* buffer, size_t buffSize, size_t prefixSize, double match
     }
 
     /* init */
-    if (pos==0) buffPtr[0] = RDG_genChar(seed, lt), pos=1;
+    if (pos==0) {
+        buffPtr[0] = RDG_genChar(seed, lt);
+        pos=1;
+    }
 
     /* Generate compressible data */
-    while (pos < buffSize)
-    {
+    while (pos < buffSize) {
         /* Select : Literal (char) or Match (within 32K) */
-        if (RDG_RAND15BITS < matchProba32)
-        {
+        if (RDG_RAND15BITS < matchProba32) {
             /* Copy (within 32K) */
             size_t match;
             size_t d;
@@ -175,9 +140,7 @@ void RDG_genBlock(void* buffer, size_t buffSize, size_t prefixSize, double match
             d = pos + length;
             if (d > buffSize) d = buffSize;
             while (pos < d) buffPtr[pos++] = buffPtr[match++];
-        }
-        else
-        {
+        } else {
             /* Literal (noise) */
             size_t d;
             size_t length = RDG_RANDLENGTH;
@@ -215,12 +178,11 @@ void RDG_genOut(unsigned long long size, double matchProba, double litProba, uns
     RDG_genBlock(buff, RDG_DICTSIZE, 0, matchProba, lt, &seed);
 
     /* Generate compressible data */
-    while (total < size)
-    {
+    while (total < size) {
         RDG_genBlock(buff, RDG_DICTSIZE+RDG_BLOCKSIZE, RDG_DICTSIZE, matchProba, lt, &seed);
         if (size-total < RDG_BLOCKSIZE) genBlockSize = (size_t)(size-total);
         total += genBlockSize;
-        fwrite(buff, 1, genBlockSize, stdout);
+        fwrite(buff, 1, genBlockSize, stdout);  /* should check potential write error */
         /* update dict */
         memcpy(buff, buff + RDG_BLOCKSIZE, RDG_DICTSIZE);
     }
