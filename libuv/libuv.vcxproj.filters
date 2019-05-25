@@ -334,9 +334,6 @@
     <ClCompile Include="src\win\process-stdio.c">
       <Filter>src\win</Filter>
     </ClCompile>
-    <ClCompile Include="src\win\req.c">
-      <Filter>src\win</Filter>
-    </ClCompile>
     <ClInclude Include="src\win\req-inl.h">
       <Filter>src\win</Filter>
     </ClInclude>
@@ -353,9 +350,6 @@
       <Filter>src\win</Filter>
     </ClCompile>
     <ClCompile Include="src\win\tty.c">
-      <Filter>src\win</Filter>
-    </ClCompile>
-    <ClCompile Include="src\win\timer.c">
       <Filter>src\win</Filter>
     </ClCompile>
     <ClCompile Include="src\win\udp.c">
@@ -382,5 +376,16 @@
     <ClCompile Include="src\win\detect-wakeup.c">
       <Filter>src\win</Filter>
     </ClCompile>
+    <ClCompile Include="src\timer.c">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\strscpy.c">
+      <Filter>src</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\strscpy.h">
+      <Filter>src</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
