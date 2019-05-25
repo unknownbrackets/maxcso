@@ -111,7 +111,7 @@ without any changes.
 
 ### Windows
 
-To build on Windows, simply open cli/maxcso.sln and build.  Visual Studio 2015 is required.
+To build on Windows, simply open cli/maxcso.sln and build.  Visual Studio 2017 is required.
 
 ### Mac OS X
 

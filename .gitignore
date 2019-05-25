@@ -44,3 +44,4 @@
 *.VC.opendb
 *.VC.db
 *.suo
+.vs
