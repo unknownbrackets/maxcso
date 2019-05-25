@@ -23,7 +23,8 @@
 #include "task.h"
 
 #if defined(__unix__) || defined(__POSIX__) || \
-    defined(__APPLE__) || defined(_AIX) || defined(__MVS__)
+    defined(__APPLE__) || defined(__sun) || \
+    defined(_AIX) || defined(__MVS__)
 #include <unistd.h> /* unlink, etc. */
 #else
 # include <direct.h>
@@ -168,6 +169,33 @@ TEST_IMPL(fs_copyfile) {
   r = uv_fs_copyfile(loop, &req, fixture, dst, -1, fail_cb);
   ASSERT(r == UV_EINVAL);
   uv_run(loop, UV_RUN_DEFAULT);
+
+  /* Copies file using UV_FS_COPYFILE_FICLONE. */
+  unlink(dst);
+  r = uv_fs_copyfile(NULL, &req, fixture, dst, UV_FS_COPYFILE_FICLONE, NULL);
+  ASSERT(r == 0);
+  handle_result(&req);
+
+  /* Copies file using UV_FS_COPYFILE_FICLONE_FORCE. */
+  unlink(dst);
+  r = uv_fs_copyfile(NULL, &req, fixture, dst, UV_FS_COPYFILE_FICLONE_FORCE,
+                     NULL);
+  ASSERT(r == 0 || r == UV_ENOSYS || r == UV_ENOTSUP);
+
+  if (r == 0)
+    handle_result(&req);
+
+#ifndef _WIN32
+  /* Copying respects permissions/mode. */
+  unlink(dst);
+  touch_file(dst, 0);
+  chmod(dst, S_IRUSR|S_IRGRP|S_IROTH); /* Sets file mode to 444 (read-only). */
+  r = uv_fs_copyfile(NULL, &req, fixture, dst, 0, NULL);
+  ASSERT(req.result == UV_EACCES);
+  ASSERT(r == UV_EACCES);
+  uv_fs_req_cleanup(&req);
+#endif
+
   unlink(dst); /* Cleanup */
   return 0;
 }

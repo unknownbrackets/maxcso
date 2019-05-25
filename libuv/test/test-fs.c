@@ -26,10 +26,12 @@
 #include <string.h> /* memset */
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <limits.h> /* INT_MAX, PATH_MAX, IOV_MAX */
 
 /* FIXME we shouldn't need to branch in this file */
 #if defined(__unix__) || defined(__POSIX__) || \
-    defined(__APPLE__) || defined(_AIX) || defined(__MVS__)
+    defined(__APPLE__) || defined(__sun) || \
+    defined(_AIX) || defined(__MVS__)
 #include <unistd.h> /* unlink, rmdir, etc. */
 #else
 # include <winioctl.h>
@@ -84,6 +86,7 @@ static int chmod_cb_count;
 static int fchmod_cb_count;
 static int chown_cb_count;
 static int fchown_cb_count;
+static int lchown_cb_count;
 static int link_cb_count;
 static int symlink_cb_count;
 static int readlink_cb_count;
@@ -120,6 +123,31 @@ static char test_buf2[] = "second-buffer\n";
 static uv_buf_t iov;
 
 #ifdef _WIN32
+int uv_test_getiovmax(void) {
+  return INT32_MAX; /* Emulated by libuv, so no real limit. */
+}
+#else
+int uv_test_getiovmax(void) {
+#if defined(IOV_MAX)
+  return IOV_MAX;
+#elif defined(_SC_IOV_MAX)
+  static int iovmax = -1;
+  if (iovmax == -1) {
+    iovmax = sysconf(_SC_IOV_MAX);
+    /* On some embedded devices (arm-linux-uclibc based ip camera),
+     * sysconf(_SC_IOV_MAX) can not get the correct value. The return
+     * value is -1 and the errno is EINPROGRESS. Degrade the value to 1.
+     */
+    if (iovmax == -1) iovmax = 1;
+  }
+  return iovmax;
+#else
+  return 1024;
+#endif
+}
+#endif
+
+#ifdef _WIN32
 /*
  * This tag and guid have no special meaning, and don't conflict with
  * reserved ids.
@@ -127,7 +155,7 @@ static uv_buf_t iov;
 static unsigned REPARSE_TAG = 0x9913;
 static GUID REPARSE_GUID = {
   0x1bf6205f, 0x46ae, 0x4527,
-  0xb1, 0x0c, 0xc5, 0x09, 0xb7, 0x55, 0x22, 0x80 };
+  { 0xb1, 0x0c, 0xc5, 0x09, 0xb7, 0x55, 0x22, 0x80 }};
 #endif
 
 static void check_permission(const char* filename, unsigned int mode) {
@@ -250,6 +278,13 @@ static void chown_cb(uv_fs_t* req) {
   ASSERT(req->fs_type == UV_FS_CHOWN);
   ASSERT(req->result == 0);
   chown_cb_count++;
+  uv_fs_req_cleanup(req);
+}
+
+static void lchown_cb(uv_fs_t* req) {
+  ASSERT(req->fs_type == UV_FS_LCHOWN);
+  ASSERT(req->result == 0);
+  lchown_cb_count++;
   uv_fs_req_cleanup(req);
 }
 
@@ -571,6 +606,15 @@ static void sendfile_cb(uv_fs_t* req) {
   ASSERT(req == &sendfile_req);
   ASSERT(req->fs_type == UV_FS_SENDFILE);
   ASSERT(req->result == 65546);
+  sendfile_cb_count++;
+  uv_fs_req_cleanup(req);
+}
+
+
+static void sendfile_nodata_cb(uv_fs_t* req) {
+  ASSERT(req == &sendfile_req);
+  ASSERT(req->fs_type == UV_FS_SENDFILE);
+  ASSERT(req->result == 0);
   sendfile_cb_count++;
   uv_fs_req_cleanup(req);
 }
@@ -1014,7 +1058,7 @@ TEST_IMPL(fs_async_dir) {
 }
 
 
-TEST_IMPL(fs_async_sendfile) {
+static int test_sendfile(void (*setup)(int), uv_fs_cb cb, off_t expected_size) {
   int f, r;
   struct stat s1, s2;
 
@@ -1027,14 +1071,8 @@ TEST_IMPL(fs_async_sendfile) {
   f = open("test_file", O_WRONLY | O_CREAT, S_IWUSR | S_IRUSR);
   ASSERT(f != -1);
 
-  r = write(f, "begin\n", 6);
-  ASSERT(r == 6);
-
-  r = lseek(f, 65536, SEEK_CUR);
-  ASSERT(r == 65542);
-
-  r = write(f, "end\n", 4);
-  ASSERT(r != -1);
+  if (setup != NULL)
+    setup(f);
 
   r = close(f);
   ASSERT(r == 0);
@@ -1052,7 +1090,7 @@ TEST_IMPL(fs_async_sendfile) {
   uv_fs_req_cleanup(&open_req2);
 
   r = uv_fs_sendfile(loop, &sendfile_req, open_req2.result, open_req1.result,
-      0, 131072, sendfile_cb);
+      0, 131072, cb);
   ASSERT(r == 0);
   uv_run(loop, UV_RUN_DEFAULT);
 
@@ -1065,9 +1103,10 @@ TEST_IMPL(fs_async_sendfile) {
   ASSERT(r == 0);
   uv_fs_req_cleanup(&close_req);
 
-  stat("test_file", &s1);
-  stat("test_file2", &s2);
-  ASSERT(65546 == s2.st_size && s1.st_size == s2.st_size);
+  ASSERT(0 == stat("test_file", &s1));
+  ASSERT(0 == stat("test_file2", &s2));
+  ASSERT(s1.st_size == s2.st_size);
+  ASSERT(s2.st_size == expected_size);
 
   /* Cleanup. */
   unlink("test_file");
@@ -1075,6 +1114,23 @@ TEST_IMPL(fs_async_sendfile) {
 
   MAKE_VALGRIND_HAPPY();
   return 0;
+}
+
+
+static void sendfile_setup(int f) {
+  ASSERT(6 == write(f, "begin\n", 6));
+  ASSERT(65542 == lseek(f, 65536, SEEK_CUR));
+  ASSERT(4 == write(f, "end\n", 4));
+}
+
+
+TEST_IMPL(fs_async_sendfile) {
+  return test_sendfile(sendfile_setup, sendfile_cb, 65546);
+}
+
+
+TEST_IMPL(fs_async_sendfile_nodata) {
+  return test_sendfile(NULL, sendfile_nodata_cb, 0);
 }
 
 
@@ -1136,6 +1192,7 @@ TEST_IMPL(fs_fstat) {
   ASSERT(req.result == sizeof(test_buf));
   uv_fs_req_cleanup(&req);
 
+  memset(&req.statbuf, 0xaa, sizeof(req.statbuf));
   r = uv_fs_fstat(NULL, &req, file, NULL);
   ASSERT(r == 0);
   ASSERT(req.result == 0);
@@ -1212,6 +1269,18 @@ TEST_IMPL(fs_fstat) {
   ASSERT(s->st_ctim.tv_sec == t.st_ctime);
   ASSERT(s->st_ctim.tv_nsec == 0);
 #endif
+#endif
+
+#if defined(__linux__)
+  /* If statx() is supported, the birth time should be equal to the change time
+   * because we just created the file. On older kernels, it's set to zero.
+   */
+  ASSERT(s->st_birthtim.tv_sec == 0 ||
+         s->st_birthtim.tv_sec == t.st_ctim.tv_sec);
+  ASSERT(s->st_birthtim.tv_nsec == 0 ||
+         s->st_birthtim.tv_nsec == t.st_ctim.tv_nsec);
+  ASSERT(s->st_flags == 0);
+  ASSERT(s->st_gen == 0);
 #endif
 
   uv_fs_req_cleanup(&req);
@@ -1474,6 +1543,64 @@ TEST_IMPL(fs_unlink_readonly) {
   return 0;
 }
 
+#ifdef _WIN32
+TEST_IMPL(fs_unlink_archive_readonly) {
+  int r;
+  uv_fs_t req;
+  uv_file file;
+
+  /* Setup. */
+  unlink("test_file");
+
+  loop = uv_default_loop();
+
+  r = uv_fs_open(NULL,
+                 &req,
+                 "test_file",
+                 O_RDWR | O_CREAT,
+                 S_IWUSR | S_IRUSR,
+                 NULL);
+  ASSERT(r >= 0);
+  ASSERT(req.result >= 0);
+  file = req.result;
+  uv_fs_req_cleanup(&req);
+
+  iov = uv_buf_init(test_buf, sizeof(test_buf));
+  r = uv_fs_write(NULL, &req, file, &iov, 1, -1, NULL);
+  ASSERT(r == sizeof(test_buf));
+  ASSERT(req.result == sizeof(test_buf));
+  uv_fs_req_cleanup(&req);
+
+  close(file);
+
+  /* Make the file read-only and clear archive flag */
+  r = SetFileAttributes("test_file", FILE_ATTRIBUTE_READONLY);
+  ASSERT(r != 0);
+  uv_fs_req_cleanup(&req);
+
+  check_permission("test_file", 0400);
+
+  /* Try to unlink the file */
+  r = uv_fs_unlink(NULL, &req, "test_file", NULL);
+  ASSERT(r == 0);
+  ASSERT(req.result == 0);
+  uv_fs_req_cleanup(&req);
+
+  /*
+  * Run the loop just to check we don't have make any extraneous uv_ref()
+  * calls. This should drop out immediately.
+  */
+  uv_run(loop, UV_RUN_DEFAULT);
+
+  /* Cleanup. */
+  uv_fs_chmod(NULL, &req, "test_file", 0600, NULL);
+  uv_fs_req_cleanup(&req);
+  unlink("test_file");
+
+  MAKE_VALGRIND_HAPPY();
+  return 0;
+}
+#endif
 
 TEST_IMPL(fs_chown) {
   int r;
@@ -1482,6 +1609,7 @@ TEST_IMPL(fs_chown) {
 
   /* Setup. */
   unlink("test_file");
+  unlink("test_file_link");
 
   loop = uv_default_loop();
 
@@ -1525,7 +1653,29 @@ TEST_IMPL(fs_chown) {
   uv_run(loop, UV_RUN_DEFAULT);
   ASSERT(fchown_cb_count == 1);
 
-  close(file);
+  /* sync link */
+  r = uv_fs_link(NULL, &req, "test_file", "test_file_link", NULL);
+  ASSERT(r == 0);
+  ASSERT(req.result == 0);
+  uv_fs_req_cleanup(&req);
+
+  /* sync lchown */
+  r = uv_fs_lchown(NULL, &req, "test_file_link", -1, -1, NULL);
+  ASSERT(r == 0);
+  ASSERT(req.result == 0);
+  uv_fs_req_cleanup(&req);
+
+  /* async lchown */
+  r = uv_fs_lchown(loop, &req, "test_file_link", -1, -1, lchown_cb);
+  ASSERT(r == 0);
+  uv_run(loop, UV_RUN_DEFAULT);
+  ASSERT(lchown_cb_count == 1);
+
+  /* Close file */
+  r = uv_fs_close(NULL, &req, file, NULL);
+  ASSERT(r == 0);
+  ASSERT(req.result == 0);
+  uv_fs_req_cleanup(&req);
 
   /*
    * Run the loop just to check we don't have make any extraneous uv_ref()
@@ -1535,6 +1685,7 @@ TEST_IMPL(fs_chown) {
 
   /* Cleanup. */
   unlink("test_file");
+  unlink("test_file_link");
 
   MAKE_VALGRIND_HAPPY();
   return 0;
@@ -2215,9 +2366,6 @@ TEST_IMPL(fs_stat_root) {
 
 
 TEST_IMPL(fs_futime) {
-#if defined(_AIX) && !defined(_AIX71)
-  RETURN_SKIP("futime is not implemented for AIX versions below 7.1");
-#else
   utime_check_t checkme;
   const char* path = "test_file";
   double atime;
@@ -2225,6 +2373,9 @@ TEST_IMPL(fs_futime) {
   uv_file file;
   uv_fs_t req;
   int r;
+#if defined(_AIX) && !defined(_AIX71)
+  RETURN_SKIP("futime is not implemented for AIX versions below 7.1");
+#endif
 
   /* Setup. */
   loop = uv_default_loop();
@@ -2286,7 +2437,6 @@ TEST_IMPL(fs_futime) {
 
   MAKE_VALGRIND_HAPPY();
   return 0;
-#endif
 }
 
 
@@ -2665,16 +2815,41 @@ TEST_IMPL(fs_write_multiple_bufs) {
   /* Read the strings back to separate buffers. */
   iovs[0] = uv_buf_init(buf, sizeof(test_buf));
   iovs[1] = uv_buf_init(buf2, sizeof(test_buf2));
+  ASSERT(lseek(open_req1.result, 0, SEEK_CUR) == 0);
+  r = uv_fs_read(NULL, &read_req, open_req1.result, iovs, 2, -1, NULL);
+  ASSERT(r >= 0);
+  ASSERT(read_req.result == sizeof(test_buf) + sizeof(test_buf2));
+  ASSERT(strcmp(buf, test_buf) == 0);
+  ASSERT(strcmp(buf2, test_buf2) == 0);
+  uv_fs_req_cleanup(&read_req);
+
+  iov = uv_buf_init(buf, sizeof(buf));
+  r = uv_fs_read(NULL, &read_req, open_req1.result, &iov, 1, -1, NULL);
+  ASSERT(r == 0);
+  ASSERT(read_req.result == 0);
+  uv_fs_req_cleanup(&read_req);
+
+  /* Read the strings back to separate buffers. */
+  iovs[0] = uv_buf_init(buf, sizeof(test_buf));
+  iovs[1] = uv_buf_init(buf2, sizeof(test_buf2));
   r = uv_fs_read(NULL, &read_req, open_req1.result, iovs, 2, 0, NULL);
   ASSERT(r >= 0);
-  ASSERT(read_req.result >= 0);
+  if (read_req.result == sizeof(test_buf)) {
+    /* Infer that preadv is not available. */
+    uv_fs_req_cleanup(&read_req);
+    r = uv_fs_read(NULL, &read_req, open_req1.result, &iovs[1], 1, read_req.result, NULL);
+    ASSERT(r >= 0);
+    ASSERT(read_req.result == sizeof(test_buf2));
+  } else {
+    ASSERT(read_req.result == sizeof(test_buf) + sizeof(test_buf2));
+  }
   ASSERT(strcmp(buf, test_buf) == 0);
   ASSERT(strcmp(buf2, test_buf2) == 0);
   uv_fs_req_cleanup(&read_req);
 
   iov = uv_buf_init(buf, sizeof(buf));
   r = uv_fs_read(NULL, &read_req, open_req1.result, &iov, 1,
-                 read_req.result, NULL);
+                 sizeof(test_buf) + sizeof(test_buf2), NULL);
   ASSERT(r == 0);
   ASSERT(read_req.result == 0);
   uv_fs_req_cleanup(&read_req);
@@ -2693,11 +2868,14 @@ TEST_IMPL(fs_write_multiple_bufs) {
 
 
 TEST_IMPL(fs_write_alotof_bufs) {
-  const size_t iovcount = 54321;
+  size_t iovcount;
+  size_t iovmax;
   uv_buf_t* iovs;
   char* buffer;
   size_t index;
   int r;
+
+  iovcount = 54321;
 
   /* Setup. */
   unlink("test_file");
@@ -2706,6 +2884,7 @@ TEST_IMPL(fs_write_alotof_bufs) {
 
   iovs = malloc(sizeof(*iovs) * iovcount);
   ASSERT(iovs != NULL);
+  iovmax = uv_test_getiovmax();
 
   r = uv_fs_open(NULL,
                  &open_req1,
@@ -2739,7 +2918,10 @@ TEST_IMPL(fs_write_alotof_bufs) {
     iovs[index] = uv_buf_init(buffer + index * sizeof(test_buf),
                               sizeof(test_buf));
 
-  r = uv_fs_read(NULL, &read_req, open_req1.result, iovs, iovcount, 0, NULL);
+  ASSERT(lseek(open_req1.result, 0, SEEK_SET) == 0);
+  r = uv_fs_read(NULL, &read_req, open_req1.result, iovs, iovcount, -1, NULL);
+  if (iovcount > iovmax)
+    iovcount = iovmax;
   ASSERT(r >= 0);
   ASSERT((size_t)read_req.result == sizeof(test_buf) * iovcount);
 
@@ -2751,13 +2933,14 @@ TEST_IMPL(fs_write_alotof_bufs) {
   uv_fs_req_cleanup(&read_req);
   free(buffer);
 
+  ASSERT(lseek(open_req1.result, write_req.result, SEEK_SET) == write_req.result);
   iov = uv_buf_init(buf, sizeof(buf));
   r = uv_fs_read(NULL,
                  &read_req,
                  open_req1.result,
                  &iov,
                  1,
-                 read_req.result,
+                 -1,
                  NULL);
   ASSERT(r == 0);
   ASSERT(read_req.result == 0);
@@ -2778,14 +2961,19 @@ TEST_IMPL(fs_write_alotof_bufs) {
 
 
 TEST_IMPL(fs_write_alotof_bufs_with_offset) {
-  const size_t iovcount = 54321;
+  size_t iovcount;
+  size_t iovmax;
   uv_buf_t* iovs;
   char* buffer;
   size_t index;
   int r;
   int64_t offset;
-  char* filler = "0123456789";
-  int filler_len = strlen(filler);
+  char* filler;
+  int filler_len;
+
+  filler = "0123456789";
+  filler_len = strlen(filler);
+  iovcount = 54321;
 
   /* Setup. */
   unlink("test_file");
@@ -2794,6 +2982,7 @@ TEST_IMPL(fs_write_alotof_bufs_with_offset) {
 
   iovs = malloc(sizeof(*iovs) * iovcount);
   ASSERT(iovs != NULL);
+  iovmax = uv_test_getiovmax();
 
   r = uv_fs_open(NULL,
                  &open_req1,
@@ -2837,6 +3026,10 @@ TEST_IMPL(fs_write_alotof_bufs_with_offset) {
   r = uv_fs_read(NULL, &read_req, open_req1.result,
                  iovs, iovcount, offset, NULL);
   ASSERT(r >= 0);
+  if (r == sizeof(test_buf))
+    iovcount = 1; /* Infer that preadv is not available. */
+  else if (iovcount > iovmax)
+    iovcount = iovmax;
   ASSERT((size_t)read_req.result == sizeof(test_buf) * iovcount);
 
   for (index = 0; index < iovcount; ++index)
@@ -2850,7 +3043,7 @@ TEST_IMPL(fs_write_alotof_bufs_with_offset) {
   r = uv_fs_stat(NULL, &stat_req, "test_file", NULL);
   ASSERT(r == 0);
   ASSERT((int64_t)((uv_stat_t*)stat_req.ptr)->st_size ==
-         offset + (int64_t)(iovcount * sizeof(test_buf)));
+         offset + (int64_t)write_req.result);
   uv_fs_req_cleanup(&stat_req);
 
   iov = uv_buf_init(buf, sizeof(buf));
@@ -2859,7 +3052,7 @@ TEST_IMPL(fs_write_alotof_bufs_with_offset) {
                  open_req1.result,
                  &iov,
                  1,
-                 read_req.result + offset,
+                 offset + write_req.result,
                  NULL);
   ASSERT(r == 0);
   ASSERT(read_req.result == 0);
@@ -2878,6 +3071,229 @@ TEST_IMPL(fs_write_alotof_bufs_with_offset) {
   return 0;
 }
 
+TEST_IMPL(fs_read_dir) {
+  int r;
+  char buf[2];
+  loop = uv_default_loop();
+
+  /* Setup */
+  rmdir("test_dir");
+  r = uv_fs_mkdir(loop, &mkdir_req, "test_dir", 0755, mkdir_cb);
+  ASSERT(r == 0);
+  uv_run(loop, UV_RUN_DEFAULT);
+  ASSERT(mkdir_cb_count == 1);
+  /* Setup Done Here */
+
+  /* Get a file descriptor for the directory */
+  r = uv_fs_open(loop,
+                 &open_req1,
+                 "test_dir",
+                 UV_FS_O_RDONLY | UV_FS_O_DIRECTORY,
+                 S_IWUSR | S_IRUSR,
+                 NULL);
+  ASSERT(r >= 0);
+  uv_fs_req_cleanup(&open_req1);
+
+  /* Try to read data from the directory */
+  iov = uv_buf_init(buf, sizeof(buf));
+  r = uv_fs_read(NULL, &read_req, open_req1.result, &iov, 1, 0, NULL);
+#if defined(__FreeBSD__)   || \
+    defined(__OpenBSD__)   || \
+    defined(__NetBSD__)    || \
+    defined(__DragonFly__) || \
+    defined(_AIX)          || \
+    defined(__sun)         || \
+    defined(__MVS__)
+  /*
+   * As of now, these operating systems support reading from a directory,
+   * that too depends on the filesystem this temporary test directory is
+   * created on. That is why this assertion is a bit lenient.
+   */
+  ASSERT((r >= 0) || (r == UV_EISDIR));
+#else
+  ASSERT(r == UV_EISDIR);
+#endif
+  uv_fs_req_cleanup(&read_req);
+
+  r = uv_fs_close(NULL, &close_req, open_req1.result, NULL);
+  ASSERT(r == 0);
+  uv_fs_req_cleanup(&close_req);
+
+  /* Cleanup */
+  rmdir("test_dir");
+
+  MAKE_VALGRIND_HAPPY();
+  return 0;
+}
+
+#ifdef _WIN32
+
+TEST_IMPL(fs_partial_read) {
+  RETURN_SKIP("Test not implemented on Windows.");
+}
+
+TEST_IMPL(fs_partial_write) {
+  RETURN_SKIP("Test not implemented on Windows.");
+}
+
+#else  /* !_WIN32 */
+
+struct thread_ctx {
+  pthread_t pid;
+  int fd;
+  char* data;
+  int size;
+  int interval;
+  int doread;
+};
+
+static void thread_main(void* arg) {
+  const struct thread_ctx* ctx;
+  int size;
+  char* data;
+
+  ctx = (struct thread_ctx*)arg;
+  size = ctx->size;
+  data = ctx->data;
+
+  while (size > 0) {
+    ssize_t result;
+    int nbytes;
+    nbytes = size < ctx->interval ? size : ctx->interval;
+    if (ctx->doread) {
+      result = write(ctx->fd, data, nbytes);
+      /* Should not see EINTR (or other errors) */
+      ASSERT(result == nbytes);
+    } else {
+      result = read(ctx->fd, data, nbytes);
+      /* Should not see EINTR (or other errors),
+       * but might get a partial read if we are faster than the writer
+       */
+      ASSERT(result > 0 && result <= nbytes);
+    }
+
+    pthread_kill(ctx->pid, SIGUSR1);
+    size -= result;
+    data += result;
+  }
+}
+
+static void sig_func(uv_signal_t* handle, int signum) {
+  uv_signal_stop(handle);
+}
+
+static size_t uv_test_fs_buf_offset(uv_buf_t* bufs, size_t size) {
+  size_t offset;
+  /* Figure out which bufs are done */
+  for (offset = 0; size > 0 && bufs[offset].len <= size; ++offset)
+    size -= bufs[offset].len;
+
+  /* Fix a partial read/write */
+  if (size > 0) {
+    bufs[offset].base += size;
+    bufs[offset].len -= size;
+  }
+  return offset;
+}
+
+static void test_fs_partial(int doread) {
+  struct thread_ctx ctx;
+  uv_thread_t thread;
+  uv_signal_t signal;
+  int pipe_fds[2];
+  size_t iovcount;
+  uv_buf_t* iovs;
+  char* buffer;
+  size_t index;
+
+  iovcount = 54321;
+
+  iovs = malloc(sizeof(*iovs) * iovcount);
+  ASSERT(iovs != NULL);
+
+  ctx.pid = pthread_self();
+  ctx.doread = doread;
+  ctx.interval = 1000;
+  ctx.size = sizeof(test_buf) * iovcount;
+  ctx.data = malloc(ctx.size);
+  ASSERT(ctx.data != NULL);
+  buffer = malloc(ctx.size);
+  ASSERT(buffer != NULL);
+
+  for (index = 0; index < iovcount; ++index)
+    iovs[index] = uv_buf_init(buffer + index * sizeof(test_buf), sizeof(test_buf));
+
+  loop = uv_default_loop();
+
+  ASSERT(0 == uv_signal_init(loop, &signal));
+  ASSERT(0 == uv_signal_start(&signal, sig_func, SIGUSR1));
+
+  ASSERT(0 == pipe(pipe_fds));
+
+  ctx.fd = pipe_fds[doread];
+  ASSERT(0 == uv_thread_create(&thread, thread_main, &ctx));
+
+  if (doread) {
+    uv_buf_t* read_iovs;
+    int nread;
+    read_iovs = iovs;
+    nread = 0;
+    while (nread < ctx.size) {
+      int result;
+      result = uv_fs_read(loop, &read_req, pipe_fds[0], read_iovs, iovcount, -1, NULL);
+      if (result > 0) {
+        size_t read_iovcount;
+        read_iovcount = uv_test_fs_buf_offset(read_iovs, result);
+        read_iovs += read_iovcount;
+        iovcount -= read_iovcount;
+        nread += result;
+      } else {
+        ASSERT(result == UV_EINTR);
+      }
+      uv_fs_req_cleanup(&read_req);
+    }
+  } else {
+    int result;
+    result = uv_fs_write(loop, &write_req, pipe_fds[1], iovs, iovcount, -1, NULL);
+    ASSERT(write_req.result == result);
+    ASSERT(result == ctx.size);
+    uv_fs_req_cleanup(&write_req);
+  }
+
+  ASSERT(0 == memcmp(buffer, ctx.data, ctx.size));
+
+  ASSERT(0 == uv_thread_join(&thread));
+  ASSERT(0 == uv_run(loop, UV_RUN_DEFAULT));
+
+  ASSERT(0 == close(pipe_fds[1]));
+  uv_close((uv_handle_t*) &signal, NULL);
+
+  { /* Make sure we read everything that we wrote. */
+      int result;
+      result = uv_fs_read(loop, &read_req, pipe_fds[0], iovs, 1, -1, NULL);
+      ASSERT(result == 0);
+      uv_fs_req_cleanup(&read_req);
+  }
+  ASSERT(0 == close(pipe_fds[0]));
+
+  free(iovs);
+  free(buffer);
+  free(ctx.data);
+
+  MAKE_VALGRIND_HAPPY();
+}
+
+TEST_IMPL(fs_partial_read) {
+  test_fs_partial(1);
+  return 0;
+}
+
+TEST_IMPL(fs_partial_write) {
+  test_fs_partial(0);
+  return 0;
+}
+
+#endif/* _WIN32 */
 
 TEST_IMPL(fs_read_write_null_arguments) {
   int r;
@@ -2965,6 +3381,52 @@ TEST_IMPL(get_osfhandle_valid_handle) {
   ASSERT(fd != INVALID_HANDLE_VALUE);
 #else
   ASSERT(fd >= 0);
+#endif
+
+  r = uv_fs_close(NULL, &close_req, open_req1.result, NULL);
+  ASSERT(r == 0);
+  ASSERT(close_req.result == 0);
+  uv_fs_req_cleanup(&close_req);
+
+  /* Cleanup. */
+  unlink("test_file");
+
+  MAKE_VALGRIND_HAPPY();
+  return 0;
+}
+
+TEST_IMPL(open_osfhandle_valid_handle) {
+  int r;
+  uv_os_fd_t handle;
+  int fd;
+
+  /* Setup. */
+  unlink("test_file");
+
+  loop = uv_default_loop();
+
+  r = uv_fs_open(NULL,
+                 &open_req1,
+                 "test_file",
+                 O_RDWR | O_CREAT,
+                 S_IWUSR | S_IRUSR,
+                 NULL);
+  ASSERT(r >= 0);
+  ASSERT(open_req1.result >= 0);
+  uv_fs_req_cleanup(&open_req1);
+
+  handle = uv_get_osfhandle(open_req1.result);
+#ifdef _WIN32
+  ASSERT(handle != INVALID_HANDLE_VALUE);
+#else
+  ASSERT(handle >= 0);
+#endif
+
+  fd = uv_open_osfhandle(handle);
+#ifdef _WIN32
+  ASSERT(fd > 0);
+#else
+  ASSERT(fd == open_req1.result);
 #endif
 
   r = uv_fs_close(NULL, &close_req, open_req1.result, NULL);
@@ -3170,5 +3632,187 @@ TEST_IMPL(fs_exclusive_sharing_mode) {
 
   MAKE_VALGRIND_HAPPY();
   return 0;
+}
+#endif
+
+#ifdef _WIN32
+TEST_IMPL(fs_file_flag_no_buffering) {
+  int r;
+
+  /* Setup. */
+  unlink("test_file");
+
+  ASSERT(UV_FS_O_APPEND > 0);
+  ASSERT(UV_FS_O_CREAT > 0);
+  ASSERT(UV_FS_O_DIRECT > 0);
+  ASSERT(UV_FS_O_RDWR > 0);
+
+  /* FILE_APPEND_DATA must be excluded from FILE_GENERIC_WRITE: */
+  r = uv_fs_open(NULL,
+                 &open_req1,
+                 "test_file",
+                 UV_FS_O_RDWR | UV_FS_O_CREAT | UV_FS_O_DIRECT,
+                 S_IWUSR | S_IRUSR,
+                 NULL);
+  ASSERT(r >= 0);
+  ASSERT(open_req1.result >= 0);
+  uv_fs_req_cleanup(&open_req1);
+
+  r = uv_fs_close(NULL, &close_req, open_req1.result, NULL);
+  ASSERT(r == 0);
+  ASSERT(close_req.result == 0);
+  uv_fs_req_cleanup(&close_req);
+
+  /* FILE_APPEND_DATA and FILE_FLAG_NO_BUFFERING are mutually exclusive: */
+  r = uv_fs_open(NULL,
+                 &open_req2,
+                 "test_file",
+                 UV_FS_O_APPEND | UV_FS_O_DIRECT,
+                 S_IWUSR | S_IRUSR,
+                 NULL);
+  ASSERT(r == UV_EINVAL);
+  ASSERT(open_req2.result == UV_EINVAL);
+  uv_fs_req_cleanup(&open_req2);
+
+  /* Cleanup */
+  unlink("test_file");
+
+  MAKE_VALGRIND_HAPPY();
+  return 0;
+}
+#endif
+
+#ifdef _WIN32
+int call_icacls(const char* command, ...) {
+    char icacls_command[1024];
+    va_list args;
+
+    va_start(args, command);
+    vsnprintf(icacls_command, ARRAYSIZE(icacls_command), command, args);
+    va_end(args);
+    return system(icacls_command);
+}
+
+TEST_IMPL(fs_open_readonly_acl) {
+    uv_passwd_t pwd;
+    uv_fs_t req;
+    int r;
+
+    /*
+        Based on Node.js test from
+        https://github.com/nodejs/node/commit/3ba81e34e86a5c32658e218cb6e65b13e8326bc5
+
+        If anything goes wrong, you can delte the test_fle_icacls with:
+
+            icacls test_file_icacls /remove "%USERNAME%" /inheritance:e
+            attrib -r test_file_icacls
+            del test_file_icacls
+    */
+
+    /* Setup - clear the ACL and remove the file */
+    loop = uv_default_loop();
+    r = uv_os_get_passwd(&pwd);
+    ASSERT(r == 0);
+    call_icacls("icacls test_file_icacls /remove \"%s\" /inheritance:e",
+                pwd.username);
+    uv_fs_chmod(loop, &req, "test_file_icacls", S_IWUSR, NULL);
+    unlink("test_file_icacls");
+
+    /* Create the file */
+    r = uv_fs_open(loop,
+                   &open_req1,
+                   "test_file_icacls",
+                   O_RDONLY | O_CREAT,
+                   S_IRUSR,
+                   NULL);
+    ASSERT(r >= 0);
+    ASSERT(open_req1.result >= 0);
+    uv_fs_req_cleanup(&open_req1);
+    r = uv_fs_close(NULL, &close_req, open_req1.result, NULL);
+    ASSERT(r == 0);
+    ASSERT(close_req.result == 0);
+    uv_fs_req_cleanup(&close_req);
+
+    /* Set up ACL */
+    r = call_icacls("icacls test_file_icacls /inheritance:r /remove \"%s\"",
+                    pwd.username);
+    if (r != 0) {
+        goto acl_cleanup;
+    }
+    r = call_icacls("icacls test_file_icacls /grant \"%s\":RX", pwd.username);
+    if (r != 0) {
+        goto acl_cleanup;
+    }
+
+    /* Try opening the file */
+    r = uv_fs_open(NULL, &open_req1, "test_file_icacls", O_RDONLY, 0, NULL);
+    if (r < 0) {
+        goto acl_cleanup;
+    }
+    uv_fs_req_cleanup(&open_req1);
+    r = uv_fs_close(NULL, &close_req, open_req1.result, NULL);
+    if (r != 0) {
+        goto acl_cleanup;
+    }
+    uv_fs_req_cleanup(&close_req);
+
+ acl_cleanup:
+    /* Cleanup */
+    call_icacls("icacls test_file_icacls /remove \"%s\" /inheritance:e",
+                pwd.username);
+    unlink("test_file_icacls");
+    uv_os_free_passwd(&pwd);
+    ASSERT(r == 0);
+    MAKE_VALGRIND_HAPPY();
+    return 0;
+}
+#endif
+
+#ifdef _WIN32
+TEST_IMPL(fs_fchmod_archive_readonly) {
+    uv_fs_t req;
+    uv_file file;
+    int r;
+    /* Test clearing read-only flag from files with Archive flag cleared */
+
+    /* Setup*/
+    unlink("test_file");
+    r = uv_fs_open(NULL,
+                   &req,
+                   "test_file",
+                   O_WRONLY | O_CREAT,
+                   S_IWUSR | S_IRUSR,
+                   NULL);
+    ASSERT(r >= 0);
+    ASSERT(req.result >= 0);
+    file = req.result;
+    uv_fs_req_cleanup(&req);
+    r = uv_fs_close(NULL, &req, file, NULL);
+    ASSERT(r == 0);
+    uv_fs_req_cleanup(&req);
+    /* Make the file read-only and clear archive flag */
+    r = SetFileAttributes("test_file", FILE_ATTRIBUTE_READONLY);
+    ASSERT(r != 0);
+    check_permission("test_file", 0400);
+    /* Try fchmod */
+    r = uv_fs_open(NULL, &req, "test_file", O_RDONLY, 0, NULL);
+    ASSERT(r >= 0);
+    ASSERT(req.result >= 0);
+    file = req.result;
+    uv_fs_req_cleanup(&req);
+    r = uv_fs_fchmod(NULL, &req, file, S_IWUSR, NULL);
+    ASSERT(r == 0);
+    ASSERT(req.result == 0);
+    uv_fs_req_cleanup(&req);
+    r = uv_fs_close(NULL, &req, file, NULL);
+    ASSERT(r == 0);
+    uv_fs_req_cleanup(&req);
+    check_permission("test_file", S_IWUSR);
+
+    /* Restore Archive flag for rest of the tests */
+    r = SetFileAttributes("test_file", FILE_ATTRIBUTE_ARCHIVE);
+    ASSERT(r != 0);
+
+    return 0;
 }
 #endif

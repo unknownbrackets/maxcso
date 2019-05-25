@@ -19,15 +19,51 @@
  * IN THE SOFTWARE.
  */
 
-#ifndef UV_MVS_H
-#define UV_MVS_H
+#include "uv.h"
+#include "task.h"
+#include <string.h>
 
-#define UV_PLATFORM_SEM_T int
+#ifndef _WIN32
+# include <sys/utsname.h>
+#endif
 
-#define UV_PLATFORM_LOOP_FIELDS                                               \
-  void* ep;                                                                   \
+TEST_IMPL(uname) {
+#ifndef _WIN32
+  struct utsname buf;
+#endif
+#ifdef _AIX
+  char temp[256];
+#endif
+  uv_utsname_t buffer;
+  int r;
 
-#define UV_PLATFORM_FS_EVENT_FIELDS                                           \
-  char rfis_rftok[8];                                                         \
+  /* Verify that NULL is handled properly. */
+  r = uv_os_uname(NULL);
+  ASSERT(r == UV_EINVAL);
 
-#endif /* UV_MVS_H */
+  /* Verify the happy path. */
+  r = uv_os_uname(&buffer);
+  ASSERT(r == 0);
+
+#ifndef _WIN32
+  ASSERT(uname(&buf) != -1);
+  ASSERT(strcmp(buffer.sysname, buf.sysname) == 0);
+  ASSERT(strcmp(buffer.version, buf.version) == 0);
+
+# ifdef _AIX
+  snprintf(temp, sizeof(temp), "%s.%s", buf.version, buf.release);
+  ASSERT(strcmp(buffer.release, temp) == 0);
+# else
+  ASSERT(strcmp(buffer.release, buf.release) == 0);
+# endif /* _AIX */
+
+# if defined(_AIX) || defined(__PASE__)
+  ASSERT(strcmp(buffer.machine, "ppc64") == 0);
+# else
+  ASSERT(strcmp(buffer.machine, buf.machine) == 0);
+# endif /* defined(_AIX) || defined(__PASE__) */
+
+#endif /* _WIN32 */
+
+  return 0;
+}

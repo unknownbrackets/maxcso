@@ -12,6 +12,8 @@ otherwise it will be performed asynchronously.
 All file operations are run on the threadpool. See :ref:`threadpool` for information
 on the threadpool size.
 
+.. note::
+     On Windows `uv_fs_*` functions use utf-8 encoding.
 
 Data types
 ----------
@@ -93,7 +95,11 @@ Data types
             UV_FS_CHOWN,
             UV_FS_FCHOWN,
             UV_FS_REALPATH,
-            UV_FS_COPYFILE
+            UV_FS_COPYFILE,
+            UV_FS_LCHOWN,
+            UV_FS_OPENDIR,
+            UV_FS_READDIR,
+            UV_FS_CLOSEDIR
         } uv_fs_type;
 
 .. c:type:: uv_dirent_t
@@ -118,6 +124,21 @@ Data types
             const char* name;
             uv_dirent_type_t type;
         } uv_dirent_t;
+
+.. c:type:: uv_dir_t
+
+    Data type used for streaming directory iteration.
+    Used by :c:func:`uv_fs_opendir()`, :c:func:`uv_fs_readdir()`, and
+    :c:func:`uv_fs_closedir()`. `dirents` represents a user provided array of
+    `uv_dirent_t`s used to hold results. `nentries` is the user provided maximum
+    array size of `dirents`.
+
+    ::
+
+        typedef struct uv_dir_s {
+            uv_dirent_t* dirents;
+            size_t nentries;
+        } uv_dir_t;
 
 
 Public members
@@ -148,8 +169,8 @@ Public members
 
 .. c:member:: void* uv_fs_t.ptr
 
-    Stores the result of :c:func:`uv_fs_readlink` and serves as an alias to
-    `statbuf`.
+    Stores the result of :c:func:`uv_fs_readlink` and
+    :c:func:`uv_fs_realpath` and serves as an alias to `statbuf`.
 
 .. seealso:: The :c:type:`uv_req_t` members also apply.
 
@@ -205,6 +226,49 @@ API
 
     Equivalent to :man:`rmdir(2)`.
 
+.. c:function:: int uv_fs_opendir(uv_loop_t* loop, uv_fs_t* req, const char* path, uv_fs_cb cb)
+
+    Opens `path` as a directory stream. On success, a `uv_dir_t` is allocated
+    and returned via `req->ptr`. This memory is not freed by
+    `uv_fs_req_cleanup()`, although `req->ptr` is set to `NULL`. The allocated
+    memory must be freed by calling `uv_fs_closedir()`. On failure, no memory
+    is allocated.
+
+    The contents of the directory can be iterated over by passing the resulting
+    `uv_dir_t` to `uv_fs_readdir()`.
+
+    .. versionadded:: 1.28.0
+
+.. c:function:: int uv_fs_closedir(uv_loop_t* loop, uv_fs_t* req, uv_dir_t* dir, uv_fs_cb cb)
+
+    Closes the directory stream represented by `dir` and frees the memory
+    allocated by `uv_fs_opendir()`.
+
+    .. versionadded:: 1.28.0
+
+.. c:function:: int uv_fs_readdir(uv_loop_t* loop, uv_fs_t* req, uv_dir_t* dir, uv_fs_cb cb)
+
+    Iterates over the directory stream, `dir`, returned by a successful
+    `uv_fs_opendir()` call. Prior to invoking `uv_fs_readdir()`, the caller
+    must set `dir->dirents` and `dir->nentries`, representing the array of
+    :c:type:`uv_dirent_t` elements used to hold the read directory entries and
+    its size.
+
+    On success, the result is an integer >= 0 representing the number of entries
+    read from the stream.
+
+    .. versionadded:: 1.28.0
+
+    .. warning::
+        `uv_fs_readdir()` is not thread safe.
+
+    .. note::
+        This function does not return the "." and ".." entries.
+
+    .. note::
+        On success this function allocates memory that must be freed using
+        `uv_fs_req_cleanup()`.
+
 .. c:function:: int uv_fs_scandir(uv_loop_t* loop, uv_fs_t* req, const char* path, int flags, uv_fs_cb cb)
 .. c:function:: int uv_fs_scandir_next(uv_fs_t* req, uv_dirent_t* ent)
 
@@ -234,6 +298,10 @@ API
 
     Equivalent to :man:`fsync(2)`.
 
+    .. note::
+        For AIX, `uv_fs_fsync` returns `UV_EBADF` on file descriptors referencing
+        non regular files.
+
 .. c:function:: int uv_fs_fdatasync(uv_loop_t* loop, uv_fs_t* req, uv_file file, uv_fs_cb cb)
 
     Equivalent to :man:`fdatasync(2)`.
@@ -249,6 +317,12 @@ API
     - `UV_FS_COPYFILE_EXCL`: If present, `uv_fs_copyfile()` will fail with
       `UV_EEXIST` if the destination path already exists. The default behavior
       is to overwrite the destination if it exists.
+    - `UV_FS_COPYFILE_FICLONE`: If present, `uv_fs_copyfile()` will attempt to
+      create a copy-on-write reflink. If the underlying platform does not
+      support copy-on-write, then a fallback copy mechanism is used.
+    - `UV_FS_COPYFILE_FICLONE_FORCE`: If present, `uv_fs_copyfile()` will
+      attempt to create a copy-on-write reflink. If the underlying platform does
+      not support copy-on-write, then an error is returned.
 
     .. warning::
         If the destination path is created, but an error occurs while copying
@@ -257,6 +331,9 @@ API
         could access the file.
 
     .. versionadded:: 1.14.0
+
+    .. versionchanged:: 1.20.0 `UV_FS_COPYFILE_FICLONE` and
+        `UV_FS_COPYFILE_FICLONE_FORCE` are supported.
 
 .. c:function:: int uv_fs_sendfile(uv_loop_t* loop, uv_fs_t* req, uv_file out_fd, uv_file in_fd, int64_t in_offset, size_t length, uv_fs_cb cb)
 
@@ -302,10 +379,12 @@ API
 .. c:function:: int uv_fs_readlink(uv_loop_t* loop, uv_fs_t* req, const char* path, uv_fs_cb cb)
 
     Equivalent to :man:`readlink(2)`.
+    The resulting string is stored in `req->ptr`.
 
 .. c:function:: int uv_fs_realpath(uv_loop_t* loop, uv_fs_t* req, const char* path, uv_fs_cb cb)
 
     Equivalent to :man:`realpath(3)` on Unix. Windows uses `GetFinalPathNameByHandle <https://msdn.microsoft.com/en-us/library/windows/desktop/aa364962(v=vs.85).aspx>`_.
+    The resulting string is stored in `req->ptr`.
 
     .. warning::
         This function has certain platform-specific caveats that were discovered when used in Node.
@@ -334,11 +413,14 @@ API
 
 .. c:function:: int uv_fs_chown(uv_loop_t* loop, uv_fs_t* req, const char* path, uv_uid_t uid, uv_gid_t gid, uv_fs_cb cb)
 .. c:function:: int uv_fs_fchown(uv_loop_t* loop, uv_fs_t* req, uv_file file, uv_uid_t uid, uv_gid_t gid, uv_fs_cb cb)
+.. c:function:: int uv_fs_lchown(uv_loop_t* loop, uv_fs_t* req, const char* path, uv_uid_t uid, uv_gid_t gid, uv_fs_cb cb)
 
-    Equivalent to :man:`chown(2)` and :man:`fchown(2)` respectively.
+    Equivalent to :man:`chown(2)`, :man:`fchown(2)` and :man:`lchown(2)` respectively.
 
     .. note::
         These functions are not implemented on Windows.
+
+    .. versionchanged:: 1.21.0 implemented uv_fs_lchown
 
 .. c:function:: uv_fs_type uv_fs_get_type(const uv_fs_t* req)
 
@@ -383,6 +465,15 @@ Helper functions
    any attempts to close it or to use it after closing the fd may lead to malfunction.
 
     .. versionadded:: 1.12.0
+
+.. c:function:: int uv_open_osfhandle(uv_os_fd_t os_fd)
+
+   For a OS-dependent handle, get the file descriptor in the C runtime.
+   On UNIX, returns the ``os_fd`` intact. On Windows, this calls `_open_osfhandle <https://msdn.microsoft.com/en-us/library/bdts1c9x.aspx>`_.
+   Note that the return value is still owned by the CRT,
+   any attempts to close it or to use it after closing the handle may lead to malfunction.
+
+    .. versionadded:: 1.23.0
 
 File open constants
 -------------------

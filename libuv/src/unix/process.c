@@ -223,8 +223,7 @@ static int uv__process_init_stdio(uv_stdio_container_t* container, int fds[2]) {
 
 
 static int uv__process_open_stream(uv_stdio_container_t* container,
-                                   int pipefds[2],
-                                   int writable) {
+                                   int pipefds[2]) {
   int flags;
   int err;
 
@@ -238,13 +237,11 @@ static int uv__process_open_stream(uv_stdio_container_t* container,
   pipefds[1] = -1;
   uv__nonblock(pipefds[0], 1);
 
-  if (container->data.stream->type == UV_NAMED_PIPE &&
-      ((uv_pipe_t*)container->data.stream)->ipc)
-    flags = UV_STREAM_READABLE | UV_STREAM_WRITABLE;
-  else if (writable)
-    flags = UV_STREAM_WRITABLE;
-  else
-    flags = UV_STREAM_READABLE;
+  flags = 0;
+  if (container->flags & UV_WRITABLE_PIPE)
+    flags |= UV_HANDLE_READABLE;
+  if (container->flags & UV_READABLE_PIPE)
+    flags |= UV_HANDLE_WRITABLE;
 
   return uv__stream_open(container->data.stream, pipefds[0], flags);
 }
@@ -318,7 +315,7 @@ static void uv__process_child_init(const uv_process_options_t* options,
         use_fd = open("/dev/null", fd == 0 ? O_RDONLY : O_RDWR);
         close_fd = use_fd;
 
-        if (use_fd == -1) {
+        if (use_fd < 0) {
           uv__write_int(error_fd, UV__ERR(errno));
           _exit(127);
         }
@@ -434,6 +431,8 @@ int uv_spawn(uv_loop_t* loop,
                               UV_PROCESS_SETGID |
                               UV_PROCESS_SETUID |
                               UV_PROCESS_WINDOWS_HIDE |
+                              UV_PROCESS_WINDOWS_HIDE_CONSOLE |
+                              UV_PROCESS_WINDOWS_HIDE_GUI |
                               UV_PROCESS_WINDOWS_VERBATIM_ARGUMENTS)));
 
   uv__handle_init(loop, (uv_handle_t*)process, UV_PROCESS);
@@ -533,7 +532,7 @@ int uv_spawn(uv_loop_t* loop,
   uv__close_nocheckstdio(signal_pipe[0]);
 
   for (i = 0; i < options->stdio_count; i++) {
-    err = uv__process_open_stream(options->stdio + i, pipes[i], i == 0);
+    err = uv__process_open_stream(options->stdio + i, pipes[i]);
     if (err == 0)
       continue;
 
