@@ -36,7 +36,7 @@ private:
 	};
 
 	static bool DecompressSectorDeflate(uint8_t *dst, const uint8_t *src, unsigned int len, FileType type, std::string &err);
-	static bool DecompressSectorLZ4(uint8_t *dst, const uint8_t *src, int dstSize, std::string &err);
+	static bool DecompressSectorLZ4(uint8_t *dst, const uint8_t *src, unsigned int len, int dstSize, std::string &err);
 
 	UVHelper uv_;
 	uv_loop_t *loop_;

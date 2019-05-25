@@ -314,7 +314,7 @@ void Input::EnqueueDecompressSector(uint8_t *src, uint32_t len, uint32_t offset,
 	uv_.queue_work(loop_, &work_, [this, actualBuf, src, len, isLZ4](uv_work_t *req) {
 		bool result;
 		if (isLZ4) {
-			result = DecompressSectorLZ4(actualBuf, src, csoBlockSize_, decompressError_);
+			result = DecompressSectorLZ4(actualBuf, src, len, csoBlockSize_, decompressError_);
 		} else {
 			result = DecompressSectorDeflate(actualBuf, src, len, type_, decompressError_);
 		}
@@ -404,9 +404,9 @@ bool Input::DecompressSectorDeflate(uint8_t *dst, const uint8_t *src, unsigned i
 	return true;
 }
 
-bool Input::DecompressSectorLZ4(uint8_t *dst, const uint8_t *src, int dstSize, std::string &err) {
-	// Must use fast, because we don't know the size of the input data.  It could include padding.
-	if (LZ4_decompress_fast(reinterpret_cast<const char *>(src), reinterpret_cast<char *>(dst), dstSize) < 0) {
+bool Input::DecompressSectorLZ4(uint8_t *dst, const uint8_t *src, unsigned int len, int dstSize, std::string &err) {
+	// We use partial because we don't know the size of the input data.  It could include padding.
+	if (LZ4_decompress_safe_partial(reinterpret_cast<const char *>(src), reinterpret_cast<char *>(dst), len, dstSize, dstSize) < 0) {
 		err = "LZ4 decompression failed.";
 		return false;
 	}
