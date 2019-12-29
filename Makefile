@@ -10,7 +10,7 @@ CXXFLAGS ?= $(CFLAGS)
 
 SRC_CFLAGS += -W -Wall -Wextra -Wno-implicit-function-declaration -DNDEBUG=1
 SRC_CXXFLAGS += -W -Wall -Wextra -std=c++11 -Izopfli/src -I7zip -DNDEBUG=1 \
-	-Wno-unused-parameter -pthread
+	-Wno-unused-parameter -Wno-unused-variable -pthread
 
 SRC_CXX_SRC = $(wildcard src/*.cpp)
 SRC_CXX_OBJ = $(SRC_CXX_SRC:.cpp=.o)
