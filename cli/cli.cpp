@@ -11,7 +11,7 @@
 #include "winglob.h"
 #include "../src/compress.h"
 #include "../src/checksum.h"
-#include "../libuv/include/uv.h"
+#include "uv.h"
 
 void show_version() {
 	fprintf(stderr, "maxcso v%s\n", maxcso::VERSION);
