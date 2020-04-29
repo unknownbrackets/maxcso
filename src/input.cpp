@@ -9,6 +9,8 @@
 
 namespace maxcso {
 
+static const uint32_t MAX_BLOCK_SIZE = 0x40000;
+
 Input::Input(uv_loop_t *loop)
 	: loop_(loop), type_(UNKNOWN), paused_(false), resumeShouldRead_(false), size_(-1), cache_(nullptr),
 	csoIndex_(nullptr), daxSize_(nullptr), daxIsNC_(nullptr) {
@@ -56,6 +58,7 @@ void Input::DetectFormat() {
 		}
 		uv_fs_req_cleanup(req);
 
+		bool freeHeaderBuf = true;
 		const bool isZSO = !memcmp(headerBuf, ZSO_MAGIC, 4);
 		if (isZSO || !memcmp(headerBuf, CSO_MAGIC, 4)) {
 			const CSOHeader *const header = reinterpret_cast<CSOHeader *>(headerBuf);
@@ -66,7 +69,7 @@ void Input::DetectFormat() {
 			}
 			if (header->version > 2) {
 				finish_(false, "CSO header indicates unsupported version");
-			} else if (header->sector_size < SECTOR_SIZE || header->sector_size > pool.bufferSize) {
+			} else if (header->sector_size < SECTOR_SIZE || header->sector_size > MAX_BLOCK_SIZE) {
 				finish_(false, "CSO header indicates unsupported sector size");
 			} else if ((header->uncompressed_size & SECTOR_MASK) != 0) {
 				finish_(false, "CSO uncompressed size not aligned to sector size");
@@ -76,15 +79,26 @@ void Input::DetectFormat() {
 				csoBlockSize_ = header->sector_size;
 
 				csoBlockShift_ = 0;
-				for (uint32_t i = header->sector_size; i > 1; i >>= 1) {
+				for (uint32_t i = csoBlockSize_; i > 1; i >>= 1) {
 					++csoBlockShift_;
+				}
+
+				pool.Release(headerBuf);
+				freeHeaderBuf = false;
+				// Over-allocate a bit in case of inefficient padding between blocks.
+				if (csoBlockSize_ * 2 > pool.bufferSize) {
+					if (!pool.SetBufferSize(csoBlockSize_ * 2)) {
+						finish_(false, "Unable to update buffer size to match decompress block size");
+						size_ = -1;
+						return;
+					}
 				}
 
 				const uint32_t sectors = static_cast<uint32_t>(SizeAligned() >> csoBlockShift_);
 				csoIndex_ = new uint32_t[sectors + 1];
 				const unsigned int bytes = (sectors + 1) * sizeof(uint32_t);
 				const uv_buf_t buf = uv_buf_init(reinterpret_cast<char *>(csoIndex_), bytes);
-				SetupCache(header->sector_size);
+				SetupCache(csoBlockSize_);
 
 				uv_.fs_read(loop_, &req_, file_, &buf, 1, sizeof(CSOHeader), [this, bytes](uv_fs_t *req) {
 					if (req->result != bytes) {
@@ -169,7 +183,10 @@ void Input::DetectFormat() {
 				}
 			});
 		}
-		pool.Release(headerBuf);
+
+		if (freeHeaderBuf) {
+			pool.Release(headerBuf);
+		}
 	});
 }
 
