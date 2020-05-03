@@ -14,9 +14,16 @@
 
 namespace maxcso {
 
-static int InitZlib(z_stream *&z, int strategy, bool withHeader) {
-	z = reinterpret_cast<z_stream *>(calloc(1, sizeof(z_stream)));
-	return deflateInit2(z, 9, Z_DEFLATED, withHeader ? 15 : -15, 9, strategy);
+static bool AddZlib(std::vector<z_stream *> &list, int strategy, bool withHeader) {
+	z_stream *z = reinterpret_cast<z_stream *>(calloc(1, sizeof(z_stream)));
+	int result = deflateInit2(z, 9, Z_DEFLATED, withHeader ? 15 : -15, 9, strategy);
+	if (result != Z_OK) {
+		free(z);
+		return false;
+	}
+
+	list.push_back(z);
+	return true;
 }
 
 static void EndZlib(z_stream *&z) {
@@ -29,13 +36,14 @@ Sector::Sector(uint32_t flags)
 	: flags_(flags), origMaxCost_(0), lz4MaxCost_(0), busy_(false), enqueued_(false),
 	compress_(true), readySize_(0), buffer_(nullptr), best_(nullptr) {
 	// Set up the zlib streams, which we will reuse each time we hit this sector.
+	bool withHeader = (flags_ & TASKFLAG_FMT_DAX) != 0;
 	if (!(flags_ & TASKFLAG_NO_ZLIB_DEFAULT)) {
-		InitZlib(zDefault_, Z_DEFAULT_STRATEGY, (flags_ & TASKFLAG_FMT_DAX) != 0);
+		AddZlib(zStreams_, Z_DEFAULT_STRATEGY, withHeader);
 	}
 	if (!(flags_ & TASKFLAG_NO_ZLIB_BRUTE)) {
-		InitZlib(zFiltered_, Z_FILTERED, (flags_ & TASKFLAG_FMT_DAX) != 0);
-		InitZlib(zHuffman_, Z_HUFFMAN_ONLY, (flags_ & TASKFLAG_FMT_DAX) != 0);
-		InitZlib(zRLE_, Z_RLE, (flags_ & TASKFLAG_FMT_DAX) != 0);
+		AddZlib(zStreams_, Z_FILTERED, withHeader);
+		AddZlib(zStreams_, Z_HUFFMAN_ONLY, withHeader);
+		AddZlib(zStreams_, Z_RLE, withHeader);
 	}
 
 #ifndef NO_DEFLATE7Z
@@ -57,13 +65,8 @@ Sector::~Sector() {
 	// Maybe should throw an error if it wasn't released?
 	Release();
 
-	if (!(flags_ & TASKFLAG_NO_ZLIB_DEFAULT)) {
-		EndZlib(zDefault_);
-	}
-	if (!(flags_ & TASKFLAG_NO_ZLIB_BRUTE)) {
-		EndZlib(zFiltered_);
-		EndZlib(zHuffman_);
-		EndZlib(zRLE_);
+	for (z_stream *&z : zStreams_) {
+		EndZlib(z);
 	}
 
 #ifndef NO_DEFLATE7Z
@@ -140,14 +143,9 @@ void Sector::FinalizeBest(uint32_t align) {
 }
 
 void Sector::Compress() {
-	if (!(flags_ & TASKFLAG_NO_ZLIB_DEFAULT)) {
-		ZlibTrial(zDefault_);
-	}
 	// Each of these sometimes wins on certain blocks.
-	if (!(flags_ & TASKFLAG_NO_ZLIB_BRUTE)) {
-		ZlibTrial(zFiltered_);
-		ZlibTrial(zHuffman_);
-		ZlibTrial(zRLE_);
+	for (z_stream *const z : zStreams_) {
+		ZlibTrial(z);
 	}
 	if (!(flags_ & TASKFLAG_NO_ZOPFLI)) {
 		ZopfliTrial();
@@ -166,7 +164,7 @@ void Sector::Compress() {
 // TODO: Split these out to separate files?
 void Sector::ZlibTrial(z_stream *z) {
 	// TODO: Validate the benefit of these with raw on msvc and gcc.
-	// Try TOO_FAR?  May not matter much for 2048 bytes.
+	// Try TOO_FAR?  Trialing 3 different values gives ~0.0002% and requires zlib patching...
 	// http://jsnell.iki.fi/blog/
 	// https://github.com/jtkukunas/zlib
 	// https://github.com/cloudflare/zlib

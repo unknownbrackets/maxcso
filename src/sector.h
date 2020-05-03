@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <vector>
 #include "uv_helper.h"
 
 typedef struct z_stream_s z_stream;
@@ -105,10 +106,7 @@ private:
 
 	SectorCallback ready_;
 
-	z_stream *zDefault_;
-	z_stream *zFiltered_;
-	z_stream *zHuffman_;
-	z_stream *zRLE_;
+	std::vector<z_stream *> zStreams_;
 	Deflate7z::Context *deflate7z_;
 };
 
