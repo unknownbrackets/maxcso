@@ -357,10 +357,11 @@ void Input::EnqueueDecompressSector(uint8_t *src, uint32_t len, uint32_t offset,
 			return;
 		}
 
+		int64_t sectorPos = pos_ - offset;
 		uint32_t resultSize = decompressResultSize_;
-		if (pos_ + resultSize > size_) {
+		if (sectorPos + resultSize > size_) {
 			// Ignore the padding at the end of the last block.
-			resultSize = size_ - pos_;
+			resultSize = static_cast<uint32_t>(size_ - sectorPos);
 		}
 
 		// If the input has a larger block size than SECTOR_SIZE, queue each up here.

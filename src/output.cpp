@@ -225,6 +225,14 @@ void Output::HandleReadySector(Sector *sector) {
 			return;
 		}
 
+		// In case there's padding in the compressed file, discard as needed.
+		if ((flags_ & TASKFLAG_DECOMPRESS) != 0 && dstPos + bestSize > srcSize_) {
+			bestSize = static_cast<unsigned int>((dstPos + bestSize) - srcSize_);
+		}
+		if (bestSize == 0) {
+			continue;
+		}
+
 		bufs[nbufs++] = uv_buf_init(reinterpret_cast<char *>(sectors[i]->BestBuffer()), bestSize);
 		dstPos += bestSize;
 		int32_t padSize = Align(dstPos);
