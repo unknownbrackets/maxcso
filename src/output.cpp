@@ -58,13 +58,15 @@ void Output::SetFile(uv_file file, int64_t srcSize, uint32_t blockSize, CSOForma
 	// For now, just take worst case (all blocks stored uncompressed.)
 	int64_t worstSize = dstPos_ + srcSize;
 	indexShift_ = 0;
-	for (int i = 62; i >= 31; --i) {
-		int64_t max = 1LL << i;
-		if (worstSize >= max) {
-			// This means we need i + 1 bits to store the position.
-			// We have to shift enough off to fit into 31.
-			indexShift_ = i + 1 - 31;
-			break;
+	if ((flags_ & TASKFLAG_DECOMPRESS) == 0) {
+		for (int i = 62; i >= 31; --i) {
+			int64_t max = 1LL << i;
+			if (worstSize >= max) {
+				// This means we need i + 1 bits to store the position.
+				// We have to shift enough off to fit into 31.
+				indexShift_ = i + 1 - 31;
+				break;
+			}
 		}
 	}
 
