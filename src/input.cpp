@@ -328,12 +328,13 @@ void Input::EnqueueDecompressSector(uint8_t *src, uint32_t len, uint32_t offset,
 	// We swap this with the compressed buf, and free the readBuf.
 	uint8_t *const actualBuf = pool.Alloc();
 	decompressError_.clear();
+	decompressResultSize_ = 0;
 	uv_.queue_work(loop_, &work_, [this, actualBuf, src, len, isLZ4](uv_work_t *req) {
 		bool result;
 		if (isLZ4) {
-			result = DecompressSectorLZ4(actualBuf, src, len, csoBlockSize_, decompressError_);
+			result = DecompressSectorLZ4(actualBuf, src, len, csoBlockSize_, decompressResultSize_, decompressError_);
 		} else {
-			result = DecompressSectorDeflate(actualBuf, src, len, type_, decompressError_);
+			result = DecompressSectorDeflate(actualBuf, src, len, type_, decompressResultSize_, decompressError_);
 		}
 		if (!result) {
 			if (decompressError_.empty()) {
@@ -350,11 +351,22 @@ void Input::EnqueueDecompressSector(uint8_t *src, uint32_t len, uint32_t offset,
 			pool.Release(actualBuf);
 			return;
 		}
+		if (decompressResultSize_ > csoBlockSize_) {
+			finish_(false, "Decompression produced more data than expected");
+			pool.Release(actualBuf);
+			return;
+		}
+
+		uint32_t resultSize = decompressResultSize_;
+		if (pos_ + resultSize > size_) {
+			// Ignore the padding at the end of the last block.
+			resultSize = size_ - pos_;
+		}
 
 		// If the input has a larger block size than SECTOR_SIZE, queue each up here.
 		// Prevents double decompression of input blocks.
-		for (uint32_t suboffset = offset; suboffset < csoBlockSize_; suboffset += SECTOR_SIZE) {
-			const bool lastSubBlock = suboffset + SECTOR_SIZE >= csoBlockSize_;
+		for (uint32_t suboffset = offset; suboffset < resultSize; suboffset += SECTOR_SIZE) {
+			const bool lastSubBlock = suboffset + SECTOR_SIZE >= resultSize;
 			uint8_t *const subBuf = lastSubBlock ? actualBuf : pool.Alloc();
 			if (lastSubBlock) {
 				memmove(actualBuf, actualBuf + suboffset, SECTOR_SIZE);
@@ -389,7 +401,7 @@ void Input::Resume() {
 	}
 }
 
-bool Input::DecompressSectorDeflate(uint8_t *dst, const uint8_t *src, unsigned int len, FileType type, std::string &err) {
+bool Input::DecompressSectorDeflate(uint8_t *dst, const uint8_t *src, unsigned int len, FileType type, uint32_t &readSize, std::string &err) {
 	z_stream z;
 	memset(&z, 0, sizeof(z));
 	// TODO: inflateReset2?
@@ -418,15 +430,18 @@ bool Input::DecompressSectorDeflate(uint8_t *dst, const uint8_t *src, unsigned i
 	}
 
 	inflateEnd(&z);
+	readSize = static_cast<uint32_t>(z.total_out);
 	return true;
 }
 
-bool Input::DecompressSectorLZ4(uint8_t *dst, const uint8_t *src, unsigned int len, int dstSize, std::string &err) {
+bool Input::DecompressSectorLZ4(uint8_t *dst, const uint8_t *src, unsigned int len, int dstSize, uint32_t &readSize, std::string &err) {
 	// We use partial because we don't know the size of the input data.  It could include padding.
-	if (LZ4_decompress_safe_partial(reinterpret_cast<const char *>(src), reinterpret_cast<char *>(dst), len, dstSize, dstSize) < 0) {
+	int actualSize = LZ4_decompress_safe_partial(reinterpret_cast<const char *>(src), reinterpret_cast<char *>(dst), len, dstSize, dstSize);
+	if (actualSize < 0) {
 		err = "LZ4 decompression failed.";
 		return false;
 	}
+	readSize = static_cast<uint32_t>(actualSize);
 	return true;
 }
 

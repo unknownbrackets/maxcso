@@ -35,8 +35,8 @@ private:
 		DAX,
 	};
 
-	static bool DecompressSectorDeflate(uint8_t *dst, const uint8_t *src, unsigned int len, FileType type, std::string &err);
-	static bool DecompressSectorLZ4(uint8_t *dst, const uint8_t *src, unsigned int len, int dstSize, std::string &err);
+	static bool DecompressSectorDeflate(uint8_t *dst, const uint8_t *src, unsigned int len, FileType type, uint32_t &readSize, std::string &err);
+	static bool DecompressSectorLZ4(uint8_t *dst, const uint8_t *src, unsigned int len, int dstSize, uint32_t &readSize, std::string &err);
 
 	UVHelper uv_;
 	uv_loop_t *loop_;
@@ -58,6 +58,7 @@ private:
 	int32_t cacheSize_;
 
 	std::string decompressError_;
+	uint32_t decompressResultSize_;
 	uint8_t csoIndexShift_;
 	uint8_t csoBlockShift_;
 	uint32_t csoBlockSize_;
