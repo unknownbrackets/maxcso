@@ -198,8 +198,7 @@ void Output::HandleReadySector(Sector *sector) {
 	// We'll just write them all together.
 	std::vector<Sector *> sectors;
 	sectors.push_back(sector);
-	// TODO: Try other numbers.
-	static const size_t MAX_BUFS = 8;
+	static const size_t MAX_BUFS = 16;
 	int64_t nextPos = srcPos_ + blockSize_;
 	auto it = pendingSectors_.find(nextPos);
 	while (it != pendingSectors_.end()) {
@@ -208,7 +207,7 @@ void Output::HandleReadySector(Sector *sector) {
 		nextPos += blockSize_;
 		it = pendingSectors_.find(nextPos);
 
-		// Don't do more than 4 at a time.
+		// Don't do more than MAX_BUFS at a time.
 		if (sectors.size() >= MAX_BUFS) {
 			break;
 		}
