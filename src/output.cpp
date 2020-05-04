@@ -227,7 +227,7 @@ void Output::HandleReadySector(Sector *sector) {
 
 		// In case there's padding in the compressed file, discard as needed.
 		if ((flags_ & TASKFLAG_DECOMPRESS) != 0 && dstPos + bestSize > srcSize_) {
-			bestSize = static_cast<unsigned int>((dstPos + bestSize) - srcSize_);
+			bestSize = static_cast<unsigned int>(srcSize_ - dstPos);
 		}
 		if (bestSize == 0) {
 			continue;
