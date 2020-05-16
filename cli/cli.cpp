@@ -235,7 +235,7 @@ static std::string get_basename(std::string &filename) {
 	char ext[MAX_PATH];
 	// We want the ext because it might be "foo.bar.baz".
 	if (_splitpath_s(filename.c_str(), nullptr, 0, nullptr, 0, name, MAX_PATH, ext, MAX_PATH) == 0) {
-		return std::string(name) + "." + ext;
+		return std::string(name) + ext;
 	}
 	return filename;
 #else
