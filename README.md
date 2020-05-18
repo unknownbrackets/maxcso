@@ -106,7 +106,7 @@ compression.  This makes the file read faster (less cpu power), but take more sp
 Platforms
 ===========
 
-maxcso has only been tested on Windows and Mac so far.  The code was written to be portable, however.
+maxcso has been tested on Windows, macOS, and Linux so far.  The code was written to be portable.
 If you'd like to port it to another platform, pull requests are accepted.  It may just compile
 without any changes.
 
@@ -125,7 +125,7 @@ And then just compile using make.
 
 ### Linux / Unix
 
-Aside from gcc/g++ or clang, you will also need liblz4-dev and libuv-dev, or similar.
+Aside from gcc/g++ or clang, you will also need liblz4-dev and libuv1-dev, or similar.
 
 
 Credits and licensing
