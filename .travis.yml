@@ -1,0 +1,42 @@
+# https://travis-ci.org
+
+language: cpp
+compiler: clang
+
+os: linux
+dist: bionic
+
+addons:
+  apt:
+    update: true
+    packages:
+      - libuv1-dev
+      - liblz4-dev
+  homebrew:
+    update: true
+    packages:
+      - lz4
+      - libuv
+
+cache:
+  apt: true
+  directories:
+    - $HOME/Library/Caches/Homebrew
+
+jobs:
+  include:
+    - os: linux
+    - os: osx
+      osx_image: xcode11.4
+    - os: windows
+      compiler: msvc2017
+
+script: |
+  if [ "$TRAVIS_OS_NAME" = "windows" ]; then
+    export "MSBUILD_PATH=/c/Program Files (x86)/Microsoft Visual Studio/2017/BuildTools/MSBuild/15.0/Bin"
+    export "PATH=$MSBUILD_PATH:$PATH"
+
+    msbuild.exe cli\\maxcso.sln -m -p:Configuration=Release -p:Platform=x64 -p:TrackFileAccess=false
+  else
+    make
+  fi
