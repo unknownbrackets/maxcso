@@ -99,7 +99,7 @@ Multiple files may be specified.  Inputs can be iso or cso files.
 Because Zopfli is significantly slower than the other methods, and uses a lot more memory, it
 is disabled by default.  Add `--use-zopfli` for maximum compression.
 
-The cost arguments allow you to allow each block to be N% bigger by using lz4 or no
+The cost arguments enable you to allow each block to be N% bigger by using lz4 or no
 compression.  This makes the file read faster (less cpu power), but take more space.
 
 
@@ -112,7 +112,8 @@ without any changes.
 
 ### Windows
 
-To build on Windows, simply open cli/maxcso.sln and build.  Visual Studio 2017 is required.
+To build on Windows, simply open cli/maxcso.sln and build.  Visual Studio 2017 or higher is
+required.
 
 ### Mac OS X
 
@@ -126,6 +127,11 @@ And then just compile using make.
 ### Linux / Unix
 
 Aside from gcc/g++ or clang, you will also need liblz4-dev and libuv1-dev, or similar.
+
+### Packages
+
+Community provided packages are available on some platforms under "maxcso".  Please confirm
+version and security before using.  Thanks should go to their respective maintainers.
 
 
 Credits and licensing
@@ -154,14 +160,14 @@ Other tools
 [zlib]: https://github.com/madler/zlib
 [7-zip]: http://7-zip.org/
 [p7zip]: http://p7zip.sourceforge.net/
-[Zopfli]: http://code.google.com/p/zopfli/
+[Zopfli]: https://github.com/google/zopfli
 [PPSSPP]: https://github.com/hrydgard/ppsspp
 [libuv]: https://github.com/joyent/libuv
-[CisoPlus]: http://cisoplus.pspgen.com/
+[CisoPlus]: https://web.archive.org/web/20161223115412/http://cisoplus.pspgen.com/
 [CisoMC]: http://wololo.net/talk/viewtopic.php?f=20&t=32659
 [ciso]: http://sourceforge.net/projects/ciso/
-[ciso-python]: http://virtuousflame.blog.163.com/blog/static/177177172201111833413485/
-[lz4]: https://code.google.com/p/lz4/
+[ciso-python]: https://github.com/MrColdbird/procfw/blob/master/contrib/ciso.py
+[lz4]: https://github.com/lz4/lz4
 [CSO v2]: README_CSO.md
 [ZSO]: README_ZSO.md
 [GitHub releases]: https://github.com/unknownbrackets/maxcso/releases
