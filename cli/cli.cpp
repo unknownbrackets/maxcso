@@ -23,30 +23,30 @@ void show_help(const char *arg0) {
 	fprintf(stderr, "\n");
 	fprintf(stderr, "Multiple files may be specified.  Inputs can be iso or cso files.\n");
 	fprintf(stderr, "\n");
-	fprintf(stderr, "   --threads=N     Specify N threads for I/O and compression\n");
-	fprintf(stderr, "   --quiet         Suppress status output\n");
-	fprintf(stderr, "   --crc           Log CRC32 checksums, ignore output files and methods\n");
-	fprintf(stderr, "   --fast          Use only basic zlib or lz4 for fastest result\n");
-	fprintf(stderr, "   --decompress    Write out to raw ISO, decompressing as needed\n");
-	fprintf(stderr, "   --block=N       Specify a block size (default depends on iso size)\n");
-	fprintf(stderr, "                   Many readers only support the 2048 size\n");
-	fprintf(stderr, "   --format=VER    Specify cso version (options: cso1, cso2, zso, dax)\n");
-	fprintf(stderr, "                   These are experimental, default is cso1\n");
+	fprintf(stderr, "   --threads=N      Specify N threads for I/O and compression\n");
+	fprintf(stderr, "   --quiet          Suppress status output\n");
+	fprintf(stderr, "   --crc            Log CRC32 checksums, ignore output files and methods\n");
+	fprintf(stderr, "   --fast           Use only basic zlib or lz4 for fastest result\n");
+	fprintf(stderr, "   --decompress     Write out to raw ISO, decompressing as needed\n");
+	fprintf(stderr, "   --block=N        Specify a block size (default depends on iso size)\n");
+	fprintf(stderr, "                    Many readers only support the 2048 size\n");
+	fprintf(stderr, "   --format=VER     Specify cso version (options: cso1, cso2, zso, dax)\n");
+	fprintf(stderr, "                    These are experimental, default is cso1\n");
 	// TODO: Bring this back once it's functional.
-	//fprintf(stderr, "   --smallest      Force compression of all sectors for smallest result\n");
-	fprintf(stderr, "   --use-zlib      Enable trials with zlib for deflate compression\n");
-	fprintf(stderr, "   --use-zopfli    Enable trials with Zopfli for deflate compression\n");
+	//fprintf(stderr, "   --smallest       Force compression of all sectors for smallest result\n");
+	fprintf(stderr, "   --use-zlib       Enable trials with zlib for deflate compression\n");
+	fprintf(stderr, "   --use-zopfli     Enable trials with Zopfli for deflate compression\n");
 #ifndef NO_DEFLATE7Z
-	fprintf(stderr, "   --use-7zdeflate Enable trials with 7-zip\'s deflate compression\n");
+	fprintf(stderr, "   --use-7zdeflate  Enable trials with 7-zip\'s deflate compression\n");
 #endif
-	fprintf(stderr, "   --use-lz4       Enable trials with lz4hc for lz4 compression\n");
-	fprintf(stderr, "   --use-lz4brute  Enable bruteforce trials with lz4hc for lz4 compression\n");
-	fprintf(stderr, "   --only-METHOD   Only allow a certain compression method (zlib, etc. above)\n");
-	fprintf(stderr, "   --no-METHOD     Disable a certain compression method (zlib, etc. above)\n");
-	fprintf(stderr, "                   The default is to use zlib and 7zdeflate only\n");
-	fprintf(stderr, "   --lz4-cost=N    Allow lz4 to increase block size by N%% at most (cso2 only)\n");
-	fprintf(stderr, "   --orig-cost=N   Allow uncompressed to increase block size by N%% at most\n");
-	fprintf(stderr, "   --output-path=X Output to path X/, use basename for default outputs\n");
+	fprintf(stderr, "   --use-lz4        Enable trials with lz4hc for lz4 compression\n");
+	fprintf(stderr, "   --use-lz4brute   Enable bruteforce trials with lz4hc for lz4 compression\n");
+	fprintf(stderr, "   --only-METHOD    Only allow a certain compression method (zlib, etc. above)\n");
+	fprintf(stderr, "   --no-METHOD      Disable a certain compression method (zlib, etc. above)\n");
+	fprintf(stderr, "                    The default is to use zlib and 7zdeflate only\n");
+	fprintf(stderr, "   --lz4-cost=N     Allow lz4 to increase block size by N%% at most (cso2 only)\n");
+	fprintf(stderr, "   --orig-cost=N    Allow uncompressed to increase block size by N%% at most\n");
+	fprintf(stderr, "   --output-path=X  Output to path X/, use basename for default outputs\n");
 }
 
 bool has_arg_value(int &i, char *argv[], const std::string &arg, const char *&val) {

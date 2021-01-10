@@ -74,26 +74,26 @@ Usage: maxcso [--args] input.iso [-o output.cso]
 
 Multiple files may be specified.  Inputs can be iso or cso files.
 
-   --threads=N     Specify N threads for I/O and compression
-   --quiet         Suppress status output
-   --crc           Log CRC32 checksums, ignore output files and methods
-   --fast          Use only basic zlib or lz4 for fastest result
-   --decompress    Write out to raw ISO, decompressing as needed
-   --block=N       Specify a block size (default depends on iso size)
-                   Many readers only support the 2048 size
-   --format=VER    Specify cso version (options: cso1, cso2, zso, dax)
-                   These are experimental, default is cso1
-   --use-zlib      Enable trials with zlib for deflate compression
-   --use-zopfli    Enable trials with Zopfli for deflate compression
-   --use-7zdeflate Enable trials with 7-zip's deflate compression
-   --use-lz4       Enable trials with lz4hc for lz4 compression
-   --use-lz4brute  Enable bruteforce trials with lz4hc for lz4 compression
-   --only-METHOD   Only allow a certain compression method (zlib, etc. above)
-   --no-METHOD     Disable a certain compression method (zlib, etc. above)
-                   The default is to use zlib and 7zdeflate only
-   --lz4-cost=N    Allow lz4 to increase block size by N% at most (cso2 only)
-   --orig-cost=N   Allow uncompressed to increase block size by N% at most
-   --output-path=X Output to path X/, use basename for default outputs
+   --threads=N      Specify N threads for I/O and compression
+   --quiet          Suppress status output
+   --crc            Log CRC32 checksums, ignore output files and methods
+   --fast           Use only basic zlib or lz4 for fastest result
+   --decompress     Write out to raw ISO, decompressing as needed
+   --block=N        Specify a block size (default depends on iso size)
+                    Many readers only support the 2048 size
+   --format=VER     Specify cso version (options: cso1, cso2, zso, dax)
+                    These are experimental, default is cso1
+   --use-zlib       Enable trials with zlib for deflate compression
+   --use-zopfli     Enable trials with Zopfli for deflate compression
+   --use-7zdeflate  Enable trials with 7-zip's deflate compression
+   --use-lz4        Enable trials with lz4hc for lz4 compression
+   --use-lz4brute   Enable bruteforce trials with lz4hc for lz4 compression
+   --only-METHOD    Only allow a certain compression method (zlib, etc. above)
+   --no-METHOD      Disable a certain compression method (zlib, etc. above)
+                    The default is to use zlib and 7zdeflate only
+   --lz4-cost=N     Allow lz4 to increase block size by N% at most (cso2 only)
+   --orig-cost=N    Allow uncompressed to increase block size by N% at most
+   --output-path=X  Output to path X/, use basename for default outputs
 ```
 
 Because Zopfli is significantly slower than the other methods, and uses a lot more memory, it
