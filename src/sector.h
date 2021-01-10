@@ -6,6 +6,7 @@
 #include "uv_helper.h"
 
 typedef struct z_stream_s z_stream;
+typedef struct libdeflate_compressor libdeflate_compressor;
 
 namespace Deflate7z {
 	struct Context;
@@ -78,6 +79,7 @@ private:
 	void ZlibTrial(z_stream *z);
 	void ZopfliTrial();
 	void SevenZipTrial();
+	void LibDeflateTrial();
 	void LZ4HCTrial(bool allowBrute);
 	void LZ4Trial();
 	bool SubmitTrial(uint8_t *result, uint32_t size, SectorFormat fmt);
@@ -86,18 +88,18 @@ private:
 	uv_loop_t *loop_;
 	uint32_t flags_;
 	uint32_t align_;
-	uint32_t origMaxCost_;
-	uint32_t lz4MaxCost_;
-	bool busy_;
-	bool enqueued_;
-	bool compress_;
+	uint32_t origMaxCost_ = 0;
+	uint32_t lz4MaxCost_ = 0;
+	bool busy_ = false;
+	bool enqueued_ = false;
+	bool compress_ = true;
 
 	uint32_t blockSize_;
-	uint32_t readySize_;
+	uint32_t readySize_ = 0;
 
 	int64_t pos_;
-	uint8_t *buffer_;
-	uint8_t *best_;
+	uint8_t *buffer_ = nullptr;
+	uint8_t *best_ = nullptr;
 	uint32_t bestSize_;
 	SectorFormat bestFmt_;
 
@@ -107,7 +109,8 @@ private:
 	SectorCallback ready_;
 
 	std::vector<z_stream *> zStreams_;
-	Deflate7z::Context *deflate7z_;
+	Deflate7z::Context *deflate7z_ = nullptr;
+	libdeflate_compressor *libdeflate_ = nullptr;
 };
 
 };

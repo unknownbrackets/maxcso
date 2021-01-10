@@ -89,6 +89,7 @@ Multiple files may be specified.  Inputs can be iso or cso files.
    --use-7zdeflate  Enable trials with 7-zip's deflate compression
    --use-lz4        Enable trials with lz4hc for lz4 compression
    --use-lz4brute   Enable bruteforce trials with lz4hc for lz4 compression
+   --use-libdeflate Enable trials with libdeflate compression
    --only-METHOD    Only allow a certain compression method (zlib, etc. above)
    --no-METHOD      Disable a certain compression method (zlib, etc. above)
                     The default is to use zlib and 7zdeflate only
@@ -122,12 +123,14 @@ Aside from gcc/g++ or clang (from Xcode or brew), you will also need:
 
     brew install lz4
     brew install libuv
+    brew install libdeflate
 
 And then just compile using make.
 
 ### Linux / Unix
 
-Aside from gcc/g++ or clang, you will also need liblz4-dev and libuv1-dev, or similar.
+Aside from gcc/g++ or clang, you will also need liblz4-dev, libdeflate-dev, and libuv1-dev - or
+similar.
 
 ### Packages
 
@@ -144,7 +147,7 @@ libraries.  Licensing is as follows:
  * maxcso is licensed under ISC.
  * [7-zip][] and [p7zip][] are licensed under LGPL.
  * [Zopfli][] is licensed under Apache 2.0.
- * [libuv][] is licensed under MIT.
+ * [libuv][] and [libdeflate][] are licensed under MIT.
  * [zlib][] is licensed under zlib.
  * [lz4][] is licensed under BSD.
 
@@ -164,6 +167,7 @@ Other tools
 [Zopfli]: https://github.com/google/zopfli
 [PPSSPP]: https://github.com/hrydgard/ppsspp
 [libuv]: https://github.com/joyent/libuv
+[libdeflate]: https://github.com/ebiggers/libdeflate
 [CisoPlus]: https://web.archive.org/web/20161223115412/http://cisoplus.pspgen.com/
 [CisoMC]: http://wololo.net/talk/viewtopic.php?f=20&t=32659
 [ciso]: http://sourceforge.net/projects/ciso/

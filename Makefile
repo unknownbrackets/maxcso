@@ -31,7 +31,7 @@ ZOPFLI_C_OBJ = $(ZOPFLI_C_SRC:.c=.o)
 	$(CC) -c $(SRC_CFLAGS) $(CFLAGS) -o $@ $<
 
 maxcso: $(SRC_CXX_OBJ) $(CLI_CXX_OBJ) $(ZOPFLI_C_OBJ) 7zip/7zip.a
-	$(CXX) -o $@ $(SRC_CXXFLAGS) $(CXXFLAGS) $^ -luv -llz4 -lz
+	$(CXX) -o $@ $(SRC_CXXFLAGS) $(CXXFLAGS) $^ -luv -llz4 -lz -ldeflate
 
 7zip/7zip.a:
 	$(MAKE) -C 7zip 7zip.a

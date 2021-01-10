@@ -42,6 +42,7 @@ void show_help(const char *arg0) {
 #endif
 	fprintf(stderr, "   --use-lz4        Enable trials with lz4hc for lz4 compression\n");
 	fprintf(stderr, "   --use-lz4brute   Enable bruteforce trials with lz4hc for lz4 compression\n");
+	fprintf(stderr, "   --use-libdeflate Enable trials with libdeflate compression\n");
 	fprintf(stderr, "   --only-METHOD    Only allow a certain compression method (zlib, etc. above)\n");
 	fprintf(stderr, "   --no-METHOD      Disable a certain compression method (zlib, etc. above)\n");
 	fprintf(stderr, "                    The default is to use zlib and 7zdeflate only\n");
@@ -83,6 +84,9 @@ bool has_arg_method(int &i, char *argv[], const std::string &arg, uint32_t &meth
 			return true;
 		} else if (strcmp(val, "lz4brute") == 0) {
 			method = maxcso::TASKFLAG_NO_LZ4_HC_BRUTE;
+			return true;
+		} else if (strcmp(val, "libdeflate") == 0) {
+			method = maxcso::TASKFLAG_NO_LIBDEFLATE;
 			return true;
 		}
 	}
@@ -321,7 +325,7 @@ int validate_args(const char *arg0, Arguments &args) {
 	if (args.flags_fmt & maxcso::TASKFLAG_FMT_CSO_2) {
 		args.flags_final = maxcso::TASKFLAG_NO_ZOPFLI | maxcso::TASKFLAG_NO_LZ4_HC_BRUTE;
 	} else if (args.flags_fmt & maxcso::TASKFLAG_FMT_ZSO) {
-		args.flags_final = maxcso::TASKFLAG_NO_ZLIB | maxcso::TASKFLAG_NO_7ZIP | maxcso::TASKFLAG_NO_ZOPFLI | maxcso::TASKFLAG_NO_LZ4_HC_BRUTE;
+		args.flags_final = maxcso::TASKFLAG_NO_ZLIB | maxcso::TASKFLAG_NO_7ZIP | maxcso::TASKFLAG_NO_ZOPFLI | maxcso::TASKFLAG_NO_LZ4_HC_BRUTE | maxcso::TASKFLAG_NO_LIBDEFLATE;
 	} else {
 		// CSO v1 or DAX, just disable lz4.
 		args.flags_final = maxcso::TASKFLAG_NO_ZOPFLI | maxcso::TASKFLAG_NO_LZ4;
@@ -339,7 +343,7 @@ int validate_args(const char *arg0, Arguments &args) {
 	}
 
 	if (args.fast) {
-		args.flags_final |= maxcso::TASKFLAG_NO_ZLIB_BRUTE | maxcso::TASKFLAG_NO_ZOPFLI | maxcso::TASKFLAG_NO_7ZIP | maxcso::TASKFLAG_NO_LZ4_HC_BRUTE | maxcso::TASKFLAG_NO_LZ4_HC;
+		args.flags_final |= maxcso::TASKFLAG_NO_ZLIB_BRUTE | maxcso::TASKFLAG_NO_ZOPFLI | maxcso::TASKFLAG_NO_7ZIP | maxcso::TASKFLAG_NO_LZ4_HC_BRUTE | maxcso::TASKFLAG_NO_LZ4_HC | maxcso::TASKFLAG_NO_LIBDEFLATE;
 	}
 	if (args.smallest) {
 		args.flags_final |= maxcso::TASKFLAG_FORCE_ALL;
@@ -361,7 +365,7 @@ int validate_args(const char *arg0, Arguments &args) {
 		}
 
 		// Currently, compression will fail if no DEFLATE format is enabled for DAX.
-		uint32_t deflateFlags = maxcso::TASKFLAG_NO_ZLIB | maxcso::TASKFLAG_NO_ZLIB_DEFAULT | maxcso::TASKFLAG_NO_ZLIB_BRUTE | maxcso::TASKFLAG_NO_ZOPFLI | maxcso::TASKFLAG_NO_7ZIP;
+		uint32_t deflateFlags = maxcso::TASKFLAG_NO_ZLIB | maxcso::TASKFLAG_NO_ZLIB_DEFAULT | maxcso::TASKFLAG_NO_ZLIB_BRUTE | maxcso::TASKFLAG_NO_ZOPFLI | maxcso::TASKFLAG_NO_7ZIP | maxcso::TASKFLAG_NO_LIBDEFLATE;
 		if ((args.flags_final & deflateFlags) == deflateFlags) {
 			show_help(arg0);
 			fprintf(stderr, "\nERROR: DAX must use some kind of DEFLATE.\n");

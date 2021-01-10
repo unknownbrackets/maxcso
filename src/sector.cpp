@@ -4,6 +4,7 @@
 #include "cso.h"
 #include "buffer_pool.h"
 #include "zopfli/zopfli.h"
+#include "libdeflate.h"
 #ifndef NO_DEFLATE7Z
 #include "deflate7z.h"
 #endif
@@ -33,8 +34,7 @@ static void EndZlib(z_stream *&z) {
 }
 
 Sector::Sector(uint32_t flags)
-	: flags_(flags), origMaxCost_(0), lz4MaxCost_(0), busy_(false), enqueued_(false),
-	compress_(true), readySize_(0), buffer_(nullptr), best_(nullptr) {
+	: flags_(flags) {
 	// Set up the zlib streams, which we will reuse each time we hit this sector.
 	bool withHeader = (flags_ & TASKFLAG_FMT_DAX) != 0;
 	if (!(flags_ & TASKFLAG_NO_ZLIB_DEFAULT)) {
@@ -44,6 +44,10 @@ Sector::Sector(uint32_t flags)
 		AddZlib(zStreams_, Z_FILTERED, withHeader);
 		AddZlib(zStreams_, Z_HUFFMAN_ONLY, withHeader);
 		AddZlib(zStreams_, Z_RLE, withHeader);
+	}
+
+	if (!(flags_ & TASKFLAG_NO_LIBDEFLATE)) {
+		libdeflate_ = libdeflate_alloc_compressor(12);
 	}
 
 #ifndef NO_DEFLATE7Z
@@ -67,6 +71,10 @@ Sector::~Sector() {
 
 	for (z_stream *&z : zStreams_) {
 		EndZlib(z);
+	}
+
+	if (libdeflate_) {
+		libdeflate_free_compressor(libdeflate_);
 	}
 
 #ifndef NO_DEFLATE7Z
@@ -153,6 +161,9 @@ void Sector::Compress() {
 	if (!(flags_ & TASKFLAG_NO_7ZIP)) {
 		SevenZipTrial();
 	}
+	if (!(flags_ & TASKFLAG_NO_LIBDEFLATE)) {
+		LibDeflateTrial();
+	}
 	if (!(flags_ & (TASKFLAG_NO_LZ4_HC | TASKFLAG_NO_LZ4_HC_BRUTE))) {
 		LZ4HCTrial(!(flags_ & TASKFLAG_NO_LZ4_HC_BRUTE));
 	}
@@ -231,6 +242,16 @@ void Sector::SevenZipTrial() {
 		pool.Release(result);
 	}
 #endif
+}
+
+void Sector::LibDeflateTrial() {
+	uint8_t *result = pool.Alloc();
+	size_t resultSize = libdeflate_deflate_compress(libdeflate_, buffer_, blockSize_, result, pool.bufferSize);
+	if (resultSize != 0) {
+		SubmitTrial(result, static_cast<uint32_t>(resultSize), SECTOR_FMT_DEFLATE);
+	} else {
+		pool.Release(result);
+	}
 }
 
 void Sector::LZ4HCTrial(bool allowBrute) {
