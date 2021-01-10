@@ -23,8 +23,7 @@ static const int64_t LARGE_BLOCK_SIZE_THRESH = 0x80000000;
 class CompressionTask {
 public:
 	CompressionTask(uv_loop_t *loop, const Task &t)
-		: task_(t), loop_(loop), input_(-1), inputHandler_(loop), outputHandler_(loop, t), output_(-1),
-		blockSize_(0) {
+		: task_(t), loop_(loop), inputHandler_(loop), outputHandler_(loop, t) {
 	}
 	~CompressionTask() {
 		Cleanup();
@@ -54,11 +53,12 @@ private:
 	uv_fs_t read_;
 	uv_fs_t write_;
 
-	uv_file input_;
+	uv_file input_ = -1;
 	Input inputHandler_;
 	Output outputHandler_;
-	uv_file output_;
-	uint32_t blockSize_;
+	uv_file output_ = -1;
+	uint32_t blockSize_= 0;
+	int64_t size_ = 0;
 };
 
 void CompressionTask::Enqueue() {
@@ -133,7 +133,7 @@ void CompressionTask::BeginProcessing() {
 	});
 	outputHandler_.OnFinish([this](bool success, const char *reason) {
 		if (success) {
-			Notify(TASK_SUCCESS);
+			Notify(TASK_SUCCESS, size_, size_, outputHandler_.Written());
 		} else {
 			// Abort reading.
 			inputHandler_.Pause();
@@ -170,6 +170,7 @@ void CompressionTask::BeginProcessing() {
 
 		outputHandler_.SetFile(output_, size, blockSize_, fmt);
 		Notify(TASK_INPROGRESS, 0, size, 0);
+		size_ = size;
 	});
 	inputHandler_.Pipe(input_, [this](int64_t pos, uint8_t *sector) {
 		outputHandler_.Enqueue(pos, sector);

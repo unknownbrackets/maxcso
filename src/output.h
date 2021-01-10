@@ -25,6 +25,10 @@ public:
 	void OnProgress(OutputCallback callback);
 	void OnFinish(OutputFinishCallback callback);
 
+	int64_t Written() {
+		return dstPos_;
+	}
+
 private:
 	void CheckFinish();
 	void Flush();
