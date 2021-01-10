@@ -1,0 +1,124 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClInclude Include="libdeflate.h" />
+    <ClInclude Include="lib\deflate_constants.h">
+      <Filter>lib</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\gzip_constants.h">
+      <Filter>lib</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\hc_matchfinder.h">
+      <Filter>lib</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\lib_common.h">
+      <Filter>lib</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\matchfinder_common.h">
+      <Filter>lib</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\unaligned.h">
+      <Filter>lib</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\zlib_constants.h">
+      <Filter>lib</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\adler32_vec_template.h">
+      <Filter>lib</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\bt_matchfinder.h">
+      <Filter>lib</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\cpu_features_common.h">
+      <Filter>lib</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\crc32_table.h">
+      <Filter>lib</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\crc32_vec_template.h">
+      <Filter>lib</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\decompress_template.h">
+      <Filter>lib</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\deflate_compress.h">
+      <Filter>lib</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\x86\cpu_features.h">
+      <Filter>lib\x86</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\x86\crc32_impl.h">
+      <Filter>lib\x86</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\x86\crc32_pclmul_template.h">
+      <Filter>lib\x86</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\x86\decompress_impl.h">
+      <Filter>lib\x86</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\x86\matchfinder_impl.h">
+      <Filter>lib\x86</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\x86\adler32_impl.h">
+      <Filter>lib\x86</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\arm\cpu_features.h">
+      <Filter>lib\arm</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\arm\crc32_impl.h">
+      <Filter>lib\arm</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\arm\matchfinder_impl.h">
+      <Filter>lib\arm</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\arm\adler32_impl.h">
+      <Filter>lib\arm</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="lib">
+      <UniqueIdentifier>{991e0302-5957-43a5-bbb5-294c8cfc3df5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="lib\x86">
+      <UniqueIdentifier>{2c89afce-1feb-4868-a985-5b1bf88341e0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="lib\arm">
+      <UniqueIdentifier>{860e2d25-97c5-476c-a3c0-e751321f4614}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="lib\deflate_decompress.c">
+      <Filter>lib</Filter>
+    </ClCompile>
+    <ClCompile Include="lib\gzip_compress.c">
+      <Filter>lib</Filter>
+    </ClCompile>
+    <ClCompile Include="lib\gzip_decompress.c">
+      <Filter>lib</Filter>
+    </ClCompile>
+    <ClCompile Include="lib\utils.c">
+      <Filter>lib</Filter>
+    </ClCompile>
+    <ClCompile Include="lib\zlib_compress.c">
+      <Filter>lib</Filter>
+    </ClCompile>
+    <ClCompile Include="lib\zlib_decompress.c">
+      <Filter>lib</Filter>
+    </ClCompile>
+    <ClCompile Include="lib\adler32.c">
+      <Filter>lib</Filter>
+    </ClCompile>
+    <ClCompile Include="lib\crc32.c">
+      <Filter>lib</Filter>
+    </ClCompile>
+    <ClCompile Include="lib\deflate_compress.c">
+      <Filter>lib</Filter>
+    </ClCompile>
+    <ClCompile Include="lib\x86\cpu_features.c">
+      <Filter>lib\x86</Filter>
+    </ClCompile>
+    <ClCompile Include="lib\arm\cpu_features.c">
+      <Filter>lib\arm</Filter>
+    </ClCompile>
+  </ItemGroup>
+</Project>
