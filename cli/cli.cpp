@@ -26,6 +26,7 @@ void show_help(const char *arg0) {
 	fprintf(stderr, "   --threads=N      Specify N threads for I/O and compression\n");
 	fprintf(stderr, "   --quiet          Suppress status output\n");
 	fprintf(stderr, "   --crc            Log CRC32 checksums, ignore output files and methods\n");
+	fprintf(stderr, "   --measure        Measure compressed size without saving output\n");
 	fprintf(stderr, "   --fast           Use only basic zlib or lz4 for fastest result\n");
 	fprintf(stderr, "   --decompress     Write out to raw ISO, decompressing as needed\n");
 	fprintf(stderr, "   --block=N        Specify a block size (default depends on iso size)\n");
@@ -120,6 +121,7 @@ struct Arguments {
 	bool quiet;
 	bool crc;
 	bool decompress;
+	bool measure;
 };
 
 void default_args(Arguments &args) {
@@ -140,6 +142,7 @@ void default_args(Arguments &args) {
 	args.quiet = false;
 	args.crc = false;
 	args.decompress = false;
+	args.measure = false;
 }
 
 void wildcard_to_inputs(const char *arg, std::vector<std::string> &files) {
@@ -195,6 +198,8 @@ int parse_args(Arguments &args, int argc, char *argv[]) {
 				args.smallest = true;
 			} else if (has_arg(i, argv, "--decompress")) {
 				args.decompress = true;
+			} else if (has_arg(i, argv, "--measure")) {
+				args.measure = true;
 			} else if (has_arg_method(i, argv, "--use-", method)) {
 				args.flags_use |= method;
 			} else if (has_arg_method(i, argv, "--no-", method)) {
@@ -257,10 +262,14 @@ int validate_args(const char *arg0, Arguments &args) {
 		return 1;
 	}
 
-	if (args.crc) {
+	if (args.crc || args.measure) {
 		if (args.outputs.size()) {
 			show_help(arg0);
-			fprintf(stderr, "\nERROR: Output files not used with --crc.\n");
+			if (args.crc) {
+				fprintf(stderr, "\nERROR: Output files not used with --crc.\n");
+			} else {
+				fprintf(stderr, "\nERROR: Output files not used with --measure.\n");
+			}
 			return 1;
 		}
 	} else {
@@ -337,6 +346,9 @@ int validate_args(const char *arg0, Arguments &args) {
 	}
 	if (args.decompress) {
 		args.flags_final |= maxcso::TASKFLAG_DECOMPRESS;
+	}
+	if (args.measure) {
+		args.flags_final |= maxcso::TASKFLAG_MEASURE;
 	}
 	args.flags_final |= args.flags_fmt;
 
@@ -490,7 +502,7 @@ int main(int argc, char *argv[]) {
 	for (size_t i = 0; i < args.inputs.size(); ++i) {
 		maxcso::Task task;
 		task.input = args.inputs[i];
-		if (!args.crc) {
+		if (!args.crc && !args.measure) {
 			task.output = args.outputs[i];
 		}
 		task.progress = progress;

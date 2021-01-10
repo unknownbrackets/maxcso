@@ -77,6 +77,7 @@ Multiple files may be specified.  Inputs can be iso or cso files.
    --threads=N      Specify N threads for I/O and compression
    --quiet          Suppress status output
    --crc            Log CRC32 checksums, ignore output files and methods
+   --measure        Measure compressed size without saving output
    --fast           Use only basic zlib or lz4 for fastest result
    --decompress     Write out to raw ISO, decompressing as needed
    --block=N        Specify a block size (default depends on iso size)

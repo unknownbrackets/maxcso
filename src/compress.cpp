@@ -92,23 +92,32 @@ void CompressionTask::Enqueue() {
 
 	// We open input and output in order in case there are errors.
 	uv_.fs_open(loop_, &read_, task_.input.c_str(), O_RDONLY, 0444, [this](uv_fs_t *req) {
-		if (req->result < 0) {
+		uv_file result = static_cast<uv_file>(req->result);
+		uv_fs_req_cleanup(req);
+
+		if (result < 0) {
 			Notify(TASK_BAD_INPUT, "Could not open input file");
 		} else {
-			input_ = static_cast<uv_file>(req->result);
+			input_ = result;
+			if (task_.flags & TASKFLAG_MEASURE) {
+				BeginProcessing();
+				return;
+			}
+
 			uv_.fs_open(loop_, &write_, task_.output.c_str(), O_CREAT | O_TRUNC | O_WRONLY, 0644, [this](uv_fs_t *req) {
-				if (req->result < 0) {
+				uv_file result = static_cast<uv_file>(req->result);
+				uv_fs_req_cleanup(req);
+
+				if (result < 0) {
 					Notify(TASK_BAD_OUTPUT, "Could not open output file");
 				} else {
-					output_ = static_cast<uv_file>(req->result);
+					output_ = result;
 
 					// Okay, both files opened fine, it's time to turn on the tap.
 					BeginProcessing();
 				}
-				uv_fs_req_cleanup(req);
 			});
 		}
-		uv_fs_req_cleanup(req);
 	});
 }
 

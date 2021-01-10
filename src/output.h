@@ -35,6 +35,7 @@ private:
 	void WriteCSOIndex();
 	void WriteDAXIndex();
 	void HandleReadySector(Sector *sector);
+	void HandleWrittenSectors(bool success, const std::vector<Sector *> &sectors, int64_t nextPos, int64_t totalWrite);
 	bool ShouldCompress(int64_t pos, uint8_t *buffer);
 
 	int32_t Align(int64_t &pos);

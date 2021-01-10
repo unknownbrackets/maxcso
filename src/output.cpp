@@ -253,32 +253,45 @@ void Output::HandleReadySector(Sector *sector) {
 	}
 
 	const int64_t totalWrite = dstPos - dstPos_;
-	uv_.fs_write(loop_, sector->WriteReq(), file_, bufs, nbufs, dstPos_, [this, sectors, nextPos, totalWrite](uv_fs_t *req) {
-		for (Sector *sector : sectors) {
-			sector->Release();
-			freeSectors_.push_back(sector);
-		}
+	if (file_ < 0) {
+		HandleWrittenSectors(true, sectors, nextPos, totalWrite);
+		return;
+	}
 
-		if (req->result != totalWrite) {
-			finish_(false, "Data could not be written to output file");
-			uv_fs_req_cleanup(req);
-			return;
-		}
+	uv_.fs_write(loop_, sector->WriteReq(), file_, bufs, nbufs, dstPos_, [this, sectors, nextPos, totalWrite](uv_fs_t *req) {
+		bool success = req->result == totalWrite;
 		uv_fs_req_cleanup(req);
 
-		srcPos_ = nextPos;
-		dstPos_ += totalWrite;
-
-		progress_(srcPos_, srcSize_, dstPos_);
-
-		if (nextPos >= srcSize_) {
-			state_ |= STATE_DATA_WRITTEN;
-			CheckFinish();
-		} else {
-			// Check if there's more data to write out.
-			HandleReadySector(nullptr);
+		HandleWrittenSectors(success, sectors, nextPos, totalWrite);
+		if (!success) {
+			finish_(false, "Data could not be written to output file");
+			return;
 		}
 	});
+}
+
+void Output::HandleWrittenSectors(bool success, const std::vector<Sector *> &sectors, int64_t nextPos, int64_t totalWrite) {
+	for (Sector *sector : sectors) {
+		sector->Release();
+		freeSectors_.push_back(sector);
+	}
+
+	if (!success) {
+		return;
+	}
+
+	srcPos_ = nextPos;
+	dstPos_ += totalWrite;
+
+	progress_(srcPos_, srcSize_, dstPos_);
+
+	if (nextPos >= srcSize_) {
+		state_ |= STATE_DATA_WRITTEN;
+		CheckFinish();
+	} else {
+		// Check if there's more data to write out.
+		HandleReadySector(nullptr);
+	}
 }
 
 bool Output::UpdateIndex(int64_t srcPos, int64_t dstPos, uint32_t compressedSize, SectorFormat compressedFmt) {
@@ -395,6 +408,14 @@ void Output::WriteCSOIndex() {
 	bufs[0] = uv_buf_init(reinterpret_cast<char *>(header), sizeof(CSOHeader));
 	bufs[1] = uv_buf_init(reinterpret_cast<char *>(index_), (sectors + 1) * sizeof(uint32_t));
 	const ssize_t totalBytes = sizeof(CSOHeader) + (sectors + 1) * sizeof(uint32_t);
+
+	if (file_ < 0) {
+		state_ |= STATE_INDEX_WRITTEN;
+		CheckFinish();
+		delete header;
+		return;
+	}
+
 	uv_.fs_write(loop_, &flush_, file_, bufs, 2, 0, [this, header, totalBytes](uv_fs_t *req) {
 		if (req->result != totalBytes) {
 			finish_(false, "Unable to write header data");
@@ -436,6 +457,15 @@ void Output::WriteDAXIndex() {
 	bufs[1] = uv_buf_init(reinterpret_cast<char *>(index_), sectors * sizeof(uint32_t));
 	bufs[2] = uv_buf_init(reinterpret_cast<char *>(sizes), sectors * sizeof(uint16_t));
 	const ssize_t totalBytes = sizeof(DAXHeader) + sectors * (sizeof(uint32_t) + sizeof(uint16_t));
+
+	if (file_ < 0) {
+		state_ |= STATE_INDEX_WRITTEN;
+		CheckFinish();
+		delete header;
+		delete [] sizes;
+		return;
+	}
+
 	uv_.fs_write(loop_, &flush_, file_, bufs, 3, 0, [this, header, sizes, totalBytes](uv_fs_t *req) {
 		if (req->result != totalBytes) {
 			finish_(false, "Unable to write header data");
