@@ -12,7 +12,6 @@ addons:
     packages:
       - libuv1-dev
       - liblz4-dev
-      - libdeflate-dev
   homebrew:
     update: true
     packages:

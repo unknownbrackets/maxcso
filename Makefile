@@ -10,7 +10,7 @@ CXXFLAGS ?= $(CFLAGS)
 
 SRC_CFLAGS += -W -Wall -Wextra -Wno-implicit-function-declaration -DNDEBUG=1
 SRC_CXXFLAGS += -W -Wall -Wextra -std=c++11 -Izopfli/src -I7zip -DNDEBUG=1 \
-	-Wno-unused-parameter -Wno-unused-variable -pthread
+	-Ilibdeflate -Wno-unused-parameter -Wno-unused-variable -pthread
 
 SRC_CXX_SRC = $(wildcard src/*.cpp)
 SRC_CXX_OBJ = $(SRC_CXX_SRC:.cpp=.o)
@@ -30,11 +30,15 @@ ZOPFLI_C_OBJ = $(ZOPFLI_C_SRC:.c=.o)
 %.o: %.c
 	$(CC) -c $(SRC_CFLAGS) $(CFLAGS) -o $@ $<
 
-maxcso: $(SRC_CXX_OBJ) $(CLI_CXX_OBJ) $(ZOPFLI_C_OBJ) 7zip/7zip.a
-	$(CXX) -o $@ $(SRC_CXXFLAGS) $(CXXFLAGS) $^ -luv -llz4 -lz -ldeflate
+# TODO: Perhaps detect and use system libdeflate if available.
+maxcso: $(SRC_CXX_OBJ) $(CLI_CXX_OBJ) $(ZOPFLI_C_OBJ) 7zip/7zip.a libdeflate/libdeflate.a
+	$(CXX) -o $@ $(SRC_CXXFLAGS) $(CXXFLAGS) $^ -luv -llz4 -lz
 
 7zip/7zip.a:
 	$(MAKE) -C 7zip 7zip.a
+
+libdeflate/libdeflate.a:
+	$(MAKE) -C libdeflate libdeflate.a
 
 install: all
 	mkdir -p $(DESTDIR)$(BINDIR)
