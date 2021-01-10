@@ -12,11 +12,13 @@ addons:
     packages:
       - libuv1-dev
       - liblz4-dev
+      - libdeflate-dev
   homebrew:
     update: true
     packages:
       - lz4
       - libuv
+      - libdeflate
 
 cache:
   apt: true
