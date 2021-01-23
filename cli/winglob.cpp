@@ -24,10 +24,13 @@ static std::vector<std::wstring> split_components(const std::wstring &argw) {
 	size_t pos = 0;
 	while (pos != argw.npos) {
 		size_t next = argw.find_first_of(L"/\\", pos);
-		if (next == pos && pos != 0) {
-			// Ignore doubled up slashes, i.e. C:\\Users\\\\Me.
-			++pos;
-			continue;
+		if (next == pos) {
+			if (pos != 0) {
+				// Ignore doubled up slashes, i.e. C:\\Users\\\\Me.
+				++pos;
+				continue;
+			}
+			next = argw.find_first_of(L"/\\", pos + 1);
 		}
 
 		if (next == argw.npos) {
@@ -79,6 +82,10 @@ static std::vector<std::wstring> next_contexts(const std::vector<std::wstring> &
 
 		WIN32_FIND_DATA data;
 		HANDLE finder = FindFirstFile(search.c_str(), &data);
+		if (finder == INVALID_HANDLE_VALUE) {
+			output.push_back(search);
+			continue;
+		}
 		do {
 			std::wstring filename(data.cFileName, wcsnlen(data.cFileName, MAX_PATH));
 			if (filename == L"." || filename == L"..") {
