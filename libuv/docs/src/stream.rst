@@ -50,8 +50,8 @@ Data types
     from the stream again is undefined.
 
     The callee is responsible for freeing the buffer, libuv does not reuse it.
-    The buffer may be a null buffer (where buf->base=NULL and buf->len=0) on
-    error.
+    The buffer may be a null buffer (where `buf->base` == NULL and `buf->len` == 0)
+    on error.
 
 .. c:type:: void (*uv_write_cb)(uv_write_t* req, int status)
 
@@ -138,6 +138,11 @@ API
     Read data from an incoming stream. The :c:type:`uv_read_cb` callback will
     be made several times until there is no more data to read or
     :c:func:`uv_read_stop` is called.
+
+    .. versionchanged:: 1.38.0 :c:func:`uv_read_start()` now consistently
+      returns `UV_EALREADY` when called twice, and `UV_EINVAL` when the
+      stream is closing. With older libuv versions, it returns `UV_EALREADY`
+      on Windows but not UNIX, and `UV_EINVAL` on UNIX but not Windows.
 
 .. c:function:: int uv_read_stop(uv_stream_t*)
 
