@@ -94,8 +94,8 @@ CDecoder::CDecoder():
   _writtenFileSize(0),
   _vmData(0),
   _vmCode(0),
-  m_IsSolid(false),
-  _errorMode(false)
+  _isSolid(false),
+  _solidAllowed(false)
 {
   Ppmd7_Construct(&_ppmd);
 }
@@ -148,7 +148,8 @@ void CDecoder::ExecuteFilter(unsigned tempFilterIndex, NVm::CBlockRef &outBlockR
   if (!_vm.Execute(filter, tempFilter, outBlockRef, filter->GlobalData))
     _unsupportedFilter = true;
   delete tempFilter;
-  _tempFilters[tempFilterIndex] = 0;
+  _tempFilters[tempFilterIndex] = NULL;
+  _numEmptyTempFilters++;
 }
 
 HRESULT CDecoder::WriteBuf()
@@ -225,6 +226,7 @@ HRESULT CDecoder::WriteBuf()
 void CDecoder::InitFilters()
 {
   _lastFilter = 0;
+  _numEmptyTempFilters = 0;
   unsigned i;
   for (i = 0; i < _tempFilters.Size(); i++)
     delete _tempFilters[i];
@@ -274,24 +276,27 @@ bool CDecoder::AddVmCode(UInt32 firstByte, UInt32 codeSize)
     filter->ExecCount++;
   }
 
-  unsigned numEmptyItems = 0;
+  if (_numEmptyTempFilters != 0)
   {
-    FOR_VECTOR (i, _tempFilters)
+    unsigned num = _tempFilters.Size();
+    CTempFilter **tempFilters = &_tempFilters.Front();
+    
+    unsigned w = 0;
+    for (unsigned i = 0; i < num; i++)
     {
-      _tempFilters[i - numEmptyItems] = _tempFilters[i];
-      if (!_tempFilters[i])
-        numEmptyItems++;
-      if (numEmptyItems != 0)
-        _tempFilters[i] = NULL;
+      CTempFilter *tf = tempFilters[i];
+      if (tf)
+        tempFilters[w++] = tf;
     }
+
+    _tempFilters.DeleteFrom(w);
+    _numEmptyTempFilters = 0;
   }
-  if (numEmptyItems == 0)
-  {
-    _tempFilters.Add(NULL);
-    numEmptyItems = 1;
-  }
+  
+  if (_tempFilters.Size() > MAX_UNPACK_FILTERS)
+    return false;
   CTempFilter *tempFilter = new CTempFilter;
-  _tempFilters[_tempFilters.Size() - numEmptyItems] = tempFilter;
+  _tempFilters.Add(tempFilter);
   tempFilter->FilterIndex = filterIndex;
  
   UInt32 blockStart = inp.ReadEncodedUInt32();
@@ -829,7 +834,7 @@ HRESULT CDecoder::CodeReal(ICompressProgressInfo *progress)
   _writtenFileSize = 0;
   _unsupportedFilter = false;
   
-  if (!m_IsSolid)
+  if (!_isSolid)
   {
     _lzSize = 0;
     _winPos = 0;
@@ -842,18 +847,23 @@ HRESULT CDecoder::CodeReal(ICompressProgressInfo *progress)
     PpmEscChar = 2;
     PpmError = true;
     InitFilters();
-    _errorMode = false;
+    // _errorMode = false;
   }
 
+  /*
   if (_errorMode)
     return S_FALSE;
+  */
 
-  if (!m_IsSolid || !TablesRead)
+  if (!_isSolid || !TablesRead)
   {
     bool keepDecompressing;
     RINOK(ReadTables(keepDecompressing));
     if (!keepDecompressing)
+    {
+      _solidAllowed = true;
       return S_OK;
+    }
   }
 
   for (;;)
@@ -878,6 +888,9 @@ HRESULT CDecoder::CodeReal(ICompressProgressInfo *progress)
     if (!keepDecompressing)
       break;
   }
+
+  _solidAllowed = true;
+
   RINOK(WriteBuf());
   UInt64 packSize = m_InBitStream.BitDecoder.GetProcessedSize();
   RINOK(progress->SetRatioInfo(&packSize, &_writtenFileSize));
@@ -897,6 +910,10 @@ STDMETHODIMP CDecoder::Code(ISequentialInStream *inStream, ISequentialOutStream 
   {
     if (!inSize)
       return E_INVALIDARG;
+
+    if (_isSolid && !_solidAllowed)
+      return S_FALSE;
+    _solidAllowed = false;
 
     if (!_vmData)
     {
@@ -926,8 +943,8 @@ STDMETHODIMP CDecoder::Code(ISequentialInStream *inStream, ISequentialOutStream 
     _unpackSize = outSize ? *outSize : (UInt64)(Int64)-1;
     return CodeReal(progress);
   }
-  catch(const CInBufferException &e)  { _errorMode = true; return e.ErrorCode; }
-  catch(...) { _errorMode = true; return S_FALSE; }
+  catch(const CInBufferException &e)  { /* _errorMode = true; */ return e.ErrorCode; }
+  catch(...) { /* _errorMode = true; */ return S_FALSE; }
   // CNewException is possible here. But probably CNewException is caused
   // by error in data stream.
 }
@@ -936,7 +953,7 @@ STDMETHODIMP CDecoder::SetDecoderProperties2(const Byte *data, UInt32 size)
 {
   if (size < 1)
     return E_INVALIDARG;
-  m_IsSolid = ((data[0] & 1) != 0);
+  _isSolid = ((data[0] & 1) != 0);
   return S_OK;
 }
 
