@@ -19,7 +19,7 @@ Format (version 1)
 
 The header is as follows (little endian):
 
-    char[4]  magic;             // Always "CISO".
+	char[4]  magic;             // Always "CISO".
 	uint32_t header_size;       // Does not always contain a reliable value.
 	uint64_t uncompressed_size; // Total size of original ISO.
 	uint32_t block_size;        // Size of each block, usually 2048.
