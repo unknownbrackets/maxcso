@@ -34,6 +34,7 @@ LZ4DIR  = lib
 PRGDIR  = programs
 TESTDIR = tests
 EXDIR   = examples
+FUZZDIR = ossfuzz
 
 include Makefile.inc
 
@@ -76,6 +77,7 @@ clean:
 	@$(MAKE) -C $(PRGDIR) $@ > $(VOID)
 	@$(MAKE) -C $(TESTDIR) $@ > $(VOID)
 	@$(MAKE) -C $(EXDIR) $@ > $(VOID)
+	@$(MAKE) -C $(FUZZDIR) $@ > $(VOID)
 	@$(MAKE) -C contrib/gen_manual $@ > $(VOID)
 	@$(RM) lz4$(EXT)
 	@echo Cleaning completed
@@ -96,7 +98,7 @@ travis-install:
 	$(MAKE) -j1 install DESTDIR=~/install_test_dir
 
 cmake:
-	@cd contrib/cmake_unofficial; cmake $(CMAKE_PARAMS) CMakeLists.txt; $(MAKE)
+	@cd build/cmake; cmake $(CMAKE_PARAMS) CMakeLists.txt; $(MAKE)
 
 endif
 
@@ -122,14 +124,17 @@ check:
 
 .PHONY: test
 test:
-	$(MAKE) -C $(TESTDIR) $@
-	$(MAKE) -C $(EXDIR) $@
+	CFLAGS="$(CFLAGS)" LDFLAGS="$(LDFLAGS)" $(MAKE) -C $(TESTDIR) $@
+	CFLAGS="$(CFLAGS)" LDFLAGS="$(LDFLAGS)" $(MAKE) -C $(EXDIR) $@
 
+clangtest: CFLAGS ?= -O3
+clangtest: CFLAGS += -Werror -Wconversion -Wno-sign-conversion
+clangtest: CC = clang
 clangtest: clean
-	clang -v
-	@CFLAGS="-O3 -Werror -Wconversion -Wno-sign-conversion" $(MAKE) -C $(LZ4DIR)  all CC=clang
-	@CFLAGS="-O3 -Werror -Wconversion -Wno-sign-conversion" $(MAKE) -C $(PRGDIR)  all CC=clang
-	@CFLAGS="-O3 -Werror -Wconversion -Wno-sign-conversion" $(MAKE) -C $(TESTDIR) all CC=clang
+	$(CC) -v
+	@CFLAGS="$(CFLAGS)" $(MAKE) -C $(LZ4DIR)  all CC=$(CC)
+	@CFLAGS="$(CFLAGS)" $(MAKE) -C $(PRGDIR)  all CC=$(CC)
+	@CFLAGS="$(CFLAGS)" $(MAKE) -C $(TESTDIR) all CC=$(CC)
 
 clangtest-native: clean
 	clang -v
@@ -137,15 +142,20 @@ clangtest-native: clean
 	@CFLAGS="-O3 -Werror -Wconversion -Wno-sign-conversion" $(MAKE) -C $(PRGDIR)  native CC=clang
 	@CFLAGS="-O3 -Werror -Wconversion -Wno-sign-conversion" $(MAKE) -C $(TESTDIR) native CC=clang
 
+usan: CC      = clang
+usan: CFLAGS  = -O3 -g -fsanitize=undefined -fno-sanitize-recover=undefined -fsanitize-recover=pointer-overflow
+usan: LDFLAGS = $(CFLAGS)
 usan: clean
-	CC=clang CFLAGS="-O3 -g -fsanitize=undefined" $(MAKE) test FUZZER_TIME="-T30s" NB_LOOPS=-i1
+	CFLAGS="$(CFLAGS)" LDFLAGS="$(LDFLAGS)" $(MAKE) test FUZZER_TIME="-T30s" NB_LOOPS=-i1
 
 usan32: clean
 	CFLAGS="-m32 -O3 -g -fsanitize=undefined" $(MAKE) test FUZZER_TIME="-T30s" NB_LOOPS=-i1
 
+SCANBUILD ?= scan-build
+SCANBUILD_FLAGS += --status-bugs -v --force-analyze-debug-code
 .PHONY: staticAnalyze
 staticAnalyze: clean
-	CFLAGS=-g scan-build --status-bugs -v $(MAKE) all
+	CPPFLAGS=-DLZ4_DEBUG=1 CFLAGS=-g $(SCANBUILD) $(SCANBUILD_FLAGS) $(MAKE) all V=1 DEBUGLEVEL=1
 
 .PHONY: cppcheck
 cppcheck:
