@@ -210,7 +210,12 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="lib\adler32.c" />
-    <ClCompile Include="lib\arm\cpu_features.c" />
+    <ClCompile Include="lib\arm\cpu_features.c">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="lib\crc32.c" />
     <ClCompile Include="lib\deflate_compress.c" />
     <ClCompile Include="lib\deflate_decompress.c" />
