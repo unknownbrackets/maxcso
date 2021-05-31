@@ -16,7 +16,7 @@
 #include "CPP/7zip/Compress/DeflateEncoder.h"
 #include "CPP/7zip/Compress/ZlibEncoder.h"
 
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(__MINGW32__)
 #include <propvarutil.h>
 #else
 inline HRESULT InitPropVariantFromUInt32(ULONG v, PROPVARIANT *pvar) {

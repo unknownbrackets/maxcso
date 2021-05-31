@@ -27,6 +27,14 @@ ZOPFLI_C_SRC = zopfli/src/zopfli/blocksplitter.c zopfli/src/zopfli/cache.c \
                zopfli/src/zopfli/zlib_container.c zopfli/src/zopfli/zopfli_lib.c
 ZOPFLI_C_OBJ = $(ZOPFLI_C_SRC:.c=.o)
 
+EXTRA_LIBS =
+ifeq ($(OS),Windows_NT)
+	LIBDEFLATE=libdeflatestatic.lib
+	EXTRA_LIBS += -luuid
+else
+	LIBDEFLATE=libdeflate.a
+endif
+
 %.o: %.cpp
 	$(CXX) -c $(SRC_CXXFLAGS) $(CXXFLAGS) -o $@ $<
 
@@ -34,14 +42,14 @@ ZOPFLI_C_OBJ = $(ZOPFLI_C_SRC:.c=.o)
 	$(CC) -c $(SRC_CFLAGS) $(CFLAGS) -o $@ $<
 
 # TODO: Perhaps detect and use system libdeflate if available.
-maxcso: $(SRC_CXX_OBJ) $(CLI_CXX_OBJ) $(ZOPFLI_C_OBJ) 7zip/7zip.a libdeflate/libdeflate.a
-	$(CXX) -o $@ $(SRC_CXXFLAGS) $(CXXFLAGS) $^ `pkg-config --libs $(LIBS)`
+maxcso: $(SRC_CXX_OBJ) $(CLI_CXX_OBJ) $(ZOPFLI_C_OBJ) 7zip/7zip.a libdeflate/$(LIBDEFLATE)
+	$(CXX) -o $@ $(SRC_CXXFLAGS) $(CXXFLAGS) $^ `pkg-config --libs $(LIBS)` $(EXTRA_LIBS)
 
 7zip/7zip.a:
 	$(MAKE) -C 7zip 7zip.a
 
-libdeflate/libdeflate.a:
-	$(MAKE) -C libdeflate libdeflate.a
+libdeflate/$(LIBDEFLATE):
+	$(MAKE) -C libdeflate $(LIBDEFLATE)
 
 install: all
 	mkdir -p $(DESTDIR)$(BINDIR)
