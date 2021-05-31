@@ -80,8 +80,8 @@ static std::vector<std::wstring> next_contexts(const std::vector<std::wstring> &
 		std::wstring base = context.empty() ? L"" : (context + L"\\");
 		std::wstring search = base + component;
 
-		WIN32_FIND_DATA data;
-		HANDLE finder = FindFirstFile(search.c_str(), &data);
+		WIN32_FIND_DATAW data;
+		HANDLE finder = FindFirstFileW(search.c_str(), &data);
 		if (finder == INVALID_HANDLE_VALUE) {
 			output.push_back(search);
 			continue;
@@ -93,7 +93,7 @@ static std::vector<std::wstring> next_contexts(const std::vector<std::wstring> &
 			}
 
 			output.push_back(base + filename);
-		} while (FindNextFile(finder, &data) != 0);
+		} while (FindNextFileW(finder, &data) != 0);
 		FindClose(finder);
 	}
 
