@@ -167,7 +167,7 @@ void CompressionTask::BeginProcessing() {
 		}
 
 		// Now that we know the file size, check if we should resize the blockSize_.
-		if (task_.block_size == DEFAULT_BLOCK_SIZE && size >= LARGE_BLOCK_SIZE_THRESH) {
+		if (!(task_.flags & maxcso::TASKFLAG_DECOMPRESS) && task_.block_size == DEFAULT_BLOCK_SIZE && size >= LARGE_BLOCK_SIZE_THRESH) {
 			blockSize_ = LARGE_BLOCK_SIZE;
 			if (!pool.SetBufferSize(blockSize_ * 2)) {
 				// Abort reading.
