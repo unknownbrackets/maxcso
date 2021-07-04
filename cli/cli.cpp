@@ -424,10 +424,14 @@ int main(int argc, char *argv[]) {
 	bool formatting = uv_guess_handle(2) == UV_TTY && !args.quiet;
 
 	int64_t next = uv_hrtime();
-	int64_t lastPos = 0;
 	// 50ms
 	static const int64_t interval_ns = 50000000LL;
-	static const double interval_to_s = 1000.0 / 50.0;
+	static const double b_to_mb = 1.0 / (1024 * 1024);
+	static const double ns_to_s = 1.0 / (1000 * 1000 * 1000);
+	struct History { int64_t pos, time; } history[20]; // 50ms * 20 = 1s
+	constexpr int historyLen = sizeof(history) / sizeof(*history);
+	int historyPos = 0;
+	std::fill(std::begin(history), std::end(history), (History){0, next});
 
 	std::string statusInfo;
 	uv_write_t write_req;
@@ -445,18 +449,21 @@ int main(int argc, char *argv[]) {
 			if (now >= next) {
 				double percent = total == 0 ? 0.0 : (pos * 100.0) / total;
 				double ratio = pos == 0 ? 0.0 : (written * 100.0) / pos;
-				double speed = 0.0;
-				int64_t diff = pos - lastPos;
-				if (diff > 0) {
-					speed = (diff / 1024.0 / 1024.0) * interval_to_s;
-				}
+				History &entry = history[historyPos];
+				int64_t diff = pos - entry.pos;
+				int64_t elapsed = now - entry.time;
+				entry = {pos, now};
+				double speed = elapsed == 0 ? 0 : (diff * b_to_mb) / (elapsed * ns_to_s);
 
 				char temp[128];
 				sprintf(temp, "%3.0f%%, ratio=%3.0f%%, speed=%5.2f MB/s", percent, ratio, speed);
 				statusInfo = temp;
 
 				next = now + interval_ns;
-				lastPos = pos;
+				historyPos++;
+				if (historyPos >= historyLen) {
+					historyPos = 0;
+				}
 			}
 		} else if (status == maxcso::TASK_SUCCESS) {
 			double ratio = total == 0 ? 0.0 : (written * 100.0) / total;
