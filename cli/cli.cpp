@@ -431,7 +431,7 @@ int main(int argc, char *argv[]) {
 	struct History { int64_t pos, time; } history[20]; // 50ms * 20 = 1s
 	constexpr int historyLen = sizeof(history) / sizeof(*history);
 	int historyPos = 0;
-	std::fill(std::begin(history), std::end(history), (History){0, next});
+	std::fill(std::begin(history), std::end(history), History{0, next});
 
 	std::string statusInfo;
 	uv_write_t write_req;
