@@ -101,6 +101,9 @@ Multiple files may be specified.  Inputs can be iso or cso files.
 Because Zopfli is significantly slower than the other methods, and uses a lot more memory, it
 is disabled by default.  Add `--use-zopfli` for maximum compression.
 
+Libdeflate is also disabled by default, because its output is not compatible with some PSP CFW.
+When not using PSP CFW, `--use-libdeflate` may improve compression a bit.
+
 The cost arguments enable you to allow each block to be N% bigger by using lz4 or no
 compression.  This makes the file read faster (less cpu power), but take more space.
 

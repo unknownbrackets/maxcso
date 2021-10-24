@@ -327,8 +327,9 @@ int validate_args(const char *arg0, Arguments &args) {
 	} else if (args.flags_fmt & maxcso::TASKFLAG_FMT_ZSO) {
 		args.flags_final = maxcso::TASKFLAG_NO_ZLIB | maxcso::TASKFLAG_NO_7ZIP | maxcso::TASKFLAG_NO_ZOPFLI | maxcso::TASKFLAG_NO_LZ4_HC_BRUTE | maxcso::TASKFLAG_NO_LIBDEFLATE;
 	} else {
-		// CSO v1 or DAX, just disable lz4.
-		args.flags_final = maxcso::TASKFLAG_NO_ZOPFLI | maxcso::TASKFLAG_NO_LZ4;
+		// CSO v1 or DAX, just disable lz4, zopfli, and libdeflate.
+		// We disable libdeflate because some CFW can't handle its output.
+		args.flags_final = maxcso::TASKFLAG_NO_ZOPFLI | maxcso::TASKFLAG_NO_LIBDEFLATE | maxcso::TASKFLAG_NO_LZ4;
 	}
 
 	// Kill any of the NO flags for the --use-METHOD args.
