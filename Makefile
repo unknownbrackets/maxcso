@@ -1,3 +1,5 @@
+SRCDIR := $(abspath $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST))))))
+
 PREFIX ?= /usr/local
 BINDIR ?= $(PREFIX)/bin
 MANDIR ?= $(PREFIX)/share/man
@@ -22,22 +24,31 @@ LIBS_ZLIB := $(shell $(PKGCONF) --libs zlib)
 DEP_FLAGS := $(CFLAGS_UV) $(CFLAGS_LZ4) $(CFLAGS_ZLIB)
 LIBS := $(LIBS_UV) $(LIBS_LZ4) $(LIBS_ZLIB)
 
-SRC_CFLAGS += -W -Wall -Wextra -Wno-implicit-function-declaration -DNDEBUG=1
-SRC_CXXFLAGS += -W -Wall -Wextra -std=c++11 -Izopfli/src -I7zip -DNDEBUG=1 \
-	-Ilibdeflate -Wno-unused-parameter -Wno-unused-variable -pthread \
-	$(DEP_FLAGS)
+OBJDIR := obj
+MKDIRS := $(OBJDIR)/src $(OBJDIR)/cli $(OBJDIR)/zopfli/src/zopfli
 
-SRC_CXX_SRC = $(wildcard src/*.cpp)
-SRC_CXX_OBJ = $(SRC_CXX_SRC:.cpp=.o)
-CLI_CXX_SRC = $(wildcard cli/*.cpp)
-CLI_CXX_OBJ = $(CLI_CXX_SRC:.cpp=.o)
-ZOPFLI_C_SRC = zopfli/src/zopfli/blocksplitter.c zopfli/src/zopfli/cache.c \
-               zopfli/src/zopfli/deflate.c zopfli/src/zopfli/gzip_container.c \
-               zopfli/src/zopfli/hash.c zopfli/src/zopfli/katajainen.c \
-               zopfli/src/zopfli/lz77.c zopfli/src/zopfli/squeeze.c \
-               zopfli/src/zopfli/tree.c zopfli/src/zopfli/util.c \
-               zopfli/src/zopfli/zlib_container.c zopfli/src/zopfli/zopfli_lib.c
-ZOPFLI_C_OBJ = $(ZOPFLI_C_SRC:.c=.o)
+SRC_CFLAGS += -W -Wall -Wextra -Wno-implicit-function-declaration -DNDEBUG=1
+SRC_CXXFLAGS += -W -Wall -Wextra -std=c++11 -I$(SRCDIR)/zopfli/src -I$(SRCDIR)/7zip \
+	-DNDEBUG=1 -I$(SRCDIR)/libdeflate -Wno-unused-parameter -Wno-unused-variable \
+	-pthread $(DEP_FLAGS)
+
+SRC_CXX_SRC := $(wildcard $(SRCDIR)/src/*.cpp)
+SRC_CXX_TMP := $(SRC_CXX_SRC:.cpp=.o)
+SRC_CXX_OBJ := $(patsubst $(SRCDIR)/%,$(OBJDIR)/%,$(SRC_CXX_TMP))
+
+CLI_CXX_SRC := $(wildcard $(SRCDIR)/cli/*.cpp)
+CLI_CXX_TMP := $(CLI_CXX_SRC:.cpp=.o)
+CLI_CXX_OBJ := $(patsubst $(SRCDIR)/%,$(OBJDIR)/%,$(CLI_CXX_TMP))
+
+ZOPFLI_C_DIR := $(SRCDIR)/zopfli/src/zopfli
+ZOPFLI_C_SRC := $(ZOPFLI_C_DIR)/blocksplitter.c $(ZOPFLI_C_DIR)/cache.c \
+               $(ZOPFLI_C_DIR)/deflate.c $(ZOPFLI_C_DIR)/gzip_container.c \
+               $(ZOPFLI_C_DIR)/hash.c $(ZOPFLI_C_DIR)/katajainen.c \
+               $(ZOPFLI_C_DIR)/lz77.c $(ZOPFLI_C_DIR)/squeeze.c \
+               $(ZOPFLI_C_DIR)/tree.c $(ZOPFLI_C_DIR)/util.c \
+               $(ZOPFLI_C_DIR)/zlib_container.c $(ZOPFLI_C_DIR)/zopfli_lib.c
+ZOPFLI_C_TMP := $(ZOPFLI_C_SRC:.c=.o)
+ZOPFLI_C_OBJ := $(patsubst $(SRCDIR)/%,$(OBJDIR)/%,$(ZOPFLI_C_TMP))
 
 EXTRA_LIBS =
 ifeq ($(OS),Windows_NT)
@@ -47,27 +58,34 @@ else
 	LIBDEFLATE=libdeflate.a
 endif
 
-%.o: %.cpp
+SRC_7ZIP = $(OBJDIR)/7zip/7zip.a
+SRC_LIBDEFLATE = $(SRCDIR)/libdeflate/$(LIBDEFLATE)
+
+$(OBJDIR)/%.o: $(SRCDIR)/%.cpp $(OBJDIR)/.done
 	$(CXX) -c $(SRC_CXXFLAGS) $(CXXFLAGS) -o $@ $<
 
-%.o: %.c
+$(OBJDIR)/%.o: $(SRCDIR)/%.c $(OBJDIR)/.done
 	$(CC) -c $(SRC_CFLAGS) $(CFLAGS) -o $@ $<
 
 # TODO: Perhaps detect and use system libdeflate if available.
-maxcso: $(SRC_CXX_OBJ) $(CLI_CXX_OBJ) $(ZOPFLI_C_OBJ) 7zip/7zip.a libdeflate/$(LIBDEFLATE)
+maxcso: $(SRC_CXX_OBJ) $(CLI_CXX_OBJ) $(ZOPFLI_C_OBJ) $(SRC_7ZIP) $(SRC_LIBDEFLATE)
 	$(CXX) -o $@ $(SRC_CXXFLAGS) $(CXXFLAGS) $^ $(LIBS) $(EXTRA_LIBS)
 
-7zip/7zip.a:
-	$(MAKE) -C 7zip 7zip.a
+$(SRC_7ZIP):
+	$(MAKE) -f $(SRCDIR)/7zip/Makefile 7zip.a
 
-libdeflate/$(LIBDEFLATE):
-	$(MAKE) -C libdeflate $(LIBDEFLATE)
+$(SRC_LIBDEFLATE):
+	$(MAKE) -C $(SRCDIR)/libdeflate $(LIBDEFLATE)
+
+$(OBJDIR)/.done:
+	@mkdir -p $(MKDIRS)
+	@touch $@
 
 install: all
 	mkdir -p $(DESTDIR)$(BINDIR)
 	mkdir -p $(DESTDIR)$(MANDIR)/man1
 	cp maxcso $(DESTDIR)$(BINDIR)
-	cp maxcso.1 $(DESTDIR)$(MANDIR)/man1
+	cp $(SRCDIR)/maxcso.1 $(DESTDIR)$(MANDIR)/man1
 	chmod 0755 $(DESTDIR)$(BINDIR)/maxcso
 	chmod 0644 $(DESTDIR)$(MANDIR)/man1/maxcso.1
 
@@ -76,8 +94,9 @@ uninstall:
 	rm -f $(DESTDIR)$(MANDIR)/man1/maxcso.1
 
 clean:
-	rm -f $(SRC_CXX_OBJ) $(CLI_CXX_OBJ) $(ZOPFLI_C_OBJ) maxcso
-	$(MAKE) -C 7zip clean
+	rm -rf -- $(OBJDIR)
+	rm -f maxcso
+	$(MAKE) -C $(SRCDIR)/libdeflate clean
 
 all: maxcso
 
