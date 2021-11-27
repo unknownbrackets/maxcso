@@ -8,12 +8,24 @@ CXX ?= g++
 CFLAGS ?= -O2
 CXXFLAGS ?= $(CFLAGS)
 
-LIBS ?= libuv liblz4 zlib
+PKGCONF ?= pkg-config
+
+CFLAGS_UV := $(shell $(PKGCONF) --cflags libuv)
+LIBS_UV := $(shell $(PKGCONF) --libs libuv)
+
+CFLAGS_LZ4 := $(shell $(PKGCONF) --cflags liblz4)
+LIBS_LZ4 := $(shell $(PKGCONF) --libs liblz4)
+
+CFLAGS_ZLIB := $(shell $(PKGCONF) --cflags zlib)
+LIBS_ZLIB := $(shell $(PKGCONF) --libs zlib)
+
+DEP_FLAGS := $(CFLAGS_UV) $(CFLAGS_LZ4) $(CFLAGS_ZLIB)
+LIBS := $(LIBS_UV) $(LIBS_LZ4) $(LIBS_ZLIB)
 
 SRC_CFLAGS += -W -Wall -Wextra -Wno-implicit-function-declaration -DNDEBUG=1
 SRC_CXXFLAGS += -W -Wall -Wextra -std=c++11 -Izopfli/src -I7zip -DNDEBUG=1 \
 	-Ilibdeflate -Wno-unused-parameter -Wno-unused-variable -pthread \
-	`pkg-config --cflags $(LIBS)`
+	$(DEP_FLAGS)
 
 SRC_CXX_SRC = $(wildcard src/*.cpp)
 SRC_CXX_OBJ = $(SRC_CXX_SRC:.cpp=.o)
@@ -43,7 +55,7 @@ endif
 
 # TODO: Perhaps detect and use system libdeflate if available.
 maxcso: $(SRC_CXX_OBJ) $(CLI_CXX_OBJ) $(ZOPFLI_C_OBJ) 7zip/7zip.a libdeflate/$(LIBDEFLATE)
-	$(CXX) -o $@ $(SRC_CXXFLAGS) $(CXXFLAGS) $^ `pkg-config --libs $(LIBS)` $(EXTRA_LIBS)
+	$(CXX) -o $@ $(SRC_CXXFLAGS) $(CXXFLAGS) $^ $(LIBS) $(EXTRA_LIBS)
 
 7zip/7zip.a:
 	$(MAKE) -C 7zip 7zip.a
