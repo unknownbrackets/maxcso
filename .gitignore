@@ -1,6 +1,8 @@
 # Object files
 /cli/Debug
 /cli/Release
+/obj
+/7zip/obj
 *.o
 *.ko
 *.obj
