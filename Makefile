@@ -69,7 +69,7 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.c $(OBJDIR)/.done
 
 # TODO: Perhaps detect and use system libdeflate if available.
 maxcso: $(SRC_CXX_OBJ) $(CLI_CXX_OBJ) $(ZOPFLI_C_OBJ) $(SRC_7ZIP) $(SRC_LIBDEFLATE)
-	$(CXX) -o $@ $(SRC_CXXFLAGS) $(CXXFLAGS) $^ $(LIBS) $(EXTRA_LIBS)
+	$(CXX) $(LDFLAGS) -o $@ $(SRC_CXXFLAGS) $(CXXFLAGS) $^ $(LIBS) $(EXTRA_LIBS)
 
 $(SRC_7ZIP):
 	$(MAKE) -f $(SRCDIR)/7zip/Makefile 7zip.a
