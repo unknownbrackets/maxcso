@@ -10,16 +10,16 @@ CXX ?= g++
 CFLAGS ?= -O2
 CXXFLAGS ?= $(CFLAGS)
 
-PKGCONF ?= pkg-config
+PKG_CONFIG ?= pkg-config
 
-CFLAGS_UV := $(shell $(PKGCONF) --cflags libuv)
-LIBS_UV := $(shell $(PKGCONF) --libs libuv)
+CFLAGS_UV := $(shell $(PKG_CONFIG) --cflags libuv)
+LIBS_UV := $(shell $(PKG_CONFIG) --libs libuv)
 
-CFLAGS_LZ4 := $(shell $(PKGCONF) --cflags liblz4)
-LIBS_LZ4 := $(shell $(PKGCONF) --libs liblz4)
+CFLAGS_LZ4 := $(shell $(PKG_CONFIG) --cflags liblz4)
+LIBS_LZ4 := $(shell $(PKG_CONFIG) --libs liblz4)
 
-CFLAGS_ZLIB := $(shell $(PKGCONF) --cflags zlib)
-LIBS_ZLIB := $(shell $(PKGCONF) --libs zlib)
+CFLAGS_ZLIB := $(shell $(PKG_CONFIG) --cflags zlib)
+LIBS_ZLIB := $(shell $(PKG_CONFIG) --libs zlib)
 
 DEP_FLAGS := $(CFLAGS_UV) $(CFLAGS_LZ4) $(CFLAGS_ZLIB)
 LIBS := $(LIBS_UV) $(LIBS_LZ4) $(LIBS_ZLIB)
