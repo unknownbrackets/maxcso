@@ -1,0 +1,68 @@
+name: CI-compile
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-windows:
+    name: Windows compilation
+    runs-on: windows-2019
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+
+      - name: Setup msbuild
+        uses: microsoft/setup-msbuild@v1.1
+        # with:
+        #   vs-version: "[15.0,16.0)"
+        #   msbuild-architecture: x64
+
+      - name: Build
+        run: msbuild.exe cli\\maxcso.sln -m -p:Configuration=Release -p:PlatformToolset=v141_xp -p:Platform=x64 -p:TrackFileAccess=false
+
+      - uses: actions/upload-artifact@v2
+        with:
+          name: maxcso-windows-${{ matrix.platform }}
+          path: maxcso.exe
+
+  build-macos:
+    name: MacOS compilation
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+
+      - run: brew install lz4 libuv libdeflate
+
+      - name: Build
+        run: |
+          make
+          tar -zcvf kelftool-macos.tar.gz maxcso
+
+      - uses: actions/upload-artifact@v2
+        with:
+          name: kelftool-macos
+          path: kelftool-macos.tar.gz
+
+  build-ubuntu:
+    name: Ubuntu compilation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+
+      - run: sudo apt-get install libuv1-dev liblz4-dev
+
+      - name: Build
+        run: |
+          make
+          tar -zcvf maxcso-linux.tar.gz maxcso
+
+      - uses: actions/upload-artifact@v2
+        with:
+          name: maxcso-linux
+          path: maxcso-linux.tar.gz
