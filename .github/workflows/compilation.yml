@@ -1,68 +1,76 @@
-name: CI-compile
+name: Build
 
 on:
   push:
+    paths-ignore:
+      - '.{gitignore,gitattributes}'
+      - '.travis.yml'
   pull_request:
+    paths-ignore:
+      - '.{gitignore,gitattributes}'
+      - '.travis.yml'
 
 jobs:
   build-windows:
-    name: Windows compilation
+    name: Windows build
     runs-on: windows-2019
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v2
 
-      - name: Setup msbuild
+      - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v1.1
-        # with:
-        #   vs-version: "[15.0,16.0)"
-        #   msbuild-architecture: x64
 
       - name: Build
-        run: msbuild.exe cli\\maxcso.sln -m -p:Configuration=Release -p:PlatformToolset=v141_xp -p:Platform=x64 -p:TrackFileAccess=false
+        run: msbuild.exe cli/maxcso.sln -m -p:Configuration=Release -p:Platform=x64 -p:TrackFileAccess=false
 
-      - uses: actions/upload-artifact@v2
+      - name: Upload build
+        uses: actions/upload-artifact@v2
         with:
-          name: maxcso-windows-${{ matrix.platform }}
+          name: maxcso-windows-nonpgo
           path: maxcso.exe
 
   build-macos:
-    name: MacOS compilation
+    name: macOS build
     runs-on: macos-latest
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v2
 
-      - run: brew install lz4 libuv libdeflate
+      - name: Setup dependencies
+        run: brew install lz4 libuv libdeflate
 
       - name: Build
         run: |
-          make
-          tar -zcvf kelftool-macos.tar.gz maxcso
+          make -j2
+          tar cv maxcso | gzip -9 > maxcso-macos.tar.gz
 
-      - uses: actions/upload-artifact@v2
+      - name: Upload build
+        uses: actions/upload-artifact@v2
         with:
-          name: kelftool-macos
-          path: kelftool-macos.tar.gz
+          name: maxcso-macos
+          path: maxcso-macos.tar.gz
 
   build-ubuntu:
-    name: Ubuntu compilation
+    name: Ubuntu build
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v2
 
-      - run: sudo apt-get install libuv1-dev liblz4-dev
+      - name: Setup dependencies
+        run: sudo apt-get install libuv1-dev liblz4-dev
 
       - name: Build
         run: |
-          make
-          tar -zcvf maxcso-linux.tar.gz maxcso
+          make -j2
+          tar cv maxcso | gzip -9 > maxcso-linux.tar.gz
 
-      - uses: actions/upload-artifact@v2
+      - name: Upload build
+        uses: actions/upload-artifact@v2
         with:
           name: maxcso-linux
           path: maxcso-linux.tar.gz
