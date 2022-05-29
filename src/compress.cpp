@@ -193,7 +193,7 @@ void Compress(const std::vector<Task> &tasks) {
 	uv_loop_t loop;
 	uv_loop_init(&loop);
 
-	for (const Task t : tasks) {
+	for (const Task &t : tasks) {
 		CompressionTask task(&loop, t);
 		task.Enqueue();
 		uv_run(&loop, UV_RUN_DEFAULT);
