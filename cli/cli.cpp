@@ -440,7 +440,10 @@ int main(int argc, char *argv[]) {
 
 	maxcso::ProgressCallback progress = [&] (const maxcso::Task *task, maxcso::TaskStatus status, int64_t pos, int64_t total, int64_t written) {
 		if (!formatting) {
-			return;
+			// Don't show progress if piping output, but do show the final result.
+			if (status != maxcso::TASK_SUCCESS || args.quiet) {
+				return;
+			}
 		}
 
 		statusInfo.clear();
@@ -480,19 +483,20 @@ int main(int argc, char *argv[]) {
 			return;
 		}
 
-		unsigned int nbufs = 0;
-		if (formatting) {
-			bufs[nbufs++] = uv_buf_init(ANSI_RESET_LINE);
-		}
-
-		if (task->input.size() > 38) {
+		if (task->input.size() > 38 && formatting) {
 			statusInfo = "..." + task->input.substr(task->input.size() - 35) + ": " + statusInfo;
 		} else {
 			statusInfo = task->input + ": " + statusInfo;
 		}
 
-		bufs[nbufs++] = uv_buf_init(statusInfo);
-		uv_write(&write_req, reinterpret_cast<uv_stream_t *>(&tty), bufs, nbufs, nullptr);
+		unsigned int nbufs = 0;
+		if (formatting) {
+			bufs[nbufs++] = uv_buf_init(ANSI_RESET_LINE);
+			bufs[nbufs++] = uv_buf_init(statusInfo);
+			uv_write(&write_req, reinterpret_cast<uv_stream_t *>(&tty), bufs, nbufs, nullptr);
+		} else {
+			fprintf(stderr, "%s", statusInfo.c_str());
+		}
 	};
 	maxcso::ErrorCallback error = [&] (const maxcso::Task *task, maxcso::TaskStatus status, const char *reason) {
 		// Change the result to indicate failure.
@@ -506,8 +510,12 @@ int main(int argc, char *argv[]) {
 
 		const std::string prefix = status == maxcso::TASK_SUCCESS ? "" : "Error while processing ";
 		statusInfo = (formatting ? ANSI_RESET_LINE : "") + prefix + task->input + ": " + reason + "\n";
-		bufs[0] = uv_buf_init(statusInfo);
-		uv_write(&write_req, reinterpret_cast<uv_stream_t *>(&tty), bufs, 1, nullptr);
+		if (formatting) {
+			bufs[0] = uv_buf_init(statusInfo);
+			uv_write(&write_req, reinterpret_cast<uv_stream_t *>(&tty), bufs, 1, nullptr);
+		} else {
+			fprintf(stderr, "%s", statusInfo.c_str());
+		}
 	};
 
 	std::vector<maxcso::Task> tasks;
