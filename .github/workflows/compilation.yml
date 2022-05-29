@@ -17,7 +17,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v1.1
@@ -26,7 +26,7 @@ jobs:
         run: msbuild.exe cli/maxcso.sln -m -p:Configuration=Release -p:Platform=x64 -p:TrackFileAccess=false
 
       - name: Upload build
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: maxcso-windows-nonpgo
           path: maxcso.exe
@@ -37,7 +37,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Build
         run: |
@@ -45,7 +45,7 @@ jobs:
           tar cv maxcso | gzip -9 > maxcso-macos.tar.gz
 
       - name: Upload build
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: maxcso-macos
           path: maxcso-macos.tar.gz
@@ -56,7 +56,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Setup dependencies
         run: sudo apt-get install libuv1-dev liblz4-dev
@@ -67,7 +67,7 @@ jobs:
           tar cv maxcso | gzip -9 > maxcso-linux.tar.gz
 
       - name: Upload build
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: maxcso-linux
           path: maxcso-linux.tar.gz
