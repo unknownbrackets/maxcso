@@ -39,9 +39,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v2
 
-      - name: Setup dependencies
-        run: brew install lz4 libuv libdeflate
-
       - name: Build
         run: |
           make -j2
