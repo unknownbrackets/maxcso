@@ -141,6 +141,34 @@ Community provided packages are available on some platforms under "maxcso".  Ple
 version and security before using.  Thanks should go to their respective maintainers.
 
 
+Batch processing
+===========
+
+On Windows, you can use a cmd or batch file to simplify arguments when using drag-and-drop.
+Create the file in the same directory as maxcso.exe, and then drag files into the batch file.
+
+For example, to maximize compression of PS2 ISO files for use with an emulator, use this:
+
+```cmd
+@echo off
+"%~dp0\maxcso.exe" --use-zopfli --block=16384 %*
+pause
+```
+(`--use-zopfli` makes this very slow, but you can try other arguments.)
+
+Similarly, to create CSOs in a "compressed" folder, use this:
+(create the "compressed" folder next to the batch file.)
+
+```cmd
+@echo off
+"%~dp0\maxcso.exe" "--output-path=%~dp0\compressed/" %*
+pause
+```
+
+More complex batch scripts can be created, but these are simple to start with.
+See the [examples]() folder for some samples to try.
+
+
 Credits and licensing
 ===========
 
@@ -179,3 +207,4 @@ Other tools
 [CSO v2]: README_CSO.md
 [ZSO]: README_ZSO.md
 [GitHub releases]: https://github.com/unknownbrackets/maxcso/releases
+[examples]: https://github.com/unknownbrackets/maxcso/tree/master/examples
