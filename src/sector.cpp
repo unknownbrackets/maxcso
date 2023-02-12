@@ -246,7 +246,13 @@ void Sector::SevenZipTrial() {
 
 void Sector::LibDeflateTrial() {
 	uint8_t *result = pool.Alloc();
-	size_t resultSize = libdeflate_deflate_compress(libdeflate_, buffer_, blockSize_, result, pool.bufferSize);
+	size_t resultSize;
+	if (flags_ & TASKFLAG_FMT_DAX) {
+		resultSize = libdeflate_zlib_compress(libdeflate_, buffer_, blockSize_, result, pool.bufferSize);
+	} else {
+		resultSize = libdeflate_deflate_compress(libdeflate_, buffer_, blockSize_, result, pool.bufferSize);
+	}
+
 	if (resultSize != 0) {
 		SubmitTrial(result, static_cast<uint32_t>(resultSize), SECTOR_FMT_DEFLATE);
 	} else {
