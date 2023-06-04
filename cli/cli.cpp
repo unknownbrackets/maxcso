@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cinttypes>
 #include <cstring>
 #include <cstdio>
 #include <cstdlib>
@@ -472,7 +473,7 @@ int main(int argc, char *argv[]) {
 		} else if (status == maxcso::TASK_SUCCESS) {
 			double ratio = total == 0 ? 0.0 : (written * 100.0) / total;
 			char temp[128];
-			sprintf(temp, "%lld -> %lld bytes (%.0f%%)\n", total, written, ratio);
+			sprintf(temp, "%" PRId64 " -> %" PRId64 " bytes (%.0f%%)\n", total, written, ratio);
 			statusInfo = temp;
 		} else {
 			// This shouldn't happen.
