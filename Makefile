@@ -63,6 +63,8 @@ SRC_LIBDEFLATE = $(SRCDIR)/libdeflate/$(LIBDEFLATE)
 
 .PHONY: all clean install uninstall
 
+all: maxcso
+
 $(OBJDIR)/%.o: $(SRCDIR)/%.cpp $(OBJDIR)/.done
 	$(CXX) -c $(SRC_CXXFLAGS) $(CXXFLAGS) -o $@ $<
 
@@ -99,5 +101,3 @@ clean:
 	rm -rf -- $(OBJDIR)
 	rm -f maxcso
 	$(MAKE) -C $(SRCDIR)/libdeflate clean
-
-all: maxcso
