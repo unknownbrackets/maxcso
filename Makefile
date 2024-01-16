@@ -61,6 +61,8 @@ endif
 SRC_7ZIP = $(OBJDIR)/7zip/7zip.a
 SRC_LIBDEFLATE = $(SRCDIR)/libdeflate/$(LIBDEFLATE)
 
+.PHONY: all clean install uninstall
+
 $(OBJDIR)/%.o: $(SRCDIR)/%.cpp $(OBJDIR)/.done
 	$(CXX) -c $(SRC_CXXFLAGS) $(CXXFLAGS) -o $@ $<
 
@@ -99,5 +101,3 @@ clean:
 	$(MAKE) -C $(SRCDIR)/libdeflate clean
 
 all: maxcso
-
-.PHONY: clean all
