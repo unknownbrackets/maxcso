@@ -12,14 +12,14 @@ CXXFLAGS ?= $(CFLAGS)
 
 PKG_CONFIG ?= pkg-config
 
-CFLAGS_UV := $(shell $(PKG_CONFIG) --cflags libuv)
-LIBS_UV := $(shell $(PKG_CONFIG) --libs libuv)
+CFLAGS_UV = $(shell $(PKG_CONFIG) --cflags libuv)
+LIBS_UV = $(shell $(PKG_CONFIG) --libs libuv)
 
-CFLAGS_LZ4 := $(shell $(PKG_CONFIG) --cflags liblz4)
-LIBS_LZ4 := $(shell $(PKG_CONFIG) --libs liblz4)
+CFLAGS_LZ4 = $(shell $(PKG_CONFIG) --cflags liblz4)
+LIBS_LZ4 = $(shell $(PKG_CONFIG) --libs liblz4)
 
-CFLAGS_ZLIB := $(shell $(PKG_CONFIG) --cflags zlib)
-LIBS_ZLIB := $(shell $(PKG_CONFIG) --libs zlib)
+CFLAGS_ZLIB = $(shell $(PKG_CONFIG) --cflags zlib)
+LIBS_ZLIB = $(shell $(PKG_CONFIG) --libs zlib)
 
 DEP_FLAGS := $(CFLAGS_UV) $(CFLAGS_LZ4) $(CFLAGS_ZLIB)
 LIBS := $(LIBS_UV) $(LIBS_LZ4) $(LIBS_ZLIB)
