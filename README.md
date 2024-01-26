@@ -135,6 +135,12 @@ And then just compile using make.
 Aside from gcc/g++ or clang, you will also need liblz4-dev, libdeflate-dev, and libuv1-dev - or
 similar.
 
+The following Dockerfile will produce an Ubuntu image with the needed build dependencies:
+
+    FROM ubuntu:latest
+
+    RUN apt-get update && apt-get install -y build-essential pkgconf zlib1g-dev liblz4-dev libuv1-dev
+
 ### Packages
 
 Community provided packages are available on some platforms under "maxcso".  Please confirm
