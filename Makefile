@@ -1,6 +1,7 @@
 SRCDIR := $(abspath $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST))))))
 
 USE_EXTERNAL_LIBDEFLATE ?= 0
+USE_EXTERNAL_LIBZOPFLI ?= 0
 
 PREFIX ?= /usr/local
 BINDIR ?= $(PREFIX)/bin
@@ -22,6 +23,10 @@ LIBS_LZ4 = $(shell $(PKG_CONFIG) --libs liblz4)
 
 CFLAGS_ZLIB = $(shell $(PKG_CONFIG) --cflags zlib)
 LIBS_ZLIB = $(shell $(PKG_CONFIG) --libs zlib)
+
+CFLAGS_7ZIP = -Wno-sign-compare -Wno-unused-parameter -Wno-misleading-indentation \
+	      -Wno-parentheses
+CXXFLAGS_7ZIP = $(CFLAGS_7ZIP) -Wno-reorder -Wno-class-memaccess
 
 DEP_FLAGS := $(CFLAGS_UV) $(CFLAGS_LZ4) $(CFLAGS_ZLIB)
 LIBS := $(LIBS_UV) $(LIBS_LZ4) $(LIBS_ZLIB)
@@ -62,7 +67,7 @@ endif
 SRC_7ZIP := $(OBJDIR)/7zip/7zip.a
 SRC_LIBDEFLATE := $(SRCDIR)/libdeflate/$(LIBDEFLATE)
 
-OBJS := $(SRC_CXX_OBJ) $(CLI_CXX_OBJ) $(ZOPFLI_C_OBJ) $(SRC_7ZIP)
+OBJS := $(SRC_CXX_OBJ) $(CLI_CXX_OBJ) $(SRC_7ZIP)
 
 ifeq ($(USE_EXTERNAL_LIBDEFLATE), 0)
 	OBJS += $(SRC_LIBDEFLATE)
@@ -71,6 +76,12 @@ else
 	LIBS_LIBDEFLATE = $(shell $(PKG_CONFIG) --libs libdeflate)
 	SRC_CXXFLAGS += $(CFLAGS_LIBDEFLATE)
 	LIBS += $(LIBS_LIBDEFLATE)
+endif
+
+ifeq ($(USE_EXTERNAL_LIBZOPFLI), 0)
+	OBJS += $(ZOPFLI_C_OBJ)
+else
+	LIBS += -lzopfli
 endif
 
 .PHONY: all clean install uninstall
@@ -86,6 +97,8 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.c $(OBJDIR)/.done
 maxcso: $(OBJS)
 	$(CXX) $(LDFLAGS) -o $@ $(SRC_CXXFLAGS) $(CXXFLAGS) $^ $(LIBS)
 
+$(SRC_7ZIP): override CFLAGS := $(CFLAGS_7ZIP) $(CFLAGS)
+$(SRC_7ZIP): override CXXFLAGS := $(CXXFLAGS_7ZIP) $(CXXFLAGS)
 $(SRC_7ZIP):
 	$(MAKE) -f $(SRCDIR)/7zip/Makefile 7zip.a
 
