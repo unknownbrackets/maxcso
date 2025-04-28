@@ -23,6 +23,10 @@ LIBS_LZ4 = $(shell $(PKG_CONFIG) --libs liblz4)
 CFLAGS_ZLIB = $(shell $(PKG_CONFIG) --cflags zlib)
 LIBS_ZLIB = $(shell $(PKG_CONFIG) --libs zlib)
 
+CFLAGS_7ZIP = -Wno-sign-compare -Wno-unused-parameter -Wno-misleading-indentation \
+	      -Wno-parentheses
+CXXFLAGS_7ZIP = $(CFLAGS_7ZIP) -Wno-reorder -Wno-class-memaccess
+
 DEP_FLAGS := $(CFLAGS_UV) $(CFLAGS_LZ4) $(CFLAGS_ZLIB)
 LIBS := $(LIBS_UV) $(LIBS_LZ4) $(LIBS_ZLIB)
 
@@ -86,6 +90,8 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.c $(OBJDIR)/.done
 maxcso: $(OBJS)
 	$(CXX) $(LDFLAGS) -o $@ $(SRC_CXXFLAGS) $(CXXFLAGS) $^ $(LIBS)
 
+$(SRC_7ZIP): override CFLAGS := $(CFLAGS_7ZIP) $(CFLAGS)
+$(SRC_7ZIP): override CXXFLAGS := $(CXXFLAGS_7ZIP) $(CXXFLAGS)
 $(SRC_7ZIP):
 	$(MAKE) -f $(SRCDIR)/7zip/Makefile 7zip.a
 
