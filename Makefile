@@ -1,6 +1,7 @@
 SRCDIR := $(abspath $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST))))))
 
 USE_EXTERNAL_LIBDEFLATE ?= 0
+USE_EXTERNAL_LIBZOPFLI ?= 0
 
 PREFIX ?= /usr/local
 BINDIR ?= $(PREFIX)/bin
@@ -66,7 +67,7 @@ endif
 SRC_7ZIP := $(OBJDIR)/7zip/7zip.a
 SRC_LIBDEFLATE := $(SRCDIR)/libdeflate/$(LIBDEFLATE)
 
-OBJS := $(SRC_CXX_OBJ) $(CLI_CXX_OBJ) $(ZOPFLI_C_OBJ) $(SRC_7ZIP)
+OBJS := $(SRC_CXX_OBJ) $(CLI_CXX_OBJ) $(SRC_7ZIP)
 
 ifeq ($(USE_EXTERNAL_LIBDEFLATE), 0)
 	OBJS += $(SRC_LIBDEFLATE)
@@ -75,6 +76,12 @@ else
 	LIBS_LIBDEFLATE = $(shell $(PKG_CONFIG) --libs libdeflate)
 	SRC_CXXFLAGS += $(CFLAGS_LIBDEFLATE)
 	LIBS += $(LIBS_LIBDEFLATE)
+endif
+
+ifeq ($(USE_EXTERNAL_LIBZOPFLI), 0)
+	OBJS += $(ZOPFLI_C_OBJ)
+else
+	LIBS += -lzopfli
 endif
 
 .PHONY: all clean install uninstall
