@@ -17,7 +17,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v1.1
@@ -26,29 +26,76 @@ jobs:
         run: msbuild.exe cli/maxcso.sln -m -p:Configuration=Release -p:Platform=x64 -p:TrackFileAccess=false
 
       - name: Upload build
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: maxcso-windows-nonpgo
           path: maxcso.exe
 
-  build-macos:
+  build-macOS:
     name: macOS build
-    runs-on: macos-latest
-
+    strategy:
+      matrix:
+        include:
+          - runner: macos-latest
+            suffix: arm64
+          - runner: macos-13
+            suffix: x86
+    runs-on: ${{ matrix.runner}}
+  
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
-
+        uses: actions/checkout@v4
+    
       - name: Build
         run: |
-          make -j2
-          tar cv maxcso | gzip -9 > maxcso-macos.tar.gz
-
+          make -j$(sysctl -n hw.ncpu)
+          mkdir maxcso-${{ matrix.suffix }}
+          mv maxcso maxcso-${{ matrix.suffix }}/maxcso
+    
       - name: Upload build
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: maxcso-macos
-          path: maxcso-macos.tar.gz
+          name: maxcso-macOS-${{ matrix.suffix }}
+          path: maxcso-${{ matrix.suffix }}/maxcso
+
+  make-macOS-univeral-binary:
+    name: macOS universal binary
+    needs: build-macOS
+    runs-on: macos-latest
+    
+    steps:
+      - name: download arm artifact
+        uses: actions/download-artifact@v4
+        with: 
+          name: maxcso-macOS-arm64
+          path: maxcso-arm64
+          
+      - name: download x86 artifact
+        uses: actions/download-artifact@v4
+        with:   
+          name: maxcso-macOS-x86
+          path: maxcso-x86
+  
+      - name: Create universal binary
+        run: |
+          mkdir bin
+          lipo -output bin/maxcso -create maxcso-arm64/maxcso maxcso-x86/maxcso
+          mv bin/maxcso maxcso
+          chmod +rxw maxcso
+          tar cv maxcso | gzip -9 > maxcso-macOS-Universal.tar.gz
+          
+      - name: Delete x86 and arm builds
+        uses: geekyeggo/delete-artifact@v5
+        with:
+          name: |
+            maxcso-macOS-x86
+            maxcso-macOS-arm64
+      
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: maxcso-macOS-Universal
+          path: maxcso-macOS-Universal.tar.gz
 
   build-ubuntu:
     name: Ubuntu build
@@ -56,7 +103,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup dependencies
         run: sudo apt-get install libuv1-dev liblz4-dev
@@ -67,7 +114,7 @@ jobs:
           tar cv maxcso | gzip -9 > maxcso-linux.tar.gz
 
       - name: Upload build
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: maxcso-linux
           path: maxcso-linux.tar.gz
